@@ -1,3 +1,5 @@
+[![Go](https://github.com/maroda/monteverdi/actions/workflows/go.yml/badge.svg)](https://github.com/maroda/monteverdi/actions/workflows/go.yml)
+
 # Monteverdi
 
 Seconda Practica Reliability Observability
