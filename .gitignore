@@ -1,0 +1,14 @@
+# Test binary, built with `go test -c`
+*.test
+
+# env file
+.env
+
+# ctags file
+tags
+
+# macOS
+.DS_Store
+
+# goreleaser
+dist/

@@ -2,7 +2,11 @@ module github.com/maroda/monteverdi
 
 go 1.25.0
 
-require github.com/gdamore/tcell/v2 v2.9.0
+require (
+	github.com/gdamore/tcell/v2 v2.9.0
+	github.com/google/go-cmp v0.7.0
+	golang.org/x/sync v0.16.0
+)
 
 require (
 	github.com/gdamore/encoding v1.0.1 // indirect

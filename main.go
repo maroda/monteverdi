@@ -2,17 +2,18 @@ package main
 
 import (
 	"fmt"
-	"log"
-
 	"github.com/gdamore/tcell/v2"
-	MV "github.com/maroda/monteverdi/server"
+	Md "github.com/maroda/monteverdi/display"
+	Ms "github.com/maroda/monteverdi/server"
+	"log"
+	"math/rand/v2"
 )
 
 func init() {
-	User := MV.FillEnvVar("USER")
+	User := Ms.FillEnvVar("USER")
 	fmt.Printf("Monteverdi initializing for ... %s\n", User)
 
-	A01 := MV.NewAccent(1, "main", "output")
+	A01 := Ms.NewAccent(1, "main", "output")
 
 	// View some struct data
 	fmt.Printf("Accent full timestamp: %s\n", A01.Timestamp)
@@ -24,78 +25,20 @@ func init() {
 	fmt.Printf("Accent mark '%d' entered for '%s' to be displayed on '%s'\n", A01.Intensity, A01.SourceID, A01.DestLayer)
 }
 
-func drawText(s tcell.Screen, x1, y1, x2, y2 int, style tcell.Style, text string) {
-	row := y1
-	col := x1
-	for _, r := range []rune(text) {
-		s.SetContent(col, row, r, nil, style)
-		col++
-		if col >= x2 {
-			row++
-			col = x1
-		}
-		if row > y2 {
-			break
-		}
-	}
-}
-
-func drawBox(s tcell.Screen, x1, y1, x2, y2 int, style tcell.Style, text string) {
-	if y2 < y1 {
-		y1, y2 = y2, y1
-	}
-	if x2 < x1 {
-		x1, x2 = x2, x1
-	}
-
-	// Fill background
-	for row := y1; row <= y2; row++ {
-		for col := x1; col <= x2; col++ {
-			s.SetContent(col, row, ' ', nil, style)
-		}
-	}
-
-	// Draw borders
-	for col := x1; col <= x2; col++ {
-		s.SetContent(col, y1, tcell.RuneHLine, nil, style)
-		s.SetContent(col, y2, tcell.RuneHLine, nil, style)
-	}
-	for row := y1 + 1; row < y2; row++ {
-		s.SetContent(x1, row, tcell.RuneVLine, nil, style)
-		s.SetContent(x2, row, tcell.RuneVLine, nil, style)
-	}
-
-	// Only draw corners if necessary
-	if y1 != y2 && x1 != x2 {
-		s.SetContent(x1, y1, tcell.RuneULCorner, nil, style)
-		s.SetContent(x2, y1, tcell.RuneURCorner, nil, style)
-		s.SetContent(x1, y2, tcell.RuneLLCorner, nil, style)
-		s.SetContent(x2, y2, tcell.RuneLRCorner, nil, style)
-	}
-
-	drawText(s, x1+1, y1+1, x2-1, y2-1, style, text)
-}
-
 func main() {
-	defStyle := tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
-	boxStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorPurple)
+	boxStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorIndigo)
+	harmonicStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorOliveDrab)
 
-	// Initialize screen
-	s, err := tcell.NewScreen()
+	s, err := Md.GetTTY()
 	if err != nil {
-		log.Fatalf("%+v", err)
+		log.Fatalf("Error getting TTY: %v", err)
 	}
-	if err := s.Init(); err != nil {
-		log.Fatalf("%+v", err)
-	}
-	s.SetStyle(defStyle)
-	s.EnableMouse()
-	s.EnablePaste()
-	s.Clear()
 
 	// Draw initial boxes
-	drawBox(s, 1, 1, 42, 7, boxStyle, "Click and drag to draw a box")
-	drawBox(s, 5, 9, 32, 14, boxStyle, "Press C to reset")
+	// These will always be overdrawn by event loop draws
+	// Md.DrawBox(s, 3, 1, 42, 7, boxStyle, "Click and drag to draw a box")
+	// Md.DrawBox(s, 5, 9, 32, 14, boxStyle, "Press C to reset")
+	Md.DrawBox(s, 4, 4, 20, 10, boxStyle, "craquemattic")
 
 	quit := func() {
 		// You have to catch panics in a defer, clean up, and
@@ -112,22 +55,24 @@ func main() {
 	// Here's how to get the screen size when you need it.
 	// xmax, ymax := s.Size()
 
-	// Here's an example of how to inject a keystroke where it will
-	// be picked up by the next PollEvent call.  Note that the
-	// queue is LIFO, it has a limited length, and PostEvent() can
-	// return an error.
-	// s.PostEvent(tcell.NewEventKey(tcell.KeyRune, rune('a'), 0))
-
 	// Event loop
-	ox, oy := -1, -1
 	for {
-		// Update screen
+		// Refresh
+		s.Clear()
+
+		// Update screen and wait
+		funR := rand.IntN(10) + 3
+		Md.WriteBar(s, 20, 1, 22, funR, harmonicStyle)
 		s.Show()
+		// time.Sleep(time.Millisecond * 500)
 
 		// Poll event
 		ev := s.PollEvent()
 
 		// Process event
+		// The Event does not have to be processed in order to be recognized.
+		// For instance, EventMouse will be captured, and make the loop restart.
+		// even if there's no case below to catch.
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			s.Sync()
@@ -138,22 +83,6 @@ func main() {
 				s.Sync()
 			} else if ev.Rune() == 'C' || ev.Rune() == 'c' {
 				s.Clear()
-			}
-		case *tcell.EventMouse:
-			x, y := ev.Position()
-
-			switch ev.Buttons() {
-			case tcell.Button1, tcell.Button2:
-				if ox < 0 {
-					ox, oy = x, y // record location when click started
-				}
-
-			case tcell.ButtonNone:
-				if ox >= 0 {
-					label := fmt.Sprintf("%d,%d to %d,%d", ox, oy, x, y)
-					drawBox(s, ox, oy, x, y, boxStyle, label)
-					ox, oy = -1, -1
-				}
 			}
 		}
 	}
