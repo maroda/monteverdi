@@ -6,7 +6,9 @@ import (
 	Md "github.com/maroda/monteverdi/display"
 	Ms "github.com/maroda/monteverdi/server"
 	"log"
-	"math/rand/v2"
+	"log/slog"
+	"strconv"
+	"time"
 )
 
 func init() {
@@ -23,6 +25,16 @@ func init() {
 
 	// Print out the accent
 	fmt.Printf("Accent mark '%d' entered for '%s' to be displayed on '%s'\n", A01.Intensity, A01.SourceID, A01.DestLayer)
+
+	// Check Netdata for data
+	// this should be its own function
+	endpoint := Ms.FillEnvVar("NETDATA_ENDPOINT")
+	netdata, err := Ms.MetricKV(endpoint)
+	if err != nil {
+		log.Fatal(err)
+	}
+	metricCount := len(netdata)
+	fmt.Printf("Netdata metrics: %d\n", metricCount)
 }
 
 func main() {
@@ -61,10 +73,31 @@ func main() {
 		s.Clear()
 
 		// Update screen and wait
-		funR := rand.IntN(10) + 3
-		Md.WriteBar(s, 20, 1, 22, funR, harmonicStyle)
+		//funR := rand.IntN(10) + 3
+
+		// Check Netdata for data
+		// this should be its own function
+		// and this data should live in a struct
+		endpoint := Ms.FillEnvVar("NETDATA_ENDPOINT")
+		netdata, err := Ms.MetricKV(endpoint)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		measure := netdata["NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL"]
+		metric, err := strconv.Atoi(measure)
+		if err != nil {
+			slog.Error("Error converting metric to int", slog.String("metric", measure), slog.String("error", err.Error()))
+		}
+
+		// Write the bar using the updating CPU metric
+		Md.WriteBar(s, 20, 1, 22, metric, harmonicStyle)
 		s.Show()
-		// time.Sleep(time.Millisecond * 500)
+
+		// This breaks keyboard events, but works when active
+		// Breaks with:
+		//	Process finished with the exit code 137 (interrupted by signal 9:SIGKILL)
+		time.Sleep(time.Millisecond * 2000)
 
 		// Poll event
 		ev := s.PollEvent()

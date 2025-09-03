@@ -3,6 +3,7 @@ package monteverdi
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -24,28 +25,16 @@ func TestShowBanner(t *testing.T) {
 	})
 }
 
-func TestLightUp(t *testing.T) {
-	t.Run("Prints configured string", func(t *testing.T) {
-		buf := &bytes.Buffer{}
-
-		msg := "Poller"
-		err := LightUp(buf, msg)
-		got := buf.String()
-		want := "Poller\n"
-
-		assertError(t, err, nil)
-		assertString(t, got, want)
-	})
-}
-
+// TestSingleFetch should handle single URLs
 func TestSingleFetch(t *testing.T) {
-	mockWWW := makeMockWebServ(0 * time.Millisecond)
+	mockWWW := makeMockWebServBody(0*time.Millisecond, "craquemattic")
 	urlWWW := mockWWW.URL
 
 	t.Run("Fetches a single URL", func(t *testing.T) {
 		want := "craquemattic"
-		_, got, err := SingleFetch(urlWWW)
+		_, get, err := SingleFetch(urlWWW)
 
+		got := string(get)
 		assertError(t, err, nil)
 		assertString(t, got, want)
 	})
@@ -60,13 +49,48 @@ func TestSingleFetch(t *testing.T) {
 	t.Run("Returns Error after Server Close", func(t *testing.T) {
 		_, _, got := SingleFetch(urlWWW)
 		assertGotError(t, got)
+		fmt.Println(got)
 	})
 }
 
-// Mock responder for external API calls
-func makeMockWebServ(delay time.Duration) *httptest.Server {
+// TestMetricKV should read KV values from a URL endpoint
+func TestMetricKV(t *testing.T) {
+	kvbody := `VAR1=value
+VAR2=valuevalue
+VAR3=valuevaluevalue
+VAR4=valuevaluevaluevalue
+
+# A comment
+VAR5=valuevaluevaluevaluevalue
+`
+	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
+	urlWWW := mockWWW.URL
+
+	// Check that the correct number of values exist
+	// This accounts for removal of whitespace and comments
+	t.Run("Fetches correct count of all KV", func(t *testing.T) {
+		get, err := MetricKV(urlWWW)
+		got := len(get)
+		want := 5
+
+		assertError(t, err, nil)
+		assertInt(t, got, want)
+	})
+
+	// Here we look for VAR4
+	t.Run("Fetches known KV", func(t *testing.T) {
+		get, _ := MetricKV(urlWWW)
+		got := get["VAR4"]
+		want := "valuevaluevaluevalue"
+
+		assertString(t, got, want)
+	})
+}
+
+// Mock responder for external API calls with configurable body content
+func makeMockWebServBody(delay time.Duration, body string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		testAnswer := []byte("craquemattic")
+		testAnswer := []byte(body)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain")
@@ -74,17 +98,6 @@ func makeMockWebServ(delay time.Duration) *httptest.Server {
 		if err != nil {
 			log.Fatalf("ERROR: Could not write to output.")
 		}
-	}))
-}
-
-// Mock responder for broken body testing
-func makeMockWebServBody(delay time.Duration) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(delay)
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Set("Content-Length", "100") // Claim 100 bytes
-		w.Write([]byte(`{"incomplete": true`))  // But only write 20
 	}))
 }
 
@@ -106,5 +119,12 @@ func assertStatus(t testing.TB, got, want int) {
 	t.Helper()
 	if got != want {
 		t.Errorf("did not get correct status, got %d, want %d", got, want)
+	}
+}
+
+func assertInt(t *testing.T, got, want int) {
+	t.Helper()
+	if got != want {
+		t.Errorf("did not get correct value, got %d, want %d", got, want)
 	}
 }

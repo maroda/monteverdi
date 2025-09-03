@@ -1,50 +1,39 @@
 package monteverdi
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const (
 	webTimeout = 10 * time.Second
+	// netdata = "http://localhost:19999/api/v3/allmetrics"
 )
-
-var url = "http://localhost:19999/api/v3/allmetrics"
-
-// LightUp takes the output location as an io.Writer
-// and uses this to display the results of the fetches
-func LightUp(w io.Writer, m string) error {
-	err := showBanner(w, m)
-	if err != nil {
-		slog.Error("Banner write error", slog.Any("Error", err))
-		return err
-	}
-
-	Code, _, err := SingleFetch(url)
-	if err != nil {
-		slog.Error("Fetch Error", slog.Any("Error", err))
-		return err
-	}
-
-	fmt.Printf("Status %d returned for Endpoint: %s\n", Code, url)
-	return nil
-}
 
 func showBanner(w io.Writer, banner string) error {
 	_, err := fmt.Fprintf(w, "%s\n", banner)
 	return err
 }
 
-func SingleFetch(url string) (int, string, error) {
+// SingleFetch returns the Response Code, raw byte stream body, and error
+func SingleFetch(url string) (int, []byte, error) {
 	client := &http.Client{Timeout: webTimeout}
 
 	resp, err := client.Get(url)
 	if err != nil {
 		slog.Error("Fetch Error", slog.Any("Error", err))
-		return 0, "", err
+		return 0, nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Error("Could not read body", slog.Any("Error", err))
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -53,11 +42,47 @@ func SingleFetch(url string) (int, string, error) {
 		}
 	}()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		slog.Error("Could not read body", slog.Any("Error", err))
-		return 0, "", err
+	return resp.StatusCode, body, err
+}
+
+// MetricKV streams input from the endpoint body and populates
+// a map for all key/values, removing whitespace and comments
+func MetricKV(url string) (map[string]string, error) {
+	envMap := make(map[string]string)
+
+	// Grab the body of the given URL, which is a known KV output
+	// in the format "KEY=VALUE" similar to a .env file
+	// This streams the result, which can be large from some sources.
+	_, body, err := SingleFetch(url)
+	scanner := bufio.NewScanner(bytes.NewReader(body))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// ignore whitespace and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Split on the assignment operator
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		// Extract Key, Clean up Value, Add to Map
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		// Remove quotes
+		value = strings.Trim(value, `"'`)
+		// Take care of any trailing quotes and comments
+		if pos := strings.IndexAny(value, `"'#`); pos != -1 {
+			value = value[:pos]
+		}
+		envMap[key] = value
+	}
+	if err := scanner.Err(); err != nil {
+		slog.Error("Problem scanning input", slog.Any("Error", err))
 	}
 
-	return resp.StatusCode, string(body), nil
+	return envMap, err
 }
