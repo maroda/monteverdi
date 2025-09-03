@@ -30,6 +30,33 @@ func TestFillEnvVar(t *testing.T) {
 	})
 }
 
+// Build a URL takes an arbitrary set of pieces and combines them into a browsable URL.
+func TestUrlCat(t *testing.T) {
+	WebDomain := "craque.bandcamp.com"
+	URIPre := "/track/"
+	t.Run("Returns a URL from static strings", func(t *testing.T) {
+		URIDyna := "relaxant" // This should be tested as a var that changes, too
+		URIPost := ""
+
+		want := "craque.bandcamp.com/track/relaxant"
+		got := urlCat(WebDomain, URIPre, URIDyna, URIPost)
+
+		assertString(t, got, want)
+	})
+
+	t.Run("Returns a URL from dynamic strings inside static strings", func(t *testing.T) {
+		URIPost := "/listen"
+		three := []string{"relaxant", "manifold", "synapse"}
+
+		for _, h := range three {
+			want := "craque.bandcamp.com/track/" + h + "/listen"
+			got := urlCat(WebDomain, URIPre, h, URIPost)
+
+			assertString(t, got, want)
+		}
+	})
+}
+
 func assertString(t *testing.T, got, want string) {
 	t.Helper()
 	if got != want {
