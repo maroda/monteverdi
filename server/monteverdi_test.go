@@ -6,7 +6,23 @@ import (
 )
 
 func TestNewQNet(t *testing.T) {
+	// create a new Endpoint
+	name := "craquemattic"
+	ep := makeEndpoint(name)
 
+	t.Run("Endpoint ID matches", func(t *testing.T) {
+		// create a slice of Endpoint (also type:Endpoints)
+		// using the Endpoint created above, just one element
+		var eps []Endpoint
+		eps = append(eps, *ep)
+
+		// create a new QNet
+		// check that the ID was created OK
+		qn := NewQNet(eps)
+		got := qn.Network[0].ID
+		want := eps[0].ID
+		assertString(t, got, want)
+	})
 }
 
 func TestNewEndpoint(t *testing.T) {
@@ -70,4 +86,32 @@ func TestNewEndpoint(t *testing.T) {
 		}
 	})
 
+}
+
+func makeEndpoint(i string) *Endpoint {
+	// Fake ID
+	id := i
+
+	// Fake URL
+	url := "https://popg.xyz"
+
+	// Collection map literal
+	c := make(map[int64]string)
+	c[1] = "ONE"
+	c[2] = "TWO"
+	c[3] = "THREE"
+
+	// Collection data map literal
+	d := make(map[int64]int64)
+	d[1] = 1
+	d[2] = 2
+	d[3] = 3
+
+	// Struct matches the Endpoint type
+	return &Endpoint{
+		ID:     id,
+		URL:    url,
+		metric: c,
+		mdata:  d,
+	}
 }

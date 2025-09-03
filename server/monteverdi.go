@@ -7,9 +7,10 @@ package monteverdi
 type Monteverdi interface {
 	// QNet methods go here
 	Init()
+	Poll()
 }
 type QNet struct {
-	Endpoints *Endpoints // slice of Endpoint
+	Network Endpoints // slice of *Endpoint
 }
 
 // NewQNet creates a new Quality Network
@@ -18,9 +19,13 @@ type QNet struct {
 // so this Endpoints slice contains everything
 // and each time the QNet object is used
 // it should have updated metrics via the Endpoints
+//
+// it's likely this metric updating will be goroutines
+// for example step through the Endpoints slice
+// and fire off a goroutine for each Endpoint
 func NewQNet(ep Endpoints) *QNet {
 	return &QNet{
-		Endpoints: &ep,
+		Network: ep,
 	}
 }
 
@@ -41,8 +46,10 @@ type Endpoint struct {
 	mdata  map[int64]int64  // map of all metric data synced by index
 }
 
-type Endpoints []*Endpoint
+type Endpoints []Endpoint
 
+// NewEndpoint returns a pointer to the Endpoint metadata and its data
+// This function syncs endpoint with data using an index
 func NewEndpoint(id, url string, m ...string) *Endpoint {
 	collection := make(map[int64]string)
 	colldata := make(map[int64]int64)
@@ -63,5 +70,13 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 }
 
 func (q *QNet) Init() {
+	panic("implement me")
+}
+
+func (q *QNet) Poll(p string) {
+	// p is the ID to poll
+	// range q.Endpoints (this is a slice of Endpoint)
+	// if the ID equals p, operate on that
+
 	panic("implement me")
 }
