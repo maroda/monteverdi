@@ -6,9 +6,6 @@ import (
 	Md "github.com/maroda/monteverdi/display"
 	Ms "github.com/maroda/monteverdi/server"
 	"log"
-	"log/slog"
-	"strconv"
-	"time"
 )
 
 func init() {
@@ -28,13 +25,22 @@ func init() {
 
 	// Check Netdata for data
 	// this should be its own function
-	endpoint := Ms.FillEnvVar("NETDATA_ENDPOINT")
-	netdata, err := Ms.MetricKV(endpoint)
+	url := Ms.FillEnvVar("NETDATA_ENDPOINT")
+	netdata, err := Ms.MetricKV(url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	metricCount := len(netdata)
 	fmt.Printf("Netdata metrics: %d\n", metricCount)
+
+	// try out the poll func
+	ep := Ms.NewEndpoint("NETDATA", url)
+	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
+	pollresult, err := qn.Poll("NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("ROOT CPU UTIL: %d\n", pollresult)
 }
 
 func main() {
@@ -72,32 +78,28 @@ func main() {
 		// Refresh
 		s.Clear()
 
-		// Update screen and wait
-		//funR := rand.IntN(10) + 3
-
 		// Check Netdata for data
 		// this should be its own function
-		// and this data should live in a struct
-		endpoint := Ms.FillEnvVar("NETDATA_ENDPOINT")
-		netdata, err := Ms.MetricKV(endpoint)
+		url := Ms.FillEnvVar("NETDATA_ENDPOINT")
+		ep := Ms.NewEndpoint("NETDATA", url)
+		qn := Ms.NewQNet([]Ms.Endpoint{*ep})
+		pollresult, err := qn.Poll("NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL")
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		measure := netdata["NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL"]
-		metric, err := strconv.Atoi(measure)
-		if err != nil {
-			slog.Error("Error converting metric to int", slog.String("metric", measure), slog.String("error", err.Error()))
-		}
+		// i'm not sure about using int64 here yet, but it feels right
+		// but for this test, convert pollresult back to int32 for tcell (for now)
+		metric := int(pollresult)
 
 		// Write the bar using the updating CPU metric
 		Md.WriteBar(s, 20, 1, 22, metric, harmonicStyle)
 		s.Show()
 
-		// This breaks keyboard events, but works when active
+		// This breaks keyboard events, but kinda works when active
 		// Breaks with:
 		//	Process finished with the exit code 137 (interrupted by signal 9:SIGKILL)
-		time.Sleep(time.Millisecond * 2000)
+		// time.Sleep(time.Millisecond * 500)
 
 		// Poll event
 		ev := s.PollEvent()

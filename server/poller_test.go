@@ -128,3 +128,10 @@ func assertInt(t *testing.T, got, want int) {
 		t.Errorf("did not get correct value, got %d, want %d", got, want)
 	}
 }
+
+func assertInt64(t *testing.T, got, want int64) {
+	t.Helper()
+	if got != want {
+		t.Errorf("did not get correct value, got %d, want %d", got, want)
+	}
+}

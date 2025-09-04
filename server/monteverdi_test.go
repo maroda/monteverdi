@@ -3,12 +3,13 @@ package monteverdi
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestNewQNet(t *testing.T) {
 	// create a new Endpoint
 	name := "craquemattic"
-	ep := makeEndpoint(name)
+	ep := makeEndpoint(name, "https://popg.xyz")
 
 	t.Run("Endpoint ID matches", func(t *testing.T) {
 		// create a slice of Endpoint (also type:Endpoints)
@@ -26,35 +27,23 @@ func TestNewQNet(t *testing.T) {
 }
 
 func TestNewEndpoint(t *testing.T) {
-	// Fake ID
-	id := "craquemattic"
-
-	// Fake URL
-	url := "https://popg.xyz"
-
-	// Collection map literal
-	c := make(map[int64]string)
-	c[1] = "ONE"
-	c[2] = "TWO"
-	c[3] = "THREE"
-
-	// Collection data map literal
-	d := make(map[int64]int64)
-	d[1] = 1
-	d[2] = 2
-	d[3] = 3
+	// create a new Endpoint
+	name := "craquemattic"
+	ep := makeEndpoint(name, "https://popg.xyz")
+	id := ep.ID
+	url := ep.URL
 
 	// Struct literal
 	want := struct {
 		ID     string
 		URL    string
 		metric map[int64]string
-		mdata  map[int64]int64
+		mdata  map[string]int64
 	}{
 		ID:     id,
 		URL:    url,
-		metric: c,
-		mdata:  d,
+		metric: ep.metric,
+		mdata:  ep.mdata,
 	}
 
 	t.Run("Returns correct metadata", func(t *testing.T) {
@@ -69,7 +58,7 @@ func TestNewEndpoint(t *testing.T) {
 	})
 
 	t.Run("Returns correct field count", func(t *testing.T) {
-		got := *NewEndpoint(id, url, c[1], c[2], c[3])
+		got := *NewEndpoint(id, url, ep.metric[1], ep.metric[2], ep.metric[3])
 		gotSize := reflect.TypeOf(got).NumField()
 		wantSize := reflect.TypeOf(want).NumField()
 		if gotSize != wantSize {
@@ -78,7 +67,7 @@ func TestNewEndpoint(t *testing.T) {
 	})
 
 	t.Run("number of collections is correct", func(t *testing.T) {
-		get := *NewEndpoint(id, url, c[1], c[2], c[3])
+		get := *NewEndpoint(id, url, ep.metric[1], ep.metric[2], ep.metric[3])
 		got := len(get.metric)
 		match := len(want.metric)
 		if got != match {
@@ -88,12 +77,51 @@ func TestNewEndpoint(t *testing.T) {
 
 }
 
-func makeEndpoint(i string) *Endpoint {
+// This may end up covering MetricKV but we'll see
+func TestQNet_Poll(t *testing.T) {
+	// create KV data
+	kvbody := `VAR1=1
+VAR2=11 # comment
+VAR3=111
+VAR4=1111
+
+# A comment
+VAR5=11111
+`
+
+	// create a mock web server
+	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
+	urlWWW := mockWWW.URL
+
+	// create a new Endpoint
+	name := "craquemattic"
+	ep := makeEndpoint(name, urlWWW)
+
+	// create a new QNet
+	qn := NewQNet([]Endpoint{*ep})
+
+	pollresult, err := qn.Poll("VAR3")
+	if err != nil {
+		t.Errorf("Poll returned unexpected error: %s", err)
+	}
+
+	// Here we look for VAR3
+	t.Run("Fetches known KV", func(t *testing.T) {
+		got := pollresult
+		var want int64
+		want = 111
+		assertInt64(t, got, want)
+	})
+}
+
+// Create an endpoint with a customizable ID and URL
+// It contains three metrics and a data value for each metric
+func makeEndpoint(i, u string) *Endpoint {
 	// Fake ID
 	id := i
 
 	// Fake URL
-	url := "https://popg.xyz"
+	url := u
 
 	// Collection map literal
 	c := make(map[int64]string)
@@ -102,10 +130,10 @@ func makeEndpoint(i string) *Endpoint {
 	c[3] = "THREE"
 
 	// Collection data map literal
-	d := make(map[int64]int64)
-	d[1] = 1
-	d[2] = 2
-	d[3] = 3
+	d := make(map[string]int64)
+	d[c[1]] = 1
+	d[c[2]] = 2
+	d[c[3]] = 3
 
 	// Struct matches the Endpoint type
 	return &Endpoint{

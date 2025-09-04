@@ -1,12 +1,16 @@
 package monteverdi
 
+import (
+	"log/slog"
+	"strconv"
+)
+
 // QNet represents the entire connected Network of Qualities
 // This is where it is configured which sources are being used
 // And where pointers to the data are held
 
 type Monteverdi interface {
 	// QNet methods go here
-	Init()
 	Poll()
 }
 type QNet struct {
@@ -42,8 +46,8 @@ func NewQNet(ep Endpoints) *QNet {
 type Endpoint struct {
 	ID     string           // string describing the endpoint source
 	URL    string           // URL endpoint for the service
-	metric map[int64]string // map of all metrics to be retrieved
-	mdata  map[int64]int64  // map of all metric data synced by index
+	metric map[int64]string // map of all metric keys to be retrieved
+	mdata  map[string]int64 // map of all metric data by metric key
 }
 
 type Endpoints []Endpoint
@@ -52,14 +56,18 @@ type Endpoints []Endpoint
 // This function syncs endpoint with data using an index
 func NewEndpoint(id, url string, m ...string) *Endpoint {
 	collection := make(map[int64]string)
-	colldata := make(map[int64]int64)
+	colldata := make(map[string]int64)
 
-	// Keep the indexes synced by initializing them together
+	// index for the metric collection
 	index := int64(len(m) - 1)
+	index = 0
+
+	// Add values of entry parameters to the map as collection keys
+	// Initialize the mdata[key] for this to zero
 	for _, value := range m {
-		index++
 		collection[index] = value
-		colldata[index] = 0
+		colldata[value] = 0
+		index++
 	}
 	return &Endpoint{
 		ID:     id,
@@ -69,14 +77,40 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 	}
 }
 
-func (q *QNet) Init() {
-	panic("implement me")
-}
+// Poll takes a string /p/ and searches the Endpoint for the Key
+// If the key is there, the metric is returned for that Key.
+func (q *QNet) Poll(p string) (int64, error) {
+	// p is the Key to poll, it is a string
 
-func (q *QNet) Poll(p string) {
-	// p is the ID to poll
-	// range q.Endpoints (this is a slice of Endpoint)
-	// if the ID equals p, operate on that
+	// We know this is KV data right now, it's the only choice
+	// this probably also needs to operate on each member of the slice
+	index := 0
 
-	panic("implement me")
+	var metric int64
+	metric = 0
+
+	// poll is a map of KV
+	poll, err := MetricKV(q.Network[index].URL)
+	if err != nil {
+		slog.Error("Could not poll metric", slog.Any("Error", err))
+		return metric, err
+	}
+
+	// Search for the requested Key to poll /p/ in the configured list of keys
+	for k := range poll {
+		if k == p {
+			// we've found the key, now grab its metric from the poll
+			// convert the metric to int64 on assignment
+			metric, err = strconv.ParseInt(poll[p], 10, 64)
+			if err != nil {
+				slog.Error("Could not convert metric to 64bits", slog.Any("Error", err))
+				return metric, err
+			}
+
+			// Populate the map in the struct
+			q.Network[index].mdata[p] = metric
+		}
+	}
+
+	return metric, nil
 }
