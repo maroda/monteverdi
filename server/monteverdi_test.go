@@ -41,11 +41,15 @@ func TestNewEndpoint(t *testing.T) {
 		URL    string
 		metric map[int64]string
 		mdata  map[string]int64
+		maxval map[string]int64
+		accent map[string]Ms.Accent
 	}{
 		ID:     id,
 		URL:    url,
 		metric: ep.Metric,
 		mdata:  ep.Mdata,
+		maxval: nil,
+		accent: nil,
 	}
 
 	t.Run("Returns correct metadata", func(t *testing.T) {
@@ -77,6 +81,48 @@ func TestNewEndpoint(t *testing.T) {
 		}
 	})
 
+}
+
+func TestQNet_FindAccent(t *testing.T) {
+	// create KV data on a mock webserver
+	kvbody := `CPU=15`
+	key := `CPU`
+	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
+	urlWWW := mockWWW.URL
+
+	// create a new Endpoint
+	name := "craquemattic"
+	ep := makeEndpoint(name, urlWWW)
+
+	// create a new QNet
+	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
+
+	pollresult, err := qn.Poll(key)
+	if err != nil {
+		t.Errorf("Poll returned unexpected error: %s", err)
+	}
+
+	t.Run("Fetches known KV", func(t *testing.T) {
+		got := pollresult
+		var want int64
+		want = 15
+		assertInt64(t, got, want)
+	})
+
+	t.Run("Fetches known accent", func(t *testing.T) {
+		accent := qn.FindAccent(key, 0, 10)
+		got := accent.SourceID
+		want := key
+
+		assertString(t, got, want)
+	})
+
+	t.Run("No accent is created", func(t *testing.T) {
+		accent := qn.FindAccent(key, 0, 20)
+		if accent != nil {
+			t.Errorf("Accent returned %v, want nil", accent)
+		}
+	})
 }
 
 // This may end up covering MetricKV but we'll see
@@ -143,5 +189,7 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		URL:    url,
 		Metric: c,
 		Mdata:  d,
+		Maxval: nil,
+		Accent: nil,
 	}
 }

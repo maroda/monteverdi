@@ -2,6 +2,10 @@ package monteverdi
 
 import "time"
 
+// The Accent is the building block of this tool.
+// What really should show up in the display is the accent,
+// not the raw value.
+
 type EventMapping interface {
 	TimestampString() string
 }
@@ -13,6 +17,8 @@ type Accent struct {
 	DestLayer string // identifies the output
 }
 
+// NewAccent builds the metadata for the accent
+// There is no boolean, the existence of an Accent is always true
 func NewAccent(i int, s, d string) *Accent {
 	return &Accent{
 		Timestamp: time.Now(),

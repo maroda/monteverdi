@@ -10,9 +10,9 @@ import (
 // And where pointers to the data are held
 
 type Monteverdi interface {
-	// QNet methods go here
 	Poll()
 }
+
 type QNet struct {
 	Network Endpoints // slice of *Endpoint
 }
@@ -33,27 +33,33 @@ func NewQNet(ep Endpoints) *QNet {
 	}
 }
 
-// The idea here is that the app will take this Endpoint
+// Endpoint is what the app uses to
 // check the URL for whatever comes back
 // and then use each metric listed in the map to grab data
 //
-// 1. app starts, reads config file. maybe this is TOML, or
-//    another idea would be to have an API that takes a JSON config
-// 2. this config is read into a slice of Endpoint entries
-// 3. This slice - Endpoints - is fed into the machine
-// 4. The QNet struct contains pointers to the data itself
-
+//  1. app starts, reads config file. maybe this is TOML, or
+//     another idea would be to have an API that takes a JSON config
+//  2. this config is read into a slice of Endpoint entries
+//  3. This slice - Endpoints - is fed into the machine
+//  4. The QNet struct contains pointers to the data itself
+//  5. The map of Accent is an on-only entry. If the raw Mdata
+//     does not trigger an Accent, there is no entry for that timestamp.
+//     However, the Accent is always located by the Metric key itself.
+//     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
-	ID     string           // string describing the endpoint source
-	URL    string           // URL endpoint for the service
-	Metric map[int64]string // map of all metric keys to be retrieved
-	Mdata  map[string]int64 // map of all metric data by metric key
+	ID     string            // string describing the endpoint source
+	URL    string            // URL endpoint for the service
+	Metric map[int64]string  // map of all metric keys to be retrieved
+	Mdata  map[string]int64  // map of all metric data by metric key
+	Maxval map[string]int64  // map of metric data max val to find accents
+	Accent map[string]Accent // map of accents by metric key
 }
 
 type Endpoints []Endpoint
 
 // NewEndpoint returns a pointer to the Endpoint metadata and its data
 // This function syncs endpoint with data using an index
+// TODO: Implement adding Maxval so it comes from the on-disk config
 func NewEndpoint(id, url string, m ...string) *Endpoint {
 	collection := make(map[int64]string)
 	colldata := make(map[string]int64)
@@ -77,8 +83,27 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 	}
 }
 
-// Poll takes a string /p/ and searches the Endpoint for the Key
+// FindAccent is configured with the parameters applied to a single metric
+// for now, intensity is 1 for everything later on, intensity is used to
+// 'weight' metrics i.e. give them greater harmonic meaning.
+// Currently destination layer is not used
+// TODO: /max int/ will need to come from QNet
+func (q *QNet) FindAccent(p string, i, max int) *Accent {
+	md := q.Network[i].Mdata[p]
+	// Below the Max, we're good.
+	// TODO: max = q.Network[i].Maxval[p]
+	if md < int64(max) {
+		return nil
+	}
+
+	intensity := 1
+	accent := NewAccent(intensity, p, "")
+	return accent
+}
+
+// Poll takes a string /p/ and searches QNet.Endpoint.Metric for the Key
 // If the key is there, the metric is returned for that Key.
+// TODO: Poll should return an accent struct
 func (q *QNet) Poll(p string) (int64, error) {
 	// p is the Key to poll, it is a string
 
@@ -108,9 +133,25 @@ func (q *QNet) Poll(p string) (int64, error) {
 			}
 
 			// Populate the map in the struct
+			// Need to understand if maxval needs to be int64
 			q.Network[index].Mdata[p] = metric
+
+			/*
+				// TODO: maxval must be set in the Endpoint struct for this key
+				// maxval := q.Network[index].Maxval[p]
+				// until then, use this
+				maxval := 20
+
+				// Did the measurement hit the accent maxval?
+				accent := q.FindAccent(p, 0, maxval)
+				if accent != nil {
+					q.Network[index].Accent[p] = *accent
+				}
+			*/
 		}
 	}
 
+	// should the raw metric or the accent metric be returned here?
+	// maybe that can be a choice...
 	return metric, nil
 }
