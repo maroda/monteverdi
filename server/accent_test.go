@@ -1,15 +1,17 @@
-package monteverdi
+package monteverdi_test
 
 import (
 	"reflect"
 	"testing"
 	"time"
+
+	Ms "github.com/maroda/monteverdi/server"
 )
 
 // Test if the Timestamp is returning the correct format
 // this hopefully runs in under 1s so the times should match
 func TestAccentTime(t *testing.T) {
-	got := *NewAccent(1, "main", "output")
+	got := *Ms.NewAccent(1, "main", "output")
 	want := time.Now().Format("20060102T150405")
 
 	if got.TimestampString() != want {
@@ -30,7 +32,7 @@ func TestNewAccent(t *testing.T) {
 	}
 
 	t.Run("Returns the correct number of fields", func(t *testing.T) {
-		got := *NewAccent(1, "sourceID", "destLayer")
+		got := *Ms.NewAccent(1, "sourceID", "destLayer")
 		gotSize := reflect.TypeOf(got).NumField()
 		wantSize := reflect.TypeOf(want).NumField()
 		if gotSize != wantSize {
@@ -39,7 +41,7 @@ func TestNewAccent(t *testing.T) {
 	})
 
 	t.Run("Returns the correct IDs", func(t *testing.T) {
-		got := *NewAccent(1, "sourceID", "destLayer")
+		got := *Ms.NewAccent(1, "sourceID", "destLayer")
 		if got.SourceID != want.SourceID {
 			t.Errorf("SourceID returned incorrect value, got: %s, want: %s", got.SourceID, want.SourceID)
 		}

@@ -1,9 +1,10 @@
 package monteverdi
 
 import (
-	"github.com/gdamore/tcell/v2"
 	"log"
 	"os"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 /*

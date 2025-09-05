@@ -1,8 +1,10 @@
-package monteverdi
+package monteverdi_test
 
 import (
 	"os"
 	"testing"
+
+	Ms "github.com/maroda/monteverdi/server"
 )
 
 func TestFillEnvVar(t *testing.T) {
@@ -10,7 +12,7 @@ func TestFillEnvVar(t *testing.T) {
 	t.Run("returns a default value", func(t *testing.T) {
 		ev := "ANYTHING"
 		want := "ENOENT"
-		got := FillEnvVar(ev)
+		got := Ms.FillEnvVar(ev)
 
 		assertString(t, got, want)
 	})
@@ -25,7 +27,7 @@ func TestFillEnvVar(t *testing.T) {
 			t.Errorf("could not set env var: %s", ev)
 		}
 
-		got := FillEnvVar(ev)
+		got := Ms.FillEnvVar(ev)
 		assertString(t, got, want)
 	})
 }
@@ -39,7 +41,7 @@ func TestUrlCat(t *testing.T) {
 		URIPost := ""
 
 		want := "craque.bandcamp.com/track/relaxant"
-		got := urlCat(WebDomain, URIPre, URIDyna, URIPost)
+		got := Ms.UrlCat(WebDomain, URIPre, URIDyna, URIPost)
 
 		assertString(t, got, want)
 	})
@@ -50,7 +52,7 @@ func TestUrlCat(t *testing.T) {
 
 		for _, h := range three {
 			want := "craque.bandcamp.com/track/" + h + "/listen"
-			got := urlCat(WebDomain, URIPre, h, URIPost)
+			got := Ms.UrlCat(WebDomain, URIPre, h, URIPost)
 
 			assertString(t, got, want)
 		}

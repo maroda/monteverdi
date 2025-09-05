@@ -1,9 +1,11 @@
-package monteverdi
+package monteverdi_test
 
 import (
 	"reflect"
 	"testing"
 	"time"
+
+	Ms "github.com/maroda/monteverdi/server"
 )
 
 func TestNewQNet(t *testing.T) {
@@ -14,12 +16,12 @@ func TestNewQNet(t *testing.T) {
 	t.Run("Endpoint ID matches", func(t *testing.T) {
 		// create a slice of Endpoint (also type:Endpoints)
 		// using the Endpoint created above, just one element
-		var eps []Endpoint
+		var eps []Ms.Endpoint
 		eps = append(eps, *ep)
 
 		// create a new QNet
 		// check that the ID was created OK
-		qn := NewQNet(eps)
+		qn := Ms.NewQNet(eps)
 		got := qn.Network[0].ID
 		want := eps[0].ID
 		assertString(t, got, want)
@@ -42,12 +44,12 @@ func TestNewEndpoint(t *testing.T) {
 	}{
 		ID:     id,
 		URL:    url,
-		metric: ep.metric,
-		mdata:  ep.mdata,
+		metric: ep.Metric,
+		mdata:  ep.Mdata,
 	}
 
 	t.Run("Returns correct metadata", func(t *testing.T) {
-		get := *NewEndpoint(id, url)
+		get := *Ms.NewEndpoint(id, url)
 		got := get.URL
 		match := want.URL
 		assertString(t, got, match)
@@ -58,7 +60,7 @@ func TestNewEndpoint(t *testing.T) {
 	})
 
 	t.Run("Returns correct field count", func(t *testing.T) {
-		got := *NewEndpoint(id, url, ep.metric[1], ep.metric[2], ep.metric[3])
+		got := *Ms.NewEndpoint(id, url, ep.Metric[1], ep.Metric[2], ep.Metric[3])
 		gotSize := reflect.TypeOf(got).NumField()
 		wantSize := reflect.TypeOf(want).NumField()
 		if gotSize != wantSize {
@@ -67,8 +69,8 @@ func TestNewEndpoint(t *testing.T) {
 	})
 
 	t.Run("number of collections is correct", func(t *testing.T) {
-		get := *NewEndpoint(id, url, ep.metric[1], ep.metric[2], ep.metric[3])
-		got := len(get.metric)
+		get := *Ms.NewEndpoint(id, url, ep.Metric[1], ep.Metric[2], ep.Metric[3])
+		got := len(get.Metric)
 		match := len(want.metric)
 		if got != match {
 			t.Errorf("NewEndpoint returned wrong number of collections: got %d, want %d", got, match)
@@ -98,7 +100,7 @@ VAR5=11111
 	ep := makeEndpoint(name, urlWWW)
 
 	// create a new QNet
-	qn := NewQNet([]Endpoint{*ep})
+	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
 
 	pollresult, err := qn.Poll("VAR3")
 	if err != nil {
@@ -116,7 +118,7 @@ VAR5=11111
 
 // Create an endpoint with a customizable ID and URL
 // It contains three metrics and a data value for each metric
-func makeEndpoint(i, u string) *Endpoint {
+func makeEndpoint(i, u string) *Ms.Endpoint {
 	// Fake ID
 	id := i
 
@@ -136,10 +138,10 @@ func makeEndpoint(i, u string) *Endpoint {
 	d[c[3]] = 3
 
 	// Struct matches the Endpoint type
-	return &Endpoint{
+	return &Ms.Endpoint{
 		ID:     id,
 		URL:    url,
-		metric: c,
-		mdata:  d,
+		Metric: c,
+		Mdata:  d,
 	}
 }

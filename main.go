@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/gdamore/tcell/v2"
+	"log"
+	"log/slog"
+
 	Md "github.com/maroda/monteverdi/display"
 	Ms "github.com/maroda/monteverdi/server"
-	"log"
 )
 
 func init() {
@@ -44,6 +45,28 @@ func init() {
 }
 
 func main() {
+	// Check Netdata for data
+	// this should be its own function
+	url := Ms.FillEnvVar("NETDATA_ENDPOINT")
+	ep := Ms.NewEndpoint("NETDATA", url)
+	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
+	// pollresult will happen in a function inside
+	/*
+		pollresult, err := qn.Poll("NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL")
+		if err != nil {
+			log.Fatal(err)
+		}
+	*/
+
+	err := Md.StartHarmonyView(qn)
+	if err != nil {
+		slog.Error("Problem starting HarmonyView", slog.Any("Error", err))
+		panic("Failed to start harmony view")
+	}
+}
+
+/*
+func main() {
 	boxStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorIndigo)
 	harmonicStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorOliveDrab)
 
@@ -73,6 +96,9 @@ func main() {
 	// Here's how to get the screen size when you need it.
 	// xmax, ymax := s.Size()
 
+	// don't use an event loop here, break this out into functions
+	// Md.StartDisplay() -> this way the display interface can be chosen
+
 	// Event loop
 	for {
 		// Refresh
@@ -88,7 +114,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		// i'm not sure about using int64 here yet, but it feels right
+		// I'm not sure about using int64 here yet, but it feels right
 		// but for this test, convert pollresult back to int32 for tcell (for now)
 		metric := int(pollresult)
 
@@ -122,3 +148,4 @@ func main() {
 		}
 	}
 }
+*/

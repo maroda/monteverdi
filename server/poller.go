@@ -3,7 +3,6 @@ package monteverdi
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,10 +15,12 @@ const (
 	// netdata = "http://localhost:19999/api/v3/allmetrics"
 )
 
+/*
 func showBanner(w io.Writer, banner string) error {
 	_, err := fmt.Fprintf(w, "%s\n", banner)
 	return err
 }
+*/
 
 // SingleFetch returns the Response Code, raw byte stream body, and error
 func SingleFetch(url string) (int, []byte, error) {

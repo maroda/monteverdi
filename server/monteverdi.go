@@ -46,8 +46,8 @@ func NewQNet(ep Endpoints) *QNet {
 type Endpoint struct {
 	ID     string           // string describing the endpoint source
 	URL    string           // URL endpoint for the service
-	metric map[int64]string // map of all metric keys to be retrieved
-	mdata  map[string]int64 // map of all metric data by metric key
+	Metric map[int64]string // map of all metric keys to be retrieved
+	Mdata  map[string]int64 // map of all metric data by metric key
 }
 
 type Endpoints []Endpoint
@@ -72,8 +72,8 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 	return &Endpoint{
 		ID:     id,
 		URL:    url,
-		metric: collection,
-		mdata:  colldata,
+		Metric: collection,
+		Mdata:  colldata,
 	}
 }
 
@@ -108,7 +108,7 @@ func (q *QNet) Poll(p string) (int64, error) {
 			}
 
 			// Populate the map in the struct
-			q.Network[index].mdata[p] = metric
+			q.Network[index].Mdata[p] = metric
 		}
 	}
 

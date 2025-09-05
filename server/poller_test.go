@@ -1,7 +1,6 @@
-package monteverdi
+package monteverdi_test
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -9,8 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	Ms "github.com/maroda/monteverdi/server"
 )
 
+/*
 func TestShowBanner(t *testing.T) {
 	t.Run("Prints configured string", func(t *testing.T) {
 		welcome := "fantastic"
@@ -24,6 +26,7 @@ func TestShowBanner(t *testing.T) {
 		assertString(t, got, want)
 	})
 }
+*/
 
 // TestSingleFetch should handle single URLs
 func TestSingleFetch(t *testing.T) {
@@ -32,7 +35,7 @@ func TestSingleFetch(t *testing.T) {
 
 	t.Run("Fetches a single URL", func(t *testing.T) {
 		want := "craquemattic"
-		_, get, err := SingleFetch(urlWWW)
+		_, get, err := Ms.SingleFetch(urlWWW)
 
 		got := string(get)
 		assertError(t, err, nil)
@@ -40,14 +43,14 @@ func TestSingleFetch(t *testing.T) {
 	})
 
 	t.Run("Returns Status 200", func(t *testing.T) {
-		got, _, _ := SingleFetch(urlWWW)
+		got, _, _ := Ms.SingleFetch(urlWWW)
 		assertStatus(t, got, 200)
 	})
 
 	mockWWW.Close()
 
 	t.Run("Returns Error after Server Close", func(t *testing.T) {
-		_, _, got := SingleFetch(urlWWW)
+		_, _, got := Ms.SingleFetch(urlWWW)
 		assertGotError(t, got)
 		fmt.Println(got)
 	})
@@ -69,7 +72,7 @@ VAR5=valuevaluevaluevaluevalue
 	// Check that the correct number of values exist
 	// This accounts for removal of whitespace and comments
 	t.Run("Fetches correct count of all KV", func(t *testing.T) {
-		get, err := MetricKV(urlWWW)
+		get, err := Ms.MetricKV(urlWWW)
 		got := len(get)
 		want := 5
 
@@ -79,7 +82,7 @@ VAR5=valuevaluevaluevaluevalue
 
 	// Here we look for VAR4
 	t.Run("Fetches known KV", func(t *testing.T) {
-		get, _ := MetricKV(urlWWW)
+		get, _ := Ms.MetricKV(urlWWW)
 		got := get["VAR4"]
 		want := "valuevaluevaluevalue"
 
