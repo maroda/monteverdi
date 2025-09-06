@@ -16,7 +16,7 @@ This is an observability tool that applies Leonard Meyer's musical analysis tech
 
 ## Core Concept
 
-Traditional monitoring observes individual component metrics in isolation. Monteverdi analyzes the **interaction harmonics** between system components, revealing emergent patterns and early warning signals that conventional dashboards miss.
+Traditional monitoring observes individual component metric in isolation. Monteverdi analyzes the **interaction harmonics** between system components, revealing emergent patterns and early warning signals that conventional dashboards miss.
 
 *Monteverdi represents a fundamental shift from reactive monitoring to predictive harmonic analysis, enabling SREs to conduct their systems like skilled orchestral conductors rather than fighting as isolated firefighters.*
 
@@ -40,7 +40,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 
 **Dynamic Homeostasis**
 - Systems maintain "normal system harmony" through dynamic balance
-- Monitor "consonance" - how well various metrics harmonize with each other
+- Monitor "consonance" - how well various metric harmonize with each other
 - Detect "dissonance" before it cascades into failure
 
 ## Core Features
@@ -85,7 +85,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 ## Technical Implementation
 
 ### Data Sources
-- Traditional metrics (latency, throughput, errors)
+- Traditional metric (latency, throughput, errors)
 - Timing relationships between processes
 - Periodic event patterns (scaling, health checks, batch jobs)
 - Cross-service interaction patterns
@@ -105,7 +105,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 ## Use Cases
 
 ### Reliability Engineering
-- **Predictive Incident Detection**: Identify system instability before traditional metrics indicate problems
+- **Predictive Incident Detection**: Identify system instability before traditional metric indicate problems
 - **Deployment Safety**: Block deployments when system harmony indicates vulnerability
 - **Maintenance Scheduling**: Dynamic timing based on real-time harmonic state
 

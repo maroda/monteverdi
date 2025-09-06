@@ -1,7 +1,9 @@
 package monteverdi_test
 
 import (
+	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -39,7 +41,7 @@ func TestNewEndpoint(t *testing.T) {
 	want := struct {
 		ID     string
 		URL    string
-		metric map[int64]string
+		metric map[int]string
 		mdata  map[string]int64
 		maxval map[string]int64
 		accent map[string]Ms.Accent
@@ -81,6 +83,38 @@ func TestNewEndpoint(t *testing.T) {
 		}
 	})
 
+}
+
+func TestNewEndpointsFromConfig(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": {
+		    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
+		    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 3,
+		    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 10
+		  }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	t.Run("Returns correct metadata", func(t *testing.T) {
+		// returns a []ConfigFile
+		loadConfig, err := Ms.LoadConfigFileName(fileName)
+		assertError(t, err, nil)
+
+		// try to get *Endpoints
+		slice, err := Ms.NewEndpointsFromConfig(loadConfig)
+		assertError(t, err, nil)
+
+		// there's only one member of the slice
+		var got string
+		for _, c := range *slice {
+			got = c.ID
+		}
+		want := "NETDATA"
+		assertString(t, got, want)
+	})
 }
 
 func TestQNet_FindAccent(t *testing.T) {
@@ -162,6 +196,63 @@ VAR5=11111
 	})
 }
 
+func TestQNet_PollMulti(t *testing.T) {
+	// create KV data
+	kvbody := `VAR1=1
+VAR2=11 # comment
+VAR3=111
+VAR4=1111
+
+# A comment
+VAR5=11111
+`
+
+	// make /num/ mock webservers and their URLs
+	num := 2
+	var WWW []*httptest.Server
+	var URL []string
+
+	for i := 0; i < (num + 1); i++ {
+		mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
+		WWW = append(WWW, mockWWW)
+		URL = append(URL, WWW[i].URL)
+	}
+
+	// create Endpoints
+	var eps Ms.Endpoints
+
+	// step through all URLs
+	for i, _ := range URL {
+		name := "SAAS_" + strconv.Itoa(i)
+		ep := makeEndpoint(name, URL[i])
+		eps = append(eps, *ep)
+	}
+
+	// create a new QNet
+	qn := Ms.NewQNet(eps)
+
+	// finally, send it to PollMulti
+	err := qn.PollMulti()
+	assertError(t, err, nil)
+
+	t.Run("Fetches correct IDs", func(t *testing.T) {
+		got := qn.Network[0].ID
+		want := "SAAS_0"
+		assertString(t, got, want)
+
+		got = qn.Network[1].ID
+		want = "SAAS_1"
+		assertString(t, got, want)
+	})
+
+	t.Run("Fetches known KV", func(t *testing.T) {
+		got := qn.Network[0].Maxval["ONE"]
+		want := 4
+
+		assertInt64(t, got, int64(want))
+	})
+}
+
 // Create an endpoint with a customizable ID and URL
 // It contains three metrics and a data value for each metric
 func makeEndpoint(i, u string) *Ms.Endpoint {
@@ -172,7 +263,7 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	url := u
 
 	// Collection map literal
-	c := make(map[int64]string)
+	c := make(map[int]string)
 	c[1] = "ONE"
 	c[2] = "TWO"
 	c[3] = "THREE"
@@ -183,13 +274,19 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	d[c[2]] = 2
 	d[c[3]] = 3
 
+	// Maxval data map literal
+	x := make(map[string]int64)
+	x[c[1]] = 4
+	x[c[2]] = 5
+	x[c[3]] = 6
+
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{
 		ID:     id,
 		URL:    url,
 		Metric: c,
 		Mdata:  d,
-		Maxval: nil,
+		Maxval: x,
 		Accent: nil,
 	}
 }

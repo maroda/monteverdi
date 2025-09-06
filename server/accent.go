@@ -1,17 +1,20 @@
 package monteverdi
 
-import "time"
+import (
+	"time"
+)
 
 // The Accent is the building block of this tool.
 // What really should show up in the display is the accent,
 // not the raw value.
 
-type EventMapping interface {
-	TimestampString() string
+// Conductor is a set of methods on the Accent and its configuration
+type Conductor interface {
+	init()
 }
 
 type Accent struct {
-	Timestamp time.Time
+	Timestamp int64  // Unix timestamp
 	Intensity int    // raw, unweighted accent strength
 	SourceID  string // identifies the source
 	DestLayer string // identifies the output
@@ -20,17 +23,23 @@ type Accent struct {
 // NewAccent builds the metadata for the accent
 // There is no boolean, the existence of an Accent is always true
 func NewAccent(i int, s, d string) *Accent {
+	// does this need to know the maxval?
 	return &Accent{
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UnixNano(),
 		Intensity: i,
 		SourceID:  s,
 		DestLayer: d,
 	}
 }
 
-// TimestampString returns a compact string
-// this can certainly be done in NewAccent,
-// but just using this to run tests
-func (a *Accent) TimestampString() string {
-	return a.Timestamp.Format("20060102T150405")
+// Init will run the first time an accent of this SourceID is registered
+func (a *Accent) init() {
+	panic("not implemented")
+	// read json
+	// a.ReadConfig()
+	// parse config
+	// validate config
+	// create Endpoint from config
+	// add Endpoint to Endpoints
+	// possibly create QNet
 }

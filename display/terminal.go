@@ -136,11 +136,33 @@ func (v *View) pollQNet() error {
 	return nil
 }
 
+// PollQNetAll is for reading the multi metric config in Endpoint
+func (v *View) PollQNetAll() error {
+	// each config stanza is a Network
+	// The Network is the slice of Endpoints
+	// first range the Networks if there is more than one
+	v.QNet.PollMulti()
+
+	return nil
+}
+
 // run runs a loop and updates periodically
 // each iteration polls the configured Metric[]
 // and fills the related Mdata[Metric] in QNet,
 // which is then read by drawHarmonyView
 // TODO: parameterize run loop time
+func (v *View) run() {
+	for {
+		time.Sleep(1 * time.Second)
+		if err := v.PollQNetAll(); err != nil {
+			slog.Error("Failed to poll QNet", slog.Any("Error", err))
+			return
+		}
+		v.updateScreen()
+	}
+}
+
+/*
 func (v *View) run() {
 	for {
 		time.Sleep(1 * time.Second)
@@ -151,6 +173,8 @@ func (v *View) run() {
 		v.updateScreen()
 	}
 }
+
+*/
 
 func (v *View) updateScreen() {
 	v.screen.Clear()
@@ -186,6 +210,23 @@ func NewView(q *Ms.QNet) (*View, error) {
 // StartHarmonyView is called by main to run the program.
 func StartHarmonyView(q *Ms.QNet) error {
 	view, err := NewView(q)
+	if err != nil {
+		slog.Error("Could not start HarmonyView", slog.Any("Error", err))
+		return err
+	}
+
+	go view.run()
+	view.handleKeyBoardEvent()
+	return err
+}
+
+// StartHarmonyViewWithConfig is called by main to run the program.
+func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
+	// with the new config c, we can make other stuff
+	// var eps *Ms.Endpoints
+	eps, err := Ms.NewEndpointsFromConfig(c)
+	qn := Ms.NewQNet(*eps)
+	view, err := NewView(qn)
 	if err != nil {
 		slog.Error("Could not start HarmonyView", slog.Any("Error", err))
 		return err

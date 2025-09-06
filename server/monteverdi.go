@@ -49,7 +49,7 @@ func NewQNet(ep Endpoints) *QNet {
 type Endpoint struct {
 	ID     string            // string describing the endpoint source
 	URL    string            // URL endpoint for the service
-	Metric map[int64]string  // map of all metric keys to be retrieved
+	Metric map[int]string    // map of all metric keys to be retrieved
 	Mdata  map[string]int64  // map of all metric data by metric key
 	Maxval map[string]int64  // map of metric data max val to find accents
 	Accent map[string]Accent // map of accents by metric key
@@ -59,13 +59,13 @@ type Endpoints []Endpoint
 
 // NewEndpoint returns a pointer to the Endpoint metadata and its data
 // This function syncs endpoint with data using an index
-// TODO: Implement adding Maxval so it comes from the on-disk config
+// TODO: Implement adding Maxval so it comes from the on-disk config, i.e. NewEndpoint(*[]ConfigFile)
 func NewEndpoint(id, url string, m ...string) *Endpoint {
-	collection := make(map[int64]string)
+	collection := make(map[int]string)
 	colldata := make(map[string]int64)
 
 	// index for the metric collection
-	index := int64(len(m) - 1)
+	index := len(m) - 1
 	index = 0
 
 	// Add values of entry parameters to the map as collection keys
@@ -81,6 +81,36 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 		Metric: collection,
 		Mdata:  colldata,
 	}
+}
+
+// NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
+func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
+	var endpoints Endpoints
+	metric := make(map[int]string)
+	maxval := make(map[string]int64)
+
+	// cf is a ConfigFile: ID, URL, MWithMax
+	// on each member a new endpoint is created
+	// we don't need the index yet? it is the count of all config items
+	for _, c := range cf {
+		j := 0
+		for k, v := range c.MWithMax {
+			metric[j] = k
+			maxval[k] = int64(v)
+			j++
+		}
+		// Assign data we know, initialize data we don't
+		NewEP := &Endpoint{
+			ID:     c.ID,
+			URL:    c.URL,
+			Metric: metric,
+			Mdata:  map[string]int64{},
+			Maxval: maxval,
+			Accent: map[string]Accent{},
+		}
+		endpoints = append(endpoints, *NewEP)
+	}
+	return &endpoints, nil
 }
 
 // FindAccent is configured with the parameters applied to a single metric
@@ -107,8 +137,13 @@ func (q *QNet) FindAccent(p string, i, max int) *Accent {
 func (q *QNet) Poll(p string) (int64, error) {
 	// p is the Key to poll, it is a string
 
+	/*
+
+		this needs to operate on each member of the slice
+
+	*/
+
 	// We know this is KV data right now, it's the only choice
-	// this probably also needs to operate on each member of the slice
 	index := 0
 
 	var metric int64
@@ -154,4 +189,59 @@ func (q *QNet) Poll(p string) (int64, error) {
 	// should the raw metric or the accent metric be returned here?
 	// maybe that can be a choice...
 	return metric, nil
+}
+
+func (q *QNet) PollMulti() error {
+	/*
+
+		this needs to operate on each member of the slice
+
+	*/
+	var metric int64
+	metric = 0
+
+	// Step through all Networks in QNet
+	for ni, nv := range q.Network {
+		// pollSource is a map of KV
+		pollSource, err := MetricKV(q.Network[ni].URL)
+		if err != nil {
+			slog.Error("Could not poll metric", slog.Any("Error", err))
+			return err
+		}
+
+		// nv.Metric is the list of configured metrics we want to use
+		for _, mv := range nv.Metric {
+			// pollSource is the full list of metrics from above,
+			for k := range pollSource {
+				if k == mv {
+					// we've found the key, now grab its metric from the poll
+					// convert the metric to int64 on assignment
+					metric, err = strconv.ParseInt(pollSource[mv], 10, 64)
+					if err != nil {
+						slog.Error("Could not convert metric to 64bits", slog.Any("Error", err))
+						return err
+					}
+
+					// Populate the map in the struct
+					// Need to understand if maxval needs to be int64
+					q.Network[ni].Mdata[mv] = metric
+
+					/*
+						// TODO: maxval must be set in the Endpoint struct for this key
+						// maxval := q.Network[index].Maxval[p]
+						// until then, use this
+						maxval := 20
+
+						// Did the measurement hit the accent maxval?
+						accent := q.FindAccent(p, 0, maxval)
+						if accent != nil {
+							q.Network[index].Accent[p] = *accent
+						}
+					*/
+				}
+			}
+		}
+	}
+
+	return nil
 }

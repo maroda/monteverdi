@@ -9,13 +9,12 @@ import (
 )
 
 // Test if the Timestamp is returning the correct format
-// this hopefully runs in under 1s so the times should match
 func TestAccentTime(t *testing.T) {
 	got := *Ms.NewAccent(1, "main", "output")
-	want := time.Now().Format("20060102T150405")
+	want := time.Now().UnixNano()
 
-	if got.TimestampString() != want {
-		t.Errorf("Accent.TimestampString() = %s, want %s", got.TimestampString(), want)
+	if got.Timestamp != want {
+		t.Errorf("Accent = %q, want %q", got, want)
 	}
 }
 
