@@ -22,16 +22,17 @@ type ScreenViewer interface {
 
 // View is updated by whatever is in the QNet
 type View struct {
-	mu     sync.Mutex
-	QNet   *Ms.QNet
-	screen tcell.Screen
+	mu      sync.Mutex
+	QNet    *Ms.QNet
+	screen  tcell.Screen
+	display []string
 }
 
 // Display text
 func (v *View) drawText(x1, y1, x2, y2 int, text string) {
 	row := y1
 	col := x1
-	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
+	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorLightSteelBlue)
 	for _, r := range text {
 		v.screen.SetContent(col, row, r, nil, style)
 		col++
@@ -75,9 +76,12 @@ func (v *View) drawViewBorder(width, height int) {
 // x1 = starting X axis (from left), x2 = ending X axis (from left)
 // y1 = starting Y axis (from top), y2 = ending Y axis (from top)
 func (v *View) drawBar(x1, y1, x2, y2 int) {
-	barStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
+	// barStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
 	for row := y1; row < y2; row++ {
 		for col := x1; col < x2; col++ {
+			// color := tcell.NewRGBColor(int32(50+row), int32(50+col), int32(50+row))
+			color := tcell.NewRGBColor(int32(80+row), int32(80+col), int32(250+row))
+			barStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
 			v.screen.SetContent(col, row, '', nil, barStyle)
 		}
 	}
@@ -93,6 +97,43 @@ func (v *View) drawHarmonyView() {
 	v.drawText(20, height-8, width, height+10, fmt.Sprintf("CPU:%d", userRootCpuUtil))
 	v.drawText(30, height-5, width, height+10, "CRAQUEMATTIC")
 	v.drawText(1, height-1, width, height+10, "Press ESC or Ctrl+C to quit")
+}
+
+// Draw the HarmonyView itself
+//
+// This version needs to draw everything with configured visibility
+// ...which could be toggle-able somehow?
+// the set of 'which metrics i want to build accents on' is not always
+// the same set as 'which metrics do i want to see right now'
+func (v *View) drawHarmonyViewMulti() {
+	// This is the border of the box
+	// 100 is meant to be able to represent percentages
+	// which can probably be configurable
+	width, height := 100, 10
+
+	// Draw basic elements
+	v.drawViewBorder(width, height)
+	v.drawText(1, height-1, width, height+10, "Press ESC or Ctrl+C to quit")
+
+	// step through all Network endpoints
+	for ni, _ := range v.QNet.Network {
+		// step through metrics listed in View.display
+		for di, dm := range v.display {
+			// look up the key in this Network's Endpoint Metric data.
+			// For now, we're pulling raw data,
+			// but future this will be only Accents
+			ddm := v.QNet.Network[ni].Mdata[dm]
+
+			// draw it
+			// hopefully this drawBar looks right
+			v.drawBar(1, 1+di, int(ddm), 2+di)
+
+			// it will take some experimentation to align...
+			v.drawText(2, height-6+di, width+di, height+10+di, fmt.Sprintf("%s:%d", dm, ddm))
+		}
+	}
+
+	v.drawText(width-20, height-1, width, height+10, "CRAQUEMATTIC")
 }
 
 // Exit cleanly
@@ -118,13 +159,6 @@ func (v *View) handleKeyBoardEvent() {
 	}
 }
 
-// Resize for terminal changes
-func (v *View) resizeScreen() {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.screen.Sync()
-}
-
 func (v *View) pollQNet() error {
 	// this poll will update the data for QNet
 	// this will eventually be ALL the metrics
@@ -144,6 +178,13 @@ func (v *View) PollQNetAll() error {
 	v.QNet.PollMulti()
 
 	return nil
+}
+
+// Resize for terminal changes
+func (v *View) resizeScreen() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.screen.Sync()
 }
 
 // run runs a loop and updates periodically
@@ -178,7 +219,8 @@ func (v *View) run() {
 
 func (v *View) updateScreen() {
 	v.screen.Clear()
-	v.drawHarmonyView()
+	// v.drawHarmonyView()
+	v.drawHarmonyViewMulti()
 	v.screen.Show()
 }
 
@@ -197,9 +239,19 @@ func NewView(q *Ms.QNet) (*View, error) {
 	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
 	screen.SetStyle(defStyle)
 
+	// this is temporary to get a list of metrics to show
+	// these are the three in the config file
+	display := make([]string, 0)
+	display = append(display,
+		"NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL",
+		"NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL",
+		"NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL",
+	)
+
 	view := &View{
-		QNet:   q,
-		screen: screen,
+		QNet:    q,
+		screen:  screen,
+		display: display,
 	}
 
 	view.updateScreen()
