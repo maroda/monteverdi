@@ -14,7 +14,7 @@ func TestAccentTime(t *testing.T) {
 	want := time.Now().UnixNano()
 
 	if got.Timestamp != want {
-		t.Errorf("Accent = %q, want %q", got, want)
+		t.Errorf("Accent = %q, want %q", got.Timestamp, want)
 	}
 }
 

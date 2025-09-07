@@ -10,7 +10,9 @@ import (
 // And where pointers to the data are held
 
 type Monteverdi interface {
-	Poll()
+	FindAccent() *Accent
+	Poll() (int64, error)
+	PollMulti() error
 }
 
 type QNet struct {
@@ -47,12 +49,12 @@ func NewQNet(ep Endpoints) *QNet {
 //     However, the Accent is always located by the Metric key itself.
 //     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
-	ID     string            // string describing the endpoint source
-	URL    string            // URL endpoint for the service
-	Metric map[int]string    // map of all metric keys to be retrieved
-	Mdata  map[string]int64  // map of all metric data by metric key
-	Maxval map[string]int64  // map of metric data max val to find accents
-	Accent map[string]Accent // map of accents by metric key
+	ID     string             // string describing the endpoint source
+	URL    string             // URL endpoint for the service
+	Metric map[int]string     // map of all metric keys to be retrieved
+	Mdata  map[string]int64   // map of all metric data by metric key
+	Maxval map[string]int64   // map of metric data max val to find accents
+	Accent map[string]*Accent // map of accents by metric key, timestamped
 }
 
 type Endpoints []Endpoint
@@ -105,7 +107,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 			Metric: metric,
 			Mdata:  map[string]int64{},
 			Maxval: maxval,
-			Accent: map[string]Accent{},
+			Accent: map[string]*Accent{},
 		}
 		endpoints = append(endpoints, *NewEP)
 	}
@@ -116,17 +118,33 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 // for now, intensity is 1 for everything later on, intensity is used to
 // 'weight' metrics i.e. give them greater harmonic meaning.
 // Currently destination layer is not used
-func (q *QNet) FindAccent(p string, i, max int) *Accent {
+//
+// i == Network index
+// p == Metric name
+func (q *QNet) FindAccent(p string, i int) *Accent {
+	// The metric data
 	md := q.Network[i].Mdata[p]
-	// Below the Max, we're good.
-	// TODO: max = q.Network[i].Maxval[p]
-	if md < int64(max) {
-		return nil
+
+	// The metric max
+	mx := q.Network[i].Maxval[p]
+
+	// init values
+	intensity := 1
+	a := &Accent{}
+
+	if md >= mx {
+		q.Network[i].Accent = make(map[string]*Accent)
+		q.Network[i].Accent[p] = NewAccent(intensity, p, "")
+		a = q.Network[i].Accent[p]
+		slog.Debug("ACCENT FOUND",
+			slog.Int64("Mdata", md),
+			slog.Int64("Maxval", mx),
+			slog.Int("Intensity", intensity),
+			slog.Int64("Timestamp", a.Timestamp),
+		)
 	}
 
-	intensity := 1
-	accent := NewAccent(intensity, p, "")
-	return accent
+	return a
 }
 
 // Poll takes a string /p/ and searches QNet.Endpoint.Metric for the Key
@@ -182,12 +200,8 @@ func (q *QNet) Poll(p string) (int64, error) {
 	return metric, nil
 }
 
+// PollMulti reads all configured metrics from QNet and retrieves them.
 func (q *QNet) PollMulti() error {
-	/*
-
-		this needs to operate on each member of the slice
-
-	*/
 	var metric int64
 	metric = 0
 
@@ -214,8 +228,13 @@ func (q *QNet) PollMulti() error {
 					}
 
 					// Populate the map in the struct
-					// Need to understand if maxval needs to be int64
 					q.Network[ni].Mdata[mv] = metric
+
+					// Find any Accents at the same time
+					accent := q.FindAccent(mv, ni)
+					if accent == nil {
+						slog.Debug("ACCENT EMPTY: NIL")
+					}
 				}
 			}
 		}

@@ -7,12 +7,6 @@ import (
 // The Accent is the building block of this tool.
 // What really should show up in the display is the accent,
 // not the raw value.
-
-// Conductor is a set of methods on the Accent and its configuration
-type Conductor interface {
-	init()
-}
-
 type Accent struct {
 	Timestamp int64  // Unix timestamp
 	Intensity int    // raw, unweighted accent strength
@@ -30,16 +24,4 @@ func NewAccent(i int, s, d string) *Accent {
 		SourceID:  s,
 		DestLayer: d,
 	}
-}
-
-// Init will run the first time an accent of this SourceID is registered
-func (a *Accent) init() {
-	panic("not implemented")
-	// read json
-	// a.ReadConfig()
-	// parse config
-	// validate config
-	// create Endpoint from config
-	// add Endpoint to Endpoints
-	// possibly create QNet
 }

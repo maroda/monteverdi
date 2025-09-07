@@ -114,7 +114,7 @@ func (v *View) drawHarmonyView() {
 // the same set as 'which metrics do i want to see right now'
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := 100, 10
+	width, height := 100, 15
 
 	// Draw basic elements
 	v.drawViewBorder(width, height)
@@ -129,6 +129,12 @@ func (v *View) drawHarmonyViewMulti() {
 			// but future this will be only Accents
 			ddm := v.QNet.Network[ni].Mdata[dm]
 
+			// Can we see an Accent happen?
+			dda := v.QNet.Network[ni].Accent[dm]
+			if dda != nil {
+				v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, dda.Timestamp))
+			}
+
 			// draw the bar
 			v.drawBar(1, 1+di, int(ddm), 2+di)
 
@@ -137,7 +143,7 @@ func (v *View) drawHarmonyViewMulti() {
 		}
 	}
 
-	v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")
+	// v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")
 }
 
 // Exit cleanly

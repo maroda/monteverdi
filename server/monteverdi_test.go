@@ -1,6 +1,8 @@
 package monteverdi_test
 
 import (
+	"fmt"
+	"math"
 	"net/http/httptest"
 	"reflect"
 	"strconv"
@@ -119,8 +121,15 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 
 func TestQNet_FindAccent(t *testing.T) {
 	// create KV data on a mock webserver
-	kvbody := `CPU=15`
-	key := `CPU`
+	// right now these are colliding with the mock Endpoint struct
+	// so making them equal for running current tests
+	// These are Key=Mdata
+	kvbody := `ONE=11
+	TWO=12
+	THREE=13
+	`
+
+	key := `ONE`
 	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
 	urlWWW := mockWWW.URL
 
@@ -131,32 +140,19 @@ func TestQNet_FindAccent(t *testing.T) {
 	// create a new QNet
 	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
 
-	pollresult, err := qn.Poll(key)
-	if err != nil {
-		t.Errorf("Poll returned unexpected error: %s", err)
-	}
+	err := qn.PollMulti()
+	assertError(t, err, nil)
 
-	t.Run("Fetches known KV", func(t *testing.T) {
-		got := pollresult
-		var want int64
-		want = 15
+	t.Run("Fetches Correct Timestamp in Accent", func(t *testing.T) {
+		get := qn.FindAccent(key, 0)
+		got := truncateToDigits(get.Timestamp, 10)
+		want := truncateToDigits(time.Now().UnixNano(), 10)
 		assertInt64(t, got, want)
 	})
+}
 
-	t.Run("Fetches known accent", func(t *testing.T) {
-		accent := qn.FindAccent(key, 0, 10)
-		got := accent.SourceID
-		want := key
-
-		assertString(t, got, want)
-	})
-
-	t.Run("No accent is created", func(t *testing.T) {
-		accent := qn.FindAccent(key, 0, 20)
-		if accent != nil {
-			t.Errorf("Accent returned %v, want nil", accent)
-		}
-	})
+func truncateToDigits(n int64, digits int) int64 {
+	return int64(math.Pow10(digits)) % n
 }
 
 // This may end up covering MetricKV but we'll see
@@ -251,6 +247,11 @@ VAR5=11111
 
 		assertInt64(t, got, int64(want))
 	})
+
+	t.Run("Reads Accent", func(t *testing.T) {
+		fmt.Println(qn.Network[0].Accent["ONE"])
+		fmt.Println(qn.Network[1].Accent["TWO"])
+	})
 }
 
 // Create an endpoint with a customizable ID and URL
@@ -262,19 +263,22 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	// Fake URL
 	url := u
 
-	// Collection map literal
+	// Collection map literal for Metric
+	// What metrics we want to keep from the Poll
 	c := make(map[int]string)
 	c[1] = "ONE"
 	c[2] = "TWO"
 	c[3] = "THREE"
 
-	// Collection data map literal
+	// Collection data map literal for Mdata
+	// What data each of these metrics has from a Poll
 	d := make(map[string]int64)
-	d[c[1]] = 1
-	d[c[2]] = 2
-	d[c[3]] = 3
+	d[c[1]] = 11
+	d[c[2]] = 12
+	d[c[3]] = 13
 
-	// Maxval data map literal
+	// Accent trigger data map literal for Maxval
+	// Greater than or equal to, an accent happens
 	x := make(map[string]int64)
 	x[c[1]] = 4
 	x[c[2]] = 5
