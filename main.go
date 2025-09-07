@@ -1,18 +1,41 @@
 package main
 
 import (
+	"log"
 	"log/slog"
+	"os"
 
 	Md "github.com/maroda/monteverdi/display"
 	Ms "github.com/maroda/monteverdi/server"
 )
 
+// Set up default logging behavior
+// Validate user is not root
 func init() {
+	file, err := os.OpenFile("monteverdi.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Print("Failed to open log file")
+		os.Exit(1)
+	}
+
+	logger := slog.New(slog.NewJSONHandler(file, &slog.HandlerOptions{
+		Level:     slog.LevelDebug,
+		AddSource: true,
+	}))
+	slog.SetDefault(logger)
+
 	User := Ms.FillEnvVar("USER")
-	slog.Info("Monteverdi initializing for ... ", User)
+	if User == "root" {
+		slog.Error("User cannot be root")
+		os.Exit(1)
+	}
+
+	slog.Info("INITIALIZED Monteverdi", slog.String("user", User))
 }
 
 func main() {
+	slog.Info("STARTING Monteverdi")
+
 	// config filename version
 	// TODO: make this an env var
 	localJSON := "config.json"

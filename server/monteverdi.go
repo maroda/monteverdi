@@ -59,7 +59,6 @@ type Endpoints []Endpoint
 
 // NewEndpoint returns a pointer to the Endpoint metadata and its data
 // This function syncs endpoint with data using an index
-// TODO: Implement adding Maxval so it comes from the on-disk config, i.e. NewEndpoint(*[]ConfigFile)
 func NewEndpoint(id, url string, m ...string) *Endpoint {
 	collection := make(map[int]string)
 	colldata := make(map[string]int64)
@@ -117,7 +116,6 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 // for now, intensity is 1 for everything later on, intensity is used to
 // 'weight' metrics i.e. give them greater harmonic meaning.
 // Currently destination layer is not used
-// TODO: /max int/ will need to come from QNet
 func (q *QNet) FindAccent(p string, i, max int) *Accent {
 	md := q.Network[i].Mdata[p]
 	// Below the Max, we're good.
@@ -225,19 +223,6 @@ func (q *QNet) PollMulti() error {
 					// Populate the map in the struct
 					// Need to understand if maxval needs to be int64
 					q.Network[ni].Mdata[mv] = metric
-
-					/*
-						// TODO: maxval must be set in the Endpoint struct for this key
-						// maxval := q.Network[index].Maxval[p]
-						// until then, use this
-						maxval := 20
-
-						// Did the measurement hit the accent maxval?
-						accent := q.FindAccent(p, 0, maxval)
-						if accent != nil {
-							q.Network[index].Accent[p] = *accent
-						}
-					*/
 				}
 			}
 		}

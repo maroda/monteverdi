@@ -1,13 +1,18 @@
 package monteverdi
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/gorilla/mux"
+	Mo "github.com/maroda/monteverdi/obvy"
 	Ms "github.com/maroda/monteverdi/server"
 )
 
@@ -26,6 +31,8 @@ type View struct {
 	QNet    *Ms.QNet
 	screen  tcell.Screen
 	display []string
+	stats   *Mo.StatsInternal
+	server  *http.Server
 }
 
 // Display text
@@ -95,7 +102,7 @@ func (v *View) drawHarmonyView() {
 	v.drawViewBorder(width, height)
 	v.drawBar(1, 1, int(userRootCpuUtil), 2)
 	v.drawText(20, height-8, width, height+10, fmt.Sprintf("CPU:%d", userRootCpuUtil))
-	v.drawText(30, height-5, width, height+10, "CRAQUEMATTIC")
+	v.drawText(30, height-5, width, height+10, "Monteverdi")
 	v.drawText(1, height-1, width, height+10, "Press ESC or Ctrl+C to quit")
 }
 
@@ -107,8 +114,6 @@ func (v *View) drawHarmonyView() {
 // the same set as 'which metrics do i want to see right now'
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	// 100 is meant to be able to represent percentages
-	// which can probably be configurable
 	width, height := 100, 10
 
 	// Draw basic elements
@@ -124,8 +129,7 @@ func (v *View) drawHarmonyViewMulti() {
 			// but future this will be only Accents
 			ddm := v.QNet.Network[ni].Mdata[dm]
 
-			// draw it
-			// hopefully this drawBar looks right
+			// draw the bar
 			v.drawBar(1, 1+di, int(ddm), 2+di)
 
 			// it will take some experimentation to align...
@@ -133,7 +137,7 @@ func (v *View) drawHarmonyViewMulti() {
 		}
 	}
 
-	v.drawText(width-20, height-1, width, height+10, "CRAQUEMATTIC")
+	v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")
 }
 
 // Exit cleanly
@@ -159,23 +163,14 @@ func (v *View) handleKeyBoardEvent() {
 	}
 }
 
-func (v *View) pollQNet() error {
-	// this poll will update the data for QNet
-	// this will eventually be ALL the metrics
-	_, err := v.QNet.Poll("NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL")
-	if err != nil {
-		slog.Error("Failed to poll QNet user", slog.Any("Error", err))
-		return err
-	}
-	return nil
-}
-
 // PollQNetAll is for reading the multi metric config in Endpoint
 func (v *View) PollQNetAll() error {
-	// each config stanza is a Network
-	// The Network is the slice of Endpoints
-	// first range the Networks if there is more than one
+	start := time.Now()
+
 	v.QNet.PollMulti()
+
+	duration := time.Since(start).Seconds()
+	v.stats.RecPollTimer(duration)
 
 	return nil
 }
@@ -193,6 +188,7 @@ func (v *View) resizeScreen() {
 // which is then read by drawHarmonyView
 // TODO: parameterize run loop time
 func (v *View) run() {
+	slog.Info("Starting HarmonyView")
 	for {
 		time.Sleep(1 * time.Second)
 		if err := v.PollQNetAll(); err != nil {
@@ -203,19 +199,46 @@ func (v *View) run() {
 	}
 }
 
-/*
-func (v *View) run() {
-	for {
-		time.Sleep(1 * time.Second)
-		if err := v.pollQNet(); err != nil {
-			slog.Error("Failed to poll QNet", slog.Any("Error", err))
-			return
-		}
-		v.updateScreen()
-	}
+func (v *View) setupMux() *mux.Router {
+	r := mux.NewRouter()
+
+	r.Handle("/metrics", v.stats.Handler())
+
+	api := r.PathPrefix("/api").Subrouter()
+	api.Use(v.statsMiddleware)
+
+	return r
 }
 
-*/
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *responseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// optional for non header
+func (w *responseWriter) Write(b []byte) (int, error) {
+	return w.ResponseWriter.Write(b)
+}
+
+func (v *View) statsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// start := time.Now()
+
+		wrapped := &responseWriter{
+			ResponseWriter: w,
+			status:         200,
+		}
+		next.ServeHTTP(wrapped, r)
+
+		// duration := time.Since(start).Seconds()
+		v.stats.RecWWW(strconv.Itoa(wrapped.status), r.Method)
+	})
+}
 
 func (v *View) updateScreen() {
 	v.screen.Clear()
@@ -248,10 +271,14 @@ func NewView(q *Ms.QNet) (*View, error) {
 		"NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL",
 	)
 
+	// create an attached prometheus registry
+	stats := Mo.NewStatsInternal()
+
 	view := &View{
 		QNet:    q,
 		screen:  screen,
 		display: display,
+		stats:   stats,
 	}
 
 	view.updateScreen()
@@ -259,20 +286,8 @@ func NewView(q *Ms.QNet) (*View, error) {
 	return view, err
 }
 
-// StartHarmonyView is called by main to run the program.
-func StartHarmonyView(q *Ms.QNet) error {
-	view, err := NewView(q)
-	if err != nil {
-		slog.Error("Could not start HarmonyView", slog.Any("Error", err))
-		return err
-	}
-
-	go view.run()
-	view.handleKeyBoardEvent()
-	return err
-}
-
 // StartHarmonyViewWithConfig is called by main to run the program.
+// This also starts up the /metrics endpoint that is populated by prometheus.
 func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 	// with the new config c, we can make other stuff
 	// var eps *Ms.Endpoints
@@ -284,7 +299,25 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 		return err
 	}
 
+	// Server for stats endpoint
+	view.server = &http.Server{
+		Addr:    ":8080",
+		Handler: view.setupMux(),
+	}
+
+	// Run Monteverdi
 	go view.run()
+
+	// Run stats endpoint
+	go func() {
+		addr := ":8080"
+		slog.Info("Starting Monteverdi stats endpoint...", slog.String("Port", addr))
+		if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Could not start stats endpoint", slog.Any("Error", err))
+		}
+	}()
+
 	view.handleKeyBoardEvent()
+
 	return err
 }

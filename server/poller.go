@@ -48,6 +48,7 @@ func SingleFetch(url string) (int, []byte, error) {
 
 // MetricKV streams input from the endpoint body and populates
 // a map for all key/values, removing whitespace and comments
+// TODO: in order to support prometheus, we need a custom delimiter
 func MetricKV(url string) (map[string]string, error) {
 	envMap := make(map[string]string)
 

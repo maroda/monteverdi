@@ -1,8 +1,9 @@
 # Test binary, built with `go test -c`
 *.test
 
-# env file
+# local files
 .env
+/monteverdi.log
 
 # ctags file
 tags
