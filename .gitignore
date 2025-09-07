@@ -13,3 +13,4 @@ tags
 
 # goreleaser
 dist/
+/monteverdi

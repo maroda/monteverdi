@@ -122,7 +122,7 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 func TestQNet_FindAccent(t *testing.T) {
 	// create KV data on a mock webserver
 	// right now these are colliding with the mock Endpoint struct
-	// so making them equal for running current tests
+	// so making them equal for running Current tests
 	// These are Key=Mdata
 	kvbody := `ONE=11
 	TWO=12

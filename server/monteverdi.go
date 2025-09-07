@@ -132,10 +132,12 @@ func (q *QNet) FindAccent(p string, i int) *Accent {
 	intensity := 1
 	a := &Accent{}
 
+	// if the accent exists, fill in a bunch of metadata
 	if md >= mx {
 		q.Network[i].Accent = make(map[string]*Accent)
-		q.Network[i].Accent[p] = NewAccent(intensity, p, "")
+		q.Network[i].Accent[p] = NewAccent(intensity, p)
 		a = q.Network[i].Accent[p]
+
 		slog.Debug("ACCENT FOUND",
 			slog.Int64("Mdata", md),
 			slog.Int64("Maxval", mx),
@@ -235,6 +237,7 @@ func (q *QNet) PollMulti() error {
 					if accent == nil {
 						slog.Debug("ACCENT EMPTY: NIL")
 					}
+
 				}
 			}
 		}

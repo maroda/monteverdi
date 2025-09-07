@@ -17,8 +17,6 @@ import (
 )
 
 type ScreenViewer interface {
-	drawHarmonyView()
-	drawText()
 	exit()
 	handleKeyBoardEvent()
 	resizeScreen()
@@ -33,6 +31,46 @@ type View struct {
 	display []string
 	stats   *Mo.StatsInternal
 	server  *http.Server
+}
+
+// Display a single rune, probably a hex value?
+// Like: '' - this is a private char, should use something else?
+// for now just using it
+// But for this to "stay on the screen", i need a running histogram
+// to do that, i need a histogram type to use a cache in Accent
+// this way, a timeseries of runes is beside a metric's accents
+func (v *View) drawRune(x, y, m, s int) {
+	color := tcell.NewRGBColor(int32(150+x), int32(150+y), int32(255-m))
+	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
+	v.screen.SetContent(x, y, '', nil, style)
+}
+
+func (v *View) drawTimeseries(x, y, i int, p string) {
+
+	// in order for this to work, the second must be evaluated when the Accent is retrieved
+	// that's in FindAccent
+	runes := v.QNet.Network[i].Accent[p].GetDisplay()
+
+	for _, r := range runes {
+		if r == 0 {
+			r = ' '
+		}
+
+		// Choose color based on the rune (intensity)
+		var style tcell.Style
+		switch r {
+		case '▁', '▂':
+			style = tcell.StyleDefault.Foreground(tcell.ColorGreen)
+		case '▃', '▄', '▅':
+			style = tcell.StyleDefault.Foreground(tcell.ColorYellow)
+		case '▆', '▇', '█':
+			style = tcell.StyleDefault.Foreground(tcell.ColorRed)
+		default:
+			style = tcell.StyleDefault
+		}
+
+		v.screen.SetContent(x+i, y+1, r, nil, style)
+	}
 }
 
 // Display text
@@ -114,7 +152,7 @@ func (v *View) drawHarmonyView() {
 // the same set as 'which metrics do i want to see right now'
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := 100, 15
+	width, height := 120, 15
 
 	// Draw basic elements
 	v.drawViewBorder(width, height)
@@ -132,9 +170,17 @@ func (v *View) drawHarmonyViewMulti() {
 			// Can we see an Accent happen?
 			dda := v.QNet.Network[ni].Accent[dm]
 			if dda != nil {
-				v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, dda.Timestamp))
-			}
+				// now get the second from the Timestamp. this is the X position on the display
+				newTime := time.Unix(dda.Timestamp/1e9, dda.Timestamp%1e9)
+				s := newTime.Second()
+				v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, s))
 
+				// draw a rune
+				v.drawRune(5+s, 5+di, int(ddm), s)
+
+				// draw timeseries
+				v.drawTimeseries(1, 6, ni, dm)
+			}
 			// draw the bar
 			v.drawBar(1, 1+di, int(ddm), 2+di)
 
