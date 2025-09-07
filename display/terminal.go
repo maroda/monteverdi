@@ -121,7 +121,7 @@ func (v *View) drawHarmonyViewMulti() {
 	v.drawText(1, height-1, width, height+10, "Press ESC or Ctrl+C to quit")
 
 	// step through all Network endpoints
-	for ni, _ := range v.QNet.Network {
+	for ni := range v.QNet.Network {
 		// step through metrics listed in View.display
 		for di, dm := range v.display {
 			// look up the key in this Network's Endpoint Metric data.
@@ -167,12 +167,15 @@ func (v *View) handleKeyBoardEvent() {
 func (v *View) PollQNetAll() error {
 	start := time.Now()
 
-	v.QNet.PollMulti()
+	err := v.QNet.PollMulti()
+	if err != nil {
+		slog.Error("Failed to PollMulti", slog.Any("Error", err))
+	}
 
 	duration := time.Since(start).Seconds()
 	v.stats.RecPollTimer(duration)
 
-	return nil
+	return err
 }
 
 // Resize for terminal changes
@@ -292,7 +295,13 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 	// with the new config c, we can make other stuff
 	// var eps *Ms.Endpoints
 	eps, err := Ms.NewEndpointsFromConfig(c)
+	if eps == nil || err != nil {
+		slog.Error("Failed to init endpoints", slog.Any("Error", err))
+		return err
+	}
+
 	qn := Ms.NewQNet(*eps)
+
 	view, err := NewView(qn)
 	if err != nil {
 		slog.Error("Could not start HarmonyView", slog.Any("Error", err))

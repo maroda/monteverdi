@@ -24,7 +24,7 @@ func NewStatsInternal() *StatsInternal {
 	// Custom Go Runtime collector
 	goCollector := collectors.NewGoCollector(
 		collectors.WithGoCollectorRuntimeMetrics(
-			collectors.GoRuntimeMetricsRule{regexp.MustCompile("/.*")},
+			collectors.GoRuntimeMetricsRule{Matcher: regexp.MustCompile("/.*")},
 		),
 	)
 	si.WWWRegistry.MustRegister(goCollector)

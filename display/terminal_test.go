@@ -1,7 +1,6 @@
 package monteverdi_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -61,11 +60,4 @@ func mkTestScreen(t *testing.T, charset string) tcell.SimulationScreen {
 		t.Fatalf("Failed to init screen: %v", err)
 	}
 	return s
-}
-
-func assertError(t testing.TB, got, want error) {
-	t.Helper()
-	if !errors.Is(got, want) {
-		t.Errorf("got error %q want %q", got, want)
-	}
 }

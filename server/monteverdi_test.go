@@ -222,7 +222,7 @@ VAR5=11111
 	var eps Ms.Endpoints
 
 	// step through all URLs
-	for i, _ := range URL {
+	for i := range URL {
 		name := "SAAS_" + strconv.Itoa(i)
 		ep := makeEndpoint(name, URL[i])
 		eps = append(eps, *ep)
