@@ -131,16 +131,9 @@ func (q *QNet) FindAccent(p string, i, max int) *Accent {
 
 // Poll takes a string /p/ and searches QNet.Endpoint.Metric for the Key
 // If the key is there, the metric is returned for that Key.
-// TODO: Poll should return an accent struct
+// This should not be needed use PollMulti()
 func (q *QNet) Poll(p string) (int64, error) {
 	// p is the Key to poll, it is a string
-
-	/*
-
-		this needs to operate on each member of the slice
-
-	*/
-
 	// We know this is KV data right now, it's the only choice
 	index := 0
 
