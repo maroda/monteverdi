@@ -49,12 +49,13 @@ func NewQNet(ep Endpoints) *QNet {
 //     However, the Accent is always located by the Metric key itself.
 //     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
-	ID     string             // string describing the endpoint source
-	URL    string             // URL endpoint for the service
-	Metric map[int]string     // map of all metric keys to be retrieved
-	Mdata  map[string]int64   // map of all metric data by metric key
-	Maxval map[string]int64   // map of metric data max val to find accents
-	Accent map[string]*Accent // map of accents by metric key, timestamped
+	ID     string                 // string describing the endpoint source
+	URL    string                 // URL endpoint for the service
+	Metric map[int]string         // map of all metric keys to be retrieved
+	Mdata  map[string]int64       // map of all metric data by metric key
+	Maxval map[string]int64       // map of metric data max val to find accents
+	Accent map[string]*Accent     // map of accents by metric key, timestamped
+	Layer  map[string]*Timeseries // map of rolling timeseries by metric key
 }
 
 type Endpoints []Endpoint
@@ -88,16 +89,29 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 	var endpoints Endpoints
 	metric := make(map[int]string)
+	mdata := make(map[string]int64)
 	maxval := make(map[string]int64)
+	accent := make(map[string]*Accent)
+	metsdb := make(map[string]*Timeseries)
+	tsdbWindow := 60
 
 	// cf is a ConfigFile: ID, URL, MWithMax
 	// on each member a new endpoint is created
-	// we don't need the index yet? it is the count of all config items
 	for _, c := range cf {
 		j := 0
+		// This locates the desired metrics from the on-disk config
 		for k, v := range c.MWithMax {
-			metric[j] = k
-			maxval[k] = int64(v)
+			metric[j] = k            // assign the metric name from the config key
+			maxval[k] = int64(v)     // assign the metric max value from the config value
+			metsdb[k] = &Timeseries{ // create a new rolling tsdb for this metric
+				Runes:   make([]rune, tsdbWindow),
+				MaxSize: tsdbWindow,
+				Current: 0,
+			}
+			// Init all rune values - might not be necessary
+			//for t := 0; t < tsdbWindow; t++ {
+			//	metsdb[k].Runes[t] = rune(0)
+			//}
 			j++
 		}
 		// Assign data we know, initialize data we don't
@@ -105,13 +119,92 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 			ID:     c.ID,
 			URL:    c.URL,
 			Metric: metric,
-			Mdata:  map[string]int64{},
+			Mdata:  mdata,
 			Maxval: maxval,
-			Accent: map[string]*Accent{},
+			Accent: accent,
+			Layer:  metsdb,
 		}
 		endpoints = append(endpoints, *NewEP)
 	}
 	return &endpoints, nil
+}
+
+// AddSecond tallies each second as a counter
+// then adds a rune to the slice indexed by second
+// this needs to take the metric name
+// TODO: This is getting a nil pointer somehow
+func (ep *Endpoint) AddSecond(m string) {
+	// This is the index of the rune, and also the current second
+	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize
+
+	// translate this val into a rune for display
+	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRune(ep.Mdata[m])
+}
+
+func (ep *Endpoint) AddSecondWithCheck(m string, isAccent bool) {
+	// This is the index of the rune, and also the current second
+	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize
+
+	// translate this val into a rune for display
+	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRuneWithCheck(ep.Mdata[m], isAccent)
+}
+
+func (ep *Endpoint) ValToRuneWithCheck(val int64, isAccent bool) rune {
+	if !isAccent {
+		return '░'
+	}
+
+	switch {
+	case val < 10:
+		return '▁'
+	case val < 20:
+		return '▂'
+	case val < 30:
+		return '▃'
+	case val < 50:
+		return '▄'
+	case val < 80:
+		return '▅'
+	case val < 130:
+		return '▆'
+	case val < 210:
+		return '▇'
+	default:
+		return '█'
+	}
+}
+
+func (ep *Endpoint) ValToRune(val int64) rune {
+	switch {
+	case val < 10:
+		return '▁'
+	case val < 20:
+		return '▂'
+	case val < 30:
+		return '▃'
+	case val < 50:
+		return '▄'
+	case val < 80:
+		return '▅'
+	case val < 130:
+		return '▆'
+	case val < 210:
+		return '▇'
+	default:
+		return '█'
+	}
+}
+
+// GetDisplay provides the string of runes for drawing using the metric name
+func (ep *Endpoint) GetDisplay(m string) []rune {
+	display := make([]rune, ep.Layer[m].MaxSize)
+	for i := 0; i < ep.Layer[m].MaxSize; i++ {
+		// Start from oldest and go to newest (left to right)
+		// subtract 1 instead to go right->left
+		idx := (ep.Layer[m].Current + 1 + i) % ep.Layer[m].MaxSize
+		display[i] = ep.Layer[m].Runes[idx]
+	}
+	return display
 }
 
 // FindAccent is configured with the parameters applied to a single metric
@@ -121,22 +214,23 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 //
 // i == Network index
 // p == Metric name
-func (q *QNet) FindAccent(p string, i int) *Accent {
+func (q *QNet) FindAccent(m string, i int) *Accent {
 	// The metric data
-	md := q.Network[i].Mdata[p]
+	md := q.Network[i].Mdata[m]
 
 	// The metric max
-	mx := q.Network[i].Maxval[p]
+	mx := q.Network[i].Maxval[m]
 
 	// init values
 	intensity := 1
 	a := &Accent{}
+	isAccent := false
 
 	// if the accent exists, fill in a bunch of metadata
 	if md >= mx {
 		q.Network[i].Accent = make(map[string]*Accent)
-		q.Network[i].Accent[p] = NewAccent(intensity, p)
-		a = q.Network[i].Accent[p]
+		q.Network[i].Accent[m] = NewAccent(intensity, m)
+		a = q.Network[i].Accent[m]
 
 		slog.Debug("ACCENT FOUND",
 			slog.Int64("Mdata", md),
@@ -144,8 +238,14 @@ func (q *QNet) FindAccent(p string, i int) *Accent {
 			slog.Int("Intensity", intensity),
 			slog.Int64("Timestamp", a.Timestamp),
 		)
+
+		isAccent = true
 	}
 
+	// ALWAYS add to timeline, regardless of accent status
+	// This will take the metric and fill
+	// the rune at the current Counter location
+	q.Network[i].AddSecondWithCheck(m, isAccent)
 	return a
 }
 

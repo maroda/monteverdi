@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	Ms "github.com/maroda/monteverdi/server"
 )
 
+/*
 const (
 	id   = "craquemattic"
 	url  = "https://popg.xyz"
@@ -15,15 +15,7 @@ const (
 
 var ep *Ms.Endpoint
 var eps []Ms.Endpoint
-
-func TestNewView(t *testing.T) {
-	ep = Ms.NewEndpoint(id, url, stat)
-	eps = append(eps, *ep)
-	// qn := Ms.QNet{Network: eps}
-
-	t.Run("Returns correct field count", func(t *testing.T) {
-	})
-}
+*/
 
 // it's probably not right to have a func that creates a screen
 // Instead, the screen would be mocked as part of testing an interface

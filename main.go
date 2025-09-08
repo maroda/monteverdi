@@ -19,7 +19,7 @@ func init() {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(file, &slog.HandlerOptions{
-		Level:     slog.LevelDebug,
+		Level:     slog.LevelInfo,
 		AddSource: true,
 	}))
 	slog.SetDefault(logger)

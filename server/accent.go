@@ -7,6 +7,9 @@ import (
 // The Accent is the building block of this tool.
 // What really should show up in the display is the accent,
 // not the raw value.
+//
+// TODO: *Timeseries has to move to Endpoint
+// don't remove it here yet, just build an identical one there
 type Accent struct {
 	Timestamp int64       // Unix timestamp
 	Intensity int         // raw, unweighted accent strength
@@ -14,6 +17,7 @@ type Accent struct {
 	DestLayer *Timeseries // identifies the output
 }
 
+// Timeseries is a generic fixed TimeSeries DB
 type Timeseries struct {
 	Runes   []rune
 	MaxSize int

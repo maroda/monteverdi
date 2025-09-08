@@ -47,6 +47,7 @@ func TestNewEndpoint(t *testing.T) {
 		mdata  map[string]int64
 		maxval map[string]int64
 		accent map[string]Ms.Accent
+		layer  map[string]Ms.Timeseries
 	}{
 		ID:     id,
 		URL:    url,
@@ -54,6 +55,7 @@ func TestNewEndpoint(t *testing.T) {
 		mdata:  ep.Mdata,
 		maxval: nil,
 		accent: nil,
+		layer:  nil,
 	}
 
 	t.Run("Returns correct metadata", func(t *testing.T) {
@@ -100,18 +102,26 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 	defer delConfig()
 	fileName := configFile.Name()
 
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	config, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	t.Run("Endpoint contains expected TSDB configuration", func(t *testing.T) {
+		for _, c := range *config {
+			m := c.Metric
+			got := c.Layer[m[0]].MaxSize
+			want := 60
+
+			assertInt(t, got, want)
+		}
+	})
+
 	t.Run("Returns correct metadata", func(t *testing.T) {
-		// returns a []ConfigFile
-		loadConfig, err := Ms.LoadConfigFileName(fileName)
-		assertError(t, err, nil)
-
-		// try to get *Endpoints
-		slice, err := Ms.NewEndpointsFromConfig(loadConfig)
-		assertError(t, err, nil)
-
 		// there's only one member of the slice
 		var got string
-		for _, c := range *slice {
+		for _, c := range *config {
 			got = c.ID
 		}
 		want := "NETDATA"
@@ -120,34 +130,40 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 }
 
 func TestQNet_FindAccent(t *testing.T) {
-	// create KV data on a mock webserver
-	// right now these are colliding with the mock Endpoint struct
-	// so making them equal for running Current tests
-	// These are Key=Mdata
-	kvbody := `ONE=11
-	TWO=12
-	THREE=13
-	`
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
 
-	key := `ONE`
-	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
-	urlWWW := mockWWW.URL
-
-	// create a new Endpoint
-	name := "craquemattic"
-	ep := makeEndpoint(name, urlWWW)
-
-	// create a new QNet
-	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
-
-	err := qn.PollMulti()
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
 	assertError(t, err, nil)
 
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	qn := Ms.NewQNet(*eps)
+
+	err = qn.PollMulti()
+	assertError(t, err, nil)
+
+	// create fake data for each
+	for _, ep := range *eps {
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+	}
+
 	t.Run("Fetches Correct Timestamp in Accent", func(t *testing.T) {
-		get := qn.FindAccent(key, 0)
-		got := truncateToDigits(get.Timestamp, 10)
-		want := truncateToDigits(time.Now().UnixNano(), 10)
-		assertInt64(t, got, want)
+		for i := range qn.Network {
+			get := qn.FindAccent("CPU1", i)
+			got := truncateToDigits(get.Timestamp, 4)
+			want := truncateToDigits(time.Now().UnixNano(), 4)
+			assertInt64(t, got, want)
+
+		}
 	})
 }
 
@@ -254,6 +270,197 @@ VAR5=11111
 	})
 }
 
+func TestEndpoint_ValToRune(t *testing.T) {
+	// create KV data
+	kvbody := `VAR1=1`
+	// create a mock web server
+	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
+	urlWWW := mockWWW.URL
+	// create a new Endpoint
+	name := "craquemattic"
+	ep := makeEndpoint(name, urlWWW)
+
+	runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+	numset := []int64{10 - 1, 20 - 1, 30 - 1, 50 - 1, 80 - 1, 130 - 1, 210 - 1, 340}
+
+	t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
+		for i, n := range numset {
+			r := ep.ValToRune(n)
+			if r != runes[i] {
+				t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
+			}
+		}
+	})
+}
+
+func TestEndpoint_ValToRuneWithCheck(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	// create fake data for each
+	for _, ep := range *eps {
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+	}
+
+	runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+	numset := []int64{10 - 1, 20 - 1, 30 - 1, 50 - 1, 80 - 1, 130 - 1, 210 - 1, 340}
+
+	t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
+		for _, ep := range *eps {
+			for i, n := range numset {
+				r := ep.ValToRuneWithCheck(n, true)
+				if r != runes[i] {
+					t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
+				}
+			}
+
+		}
+	})
+}
+
+func TestEndpoint_AddSecondWithCheck(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	// create fake data for each
+	for _, ep := range *eps {
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+	}
+
+	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
+		for _, ep := range *eps {
+			m := ep.Metric[0]
+			ep.AddSecondWithCheck(m, true)
+
+			// Check the rune. This should be < 13
+			got := ep.Layer[m].Runes[1]
+			want := '▂'
+			if got != want {
+				t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
+			}
+		}
+	})
+}
+
+func TestEndpoint_AddSecond(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	// create fake data for each
+	for _, ep := range *eps {
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+	}
+
+	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
+		for _, ep := range *eps {
+			m := ep.Metric[0]
+			ep.AddSecond(m)
+
+			// Check the rune. This should be < 13
+			got := ep.Layer[m].Runes[1]
+			want := '▂'
+			if got != want {
+				t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
+			}
+		}
+	})
+}
+
+func TestEndpoint_GetDisplay(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	// create fake data for each
+	for _, ep := range *eps {
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+	}
+
+	t.Run("Returns the correct display value", func(t *testing.T) {
+		for _, ep := range *eps {
+			got := ep.GetDisplay(ep.Metric[0])
+			want := []rune{
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			}
+
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("GetDisplay returned incorrect value, got: %q, want: %q", got, want)
+			}
+		}
+	})
+
+	t.Run("Retrieves the correct runes for fake data accents", func(t *testing.T) {
+		var testrunes []rune
+		for _, ep := range *eps {
+			m := ep.Metric[0]
+			for i := 0; i < ep.Layer[m].MaxSize; i++ {
+				ep.AddSecond(m)
+				testrunes = append(testrunes, '▂')
+			}
+
+			got := ep.GetDisplay(ep.Metric[0])
+			want := testrunes
+
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("GetDisplay returned incorrect value, got: %q, want: %q", got, want)
+			}
+		}
+	})
+}
+
 // Create an endpoint with a customizable ID and URL
 // It contains three metrics and a data value for each metric
 func makeEndpoint(i, u string) *Ms.Endpoint {
@@ -284,6 +491,13 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	x[c[2]] = 5
 	x[c[3]] = 6
 
+	l := make(map[string]*Ms.Timeseries)
+	l[c[1]] = &Ms.Timeseries{
+		Runes:   []rune{},
+		MaxSize: 60,
+		Current: 0,
+	}
+
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{
 		ID:     id,
@@ -292,5 +506,6 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		Mdata:  d,
 		Maxval: x,
 		Accent: nil,
+		Layer:  l,
 	}
 }

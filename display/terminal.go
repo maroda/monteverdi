@@ -39,19 +39,16 @@ type View struct {
 // But for this to "stay on the screen", i need a running histogram
 // to do that, i need a histogram type to use a cache in Accent
 // this way, a timeseries of runes is beside a metric's accents
-func (v *View) drawRune(x, y, m, s int) {
+func (v *View) drawRune(x, y, m int) {
 	color := tcell.NewRGBColor(int32(150+x), int32(150+y), int32(255-m))
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
 	v.screen.SetContent(x, y, '', nil, style)
 }
 
-func (v *View) drawTimeseries(x, y, i int, p string) {
+func (v *View) drawTimeseries(x, y, i int, m string) {
+	runes := v.QNet.Network[i].GetDisplay(m)
 
-	// in order for this to work, the second must be evaluated when the Accent is retrieved
-	// that's in FindAccent
-	runes := v.QNet.Network[i].Accent[p].GetDisplay()
-
-	for _, r := range runes {
+	for runeIndex, r := range runes { // Use a different variable name
 		if r == 0 {
 			r = ' '
 		}
@@ -69,7 +66,7 @@ func (v *View) drawTimeseries(x, y, i int, p string) {
 			style = tcell.StyleDefault
 		}
 
-		v.screen.SetContent(x+i, y+1, r, nil, style)
+		v.screen.SetContent(x+runeIndex, y, r, nil, style) // Use runeIndex here
 	}
 }
 
@@ -152,7 +149,7 @@ func (v *View) drawHarmonyView() {
 // the same set as 'which metrics do i want to see right now'
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := 120, 15
+	width, height := 80, 15
 
 	// Draw basic elements
 	v.drawViewBorder(width, height)
@@ -167,19 +164,25 @@ func (v *View) drawHarmonyViewMulti() {
 			// but future this will be only Accents
 			ddm := v.QNet.Network[ni].Mdata[dm]
 
+			// Calculate unique y position for each endpoint/metric combination
+			yTS := 6 + (ni * len(v.display)) + di
+
+			// draw timeseries - each endpoint gets its own line
+			v.drawTimeseries(1, yTS, ni, dm)
+
+			// draw timeseries
+			// v.drawTimeseries(1, 6, ni, dm)
+
 			// Can we see an Accent happen?
 			dda := v.QNet.Network[ni].Accent[dm]
 			if dda != nil {
 				// now get the second from the Timestamp. this is the X position on the display
 				newTime := time.Unix(dda.Timestamp/1e9, dda.Timestamp%1e9)
 				s := newTime.Second()
-				v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, s))
+				// v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, s))
 
 				// draw a rune
-				v.drawRune(5+s, 5+di, int(ddm), s)
-
-				// draw timeseries
-				v.drawTimeseries(1, 6, ni, dm)
+				v.drawRune(s, 6+di, int(ddm))
 			}
 			// draw the bar
 			v.drawBar(1, 1+di, int(ddm), 2+di)
@@ -189,7 +192,7 @@ func (v *View) drawHarmonyViewMulti() {
 		}
 	}
 
-	// v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")
+	v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")
 }
 
 // Exit cleanly
