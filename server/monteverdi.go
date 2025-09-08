@@ -51,6 +51,7 @@ func NewQNet(ep Endpoints) *QNet {
 type Endpoint struct {
 	ID     string                 // string describing the endpoint source
 	URL    string                 // URL endpoint for the service
+	Delim  string                 // delimiter for KV
 	Metric map[int]string         // map of all metric keys to be retrieved
 	Mdata  map[string]int64       // map of all metric data by metric key
 	Maxval map[string]int64       // map of metric data max val to find accents
@@ -118,6 +119,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		NewEP := &Endpoint{
 			ID:     c.ID,
 			URL:    c.URL,
+			Delim:  c.Delim,
 			Metric: metric,
 			Mdata:  mdata,
 			Maxval: maxval,
@@ -151,7 +153,7 @@ func (ep *Endpoint) AddSecondWithCheck(m string, isAccent bool) {
 
 func (ep *Endpoint) ValToRuneWithCheck(val int64, isAccent bool) rune {
 	if !isAccent {
-		return '░'
+		return ' '
 	}
 
 	switch {
@@ -249,68 +251,22 @@ func (q *QNet) FindAccent(m string, i int) *Accent {
 	return a
 }
 
-// Poll takes a string /p/ and searches QNet.Endpoint.Metric for the Key
-// If the key is there, the metric is returned for that Key.
-// This should not be needed use PollMulti()
-func (q *QNet) Poll(p string) (int64, error) {
-	// p is the Key to poll, it is a string
-	// We know this is KV data right now, it's the only choice
-	index := 0
-
-	var metric int64
-	metric = 0
-
-	// poll is a map of KV
-	poll, err := MetricKV(q.Network[index].URL)
-	if err != nil {
-		slog.Error("Could not poll metric", slog.Any("Error", err))
-		return metric, err
-	}
-
-	// Search for the requested Key to poll /p/ in the configured list of keys
-	for k := range poll {
-		if k == p {
-			// we've found the key, now grab its metric from the poll
-			// convert the metric to int64 on assignment
-			metric, err = strconv.ParseInt(poll[p], 10, 64)
-			if err != nil {
-				slog.Error("Could not convert metric to 64bits", slog.Any("Error", err))
-				return metric, err
-			}
-
-			// Populate the map in the struct
-			// Need to understand if maxval needs to be int64
-			q.Network[index].Mdata[p] = metric
-
-			/*
-				// TODO: maxval must be set in the Endpoint struct for this key
-				// maxval := q.Network[index].Maxval[p]
-				// until then, use this
-				maxval := 20
-
-				// Did the measurement hit the accent maxval?
-				accent := q.FindAccent(p, 0, maxval)
-				if accent != nil {
-					q.Network[index].Accent[p] = *accent
-				}
-			*/
-		}
-	}
-
-	// should the raw metric or the accent metric be returned here?
-	// maybe that can be a choice...
-	return metric, nil
-}
-
 // PollMulti reads all configured metrics from QNet and retrieves them.
 func (q *QNet) PollMulti() error {
 	var metric int64
 	metric = 0
 
+	// Default delimiter is /=/
+	var delimiter string
+	delimiter = "="
+
 	// Step through all Networks in QNet
 	for ni, nv := range q.Network {
+		// get custom delimiter
+		delimiter = q.Network[ni].Delim
+
 		// pollSource is a map of KV
-		pollSource, err := MetricKV(q.Network[ni].URL)
+		pollSource, err := MetricKV(delimiter, q.Network[ni].URL)
 		if err != nil {
 			slog.Error("Could not poll metric", slog.Any("Error", err))
 			return err

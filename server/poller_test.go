@@ -68,11 +68,12 @@ VAR5=valuevaluevaluevaluevalue
 `
 	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
 	urlWWW := mockWWW.URL
+	delimiter := "="
 
 	// Check that the correct number of values exist
 	// This accounts for removal of whitespace and comments
 	t.Run("Fetches correct count of all KV", func(t *testing.T) {
-		get, err := Ms.MetricKV(urlWWW)
+		get, err := Ms.MetricKV(delimiter, urlWWW)
 		got := len(get)
 		want := 5
 
@@ -82,9 +83,22 @@ VAR5=valuevaluevaluevaluevalue
 
 	// Here we look for VAR4
 	t.Run("Fetches known KV", func(t *testing.T) {
-		get, _ := Ms.MetricKV(urlWWW)
+		get, _ := Ms.MetricKV(delimiter, urlWWW)
 		got := get["VAR4"]
 		want := "valuevaluevaluevalue"
+
+		assertString(t, got, want)
+	})
+
+	// We can use `=` or ` `
+	t.Run("Works with alternative delimiter", func(t *testing.T) {
+		kvb := `VAR1 value`
+		mWWW := makeMockWebServBody(0*time.Millisecond, kvb)
+		uWWW := mWWW.URL
+		delimiter := " "
+		get, _ := Ms.MetricKV(delimiter, uWWW)
+		got := get["VAR1"]
+		want := "value"
 
 		assertString(t, got, want)
 	})

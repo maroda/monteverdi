@@ -1,6 +1,7 @@
 [{
   "id": "NETDATA",
   "url": "http://localhost:19999/api/v3/allmetrics",
+  "delim": "=",
   "metrics": {
     "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
     "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 10,

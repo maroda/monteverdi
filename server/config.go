@@ -8,9 +8,10 @@ import (
 )
 
 type ConfigFile struct {
-	ID       string         `json:"id"`
-	URL      string         `json:"url"`
-	MWithMax map[string]int `json:"metrics"`
+	ID       string         `json:"id"`      // Unique string ID
+	URL      string         `json:"url"`     // Endpoint URL (no auth yet)
+	Delim    string         `json:"delim"`   // Stats delimiter (eg: "=")
+	MWithMax map[string]int `json:"metrics"` // Value to trigger an accent
 }
 
 // LoadConfigFileName pulls a given filename config off local disk

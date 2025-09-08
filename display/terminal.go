@@ -182,7 +182,7 @@ func (v *View) drawHarmonyViewMulti() {
 				// v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, s))
 
 				// draw a rune
-				v.drawRune(s, 6+di, int(ddm))
+				v.drawRune(s, di+1, int(ddm))
 			}
 			// draw the bar
 			v.drawBar(1, 1+di, int(ddm), 2+di)

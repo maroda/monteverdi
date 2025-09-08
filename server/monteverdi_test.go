@@ -43,6 +43,7 @@ func TestNewEndpoint(t *testing.T) {
 	want := struct {
 		ID     string
 		URL    string
+		Delim  string
 		metric map[int]string
 		mdata  map[string]int64
 		maxval map[string]int64
@@ -51,6 +52,7 @@ func TestNewEndpoint(t *testing.T) {
 	}{
 		ID:     id,
 		URL:    url,
+		Delim:  "=",
 		metric: ep.Metric,
 		mdata:  ep.Mdata,
 		maxval: nil,
@@ -93,6 +95,7 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
 		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "delim": "=",
 		  "metrics": {
 		    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
 		    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 3,
@@ -169,43 +172,6 @@ func TestQNet_FindAccent(t *testing.T) {
 
 func truncateToDigits(n int64, digits int) int64 {
 	return int64(math.Pow10(digits)) % n
-}
-
-// This may end up covering MetricKV but we'll see
-func TestQNet_Poll(t *testing.T) {
-	// create KV data
-	kvbody := `VAR1=1
-VAR2=11 # comment
-VAR3=111
-VAR4=1111
-
-# A comment
-VAR5=11111
-`
-
-	// create a mock web server
-	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
-	urlWWW := mockWWW.URL
-
-	// create a new Endpoint
-	name := "craquemattic"
-	ep := makeEndpoint(name, urlWWW)
-
-	// create a new QNet
-	qn := Ms.NewQNet([]Ms.Endpoint{*ep})
-
-	pollresult, err := qn.Poll("VAR3")
-	if err != nil {
-		t.Errorf("Poll returned unexpected error: %s", err)
-	}
-
-	// Here we look for VAR3
-	t.Run("Fetches known KV", func(t *testing.T) {
-		got := pollresult
-		var want int64
-		want = 111
-		assertInt64(t, got, want)
-	})
 }
 
 func TestQNet_PollMulti(t *testing.T) {
@@ -502,6 +468,7 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	return &Ms.Endpoint{
 		ID:     id,
 		URL:    url,
+		Delim:  "=",
 		Metric: c,
 		Mdata:  d,
 		Maxval: x,

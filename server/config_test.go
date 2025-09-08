@@ -28,6 +28,7 @@ func TestLoadConfigFileName(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
 		  "url": "http://localhost:19999/api/v3/allmetrics",
+          "delim": "=",
 		  "metrics": {
 		    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
 		    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 3,
@@ -36,6 +37,15 @@ func TestLoadConfigFileName(t *testing.T) {
 		}]`)
 	defer delConfig()
 	fileName := configFile.Name()
+
+	t.Run("Displays correct delimiter", func(t *testing.T) {
+		loadConfig, err := Ms.LoadConfigFileName(fileName)
+		got := loadConfig[0].Delim
+		want := "="
+
+		assertError(t, err, nil)
+		assertString(t, got, want)
+	})
 
 	t.Run("Returns the correct filename when loading", func(t *testing.T) {
 		loadConfig, err := Ms.LoadConfigFileName(fileName)
