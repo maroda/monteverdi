@@ -89,18 +89,24 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 // NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 	var endpoints Endpoints
-	metric := make(map[int]string)
-	mdata := make(map[string]int64)
-	maxval := make(map[string]int64)
-	accent := make(map[string]*Accent)
-	metsdb := make(map[string]*Timeseries)
-	tsdbWindow := 60
 
 	// cf is a ConfigFile: ID, URL, MWithMax
 	// on each member a new endpoint is created
 	for _, c := range cf {
-		j := 0
+		// initialized for each Endpoint
+		metric := make(map[int]string)
+
+		// fmt.Printf("Processing config ID: %s\n", c.ID)
+		// fmt.Printf("Config MWithMax: %+v\n", c.MWithMax)
+
+		mdata := make(map[string]int64)
+		maxval := make(map[string]int64)
+		accent := make(map[string]*Accent)
+		metsdb := make(map[string]*Timeseries)
+		tsdbWindow := 60
+
 		// This locates the desired metrics from the on-disk config
+		j := 0
 		for k, v := range c.MWithMax {
 			metric[j] = k            // assign the metric name from the config key
 			maxval[k] = int64(v)     // assign the metric max value from the config value
@@ -115,8 +121,11 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 			//}
 			j++
 		}
+
+		// fmt.Printf("Final metric map: %+v\n", metric)
+
 		// Assign data we know, initialize data we don't
-		NewEP := &Endpoint{
+		NewEP := Endpoint{
 			ID:     c.ID,
 			URL:    c.URL,
 			Delim:  c.Delim,
@@ -126,7 +135,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 			Accent: accent,
 			Layer:  metsdb,
 		}
-		endpoints = append(endpoints, *NewEP)
+		endpoints = append(endpoints, NewEP)
 	}
 	return &endpoints, nil
 }
@@ -134,7 +143,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 // AddSecond tallies each second as a counter
 // then adds a rune to the slice indexed by second
 // this needs to take the metric name
-// TODO: This is getting a nil pointer somehow
+// TODO: Clean this up, WithCheck should be the default
 func (ep *Endpoint) AddSecond(m string) {
 	// This is the index of the rune, and also the current second
 	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize

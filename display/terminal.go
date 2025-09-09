@@ -130,26 +130,9 @@ func (v *View) drawBar(x1, y1, x2, y2 int) {
 }
 
 // Draw the HarmonyView itself
-func (v *View) drawHarmonyView() {
-	userRootCpuUtil := v.QNet.Network[0].Mdata["NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL"]
-	width, height := 100, 10
-
-	v.drawViewBorder(width, height)
-	v.drawBar(1, 1, int(userRootCpuUtil), 2)
-	v.drawText(20, height-8, width, height+10, fmt.Sprintf("CPU:%d", userRootCpuUtil))
-	v.drawText(30, height-5, width, height+10, "Monteverdi")
-	v.drawText(1, height-1, width, height+10, "Press ESC or Ctrl+C to quit")
-}
-
-// Draw the HarmonyView itself
-//
-// This version needs to draw everything with configured visibility
-// ...which could be toggle-able somehow?
-// the set of 'which metrics i want to build accents on' is not always
-// the same set as 'which metrics do i want to see right now'
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := 80, 15
+	width, height := 80, 20
 
 	// Draw basic elements
 	v.drawViewBorder(width, height)
@@ -158,7 +141,10 @@ func (v *View) drawHarmonyViewMulti() {
 	// step through all Network endpoints
 	for ni := range v.QNet.Network {
 		// step through metrics listed in View.display
-		for di, dm := range v.display {
+		// ranging on the global display variable is INCORRECT here!
+		// i should be ranging on THIS endpoint's metrics
+		// for di, dm := range v.display {
+		for di, dm := range v.QNet.Network[ni].Metric {
 			// look up the key in this Network's Endpoint Metric data.
 			// For now, we're pulling raw data,
 			// but future this will be only Accents
@@ -170,8 +156,11 @@ func (v *View) drawHarmonyViewMulti() {
 			// draw timeseries - each endpoint gets its own line
 			v.drawTimeseries(1, yTS, ni, dm)
 
-			// draw timeseries
-			// v.drawTimeseries(1, 6, ni, dm)
+			// it will take some experimentation to align...
+			v.drawText(2, yTS+3, width+di, height+10+di, fmt.Sprintf("%s:%d", dm, ddm))
+
+			// draw the bar
+			v.drawBar(1, 1+di, int(ddm), 2+di)
 
 			// Can we see an Accent happen?
 			dda := v.QNet.Network[ni].Accent[dm]
@@ -179,16 +168,10 @@ func (v *View) drawHarmonyViewMulti() {
 				// now get the second from the Timestamp. this is the X position on the display
 				newTime := time.Unix(dda.Timestamp/1e9, dda.Timestamp%1e9)
 				s := newTime.Second()
-				// v.drawText(4, height-2, width, height+10, fmt.Sprintf("Accent Found! %s: %d", dm, s))
 
 				// draw a rune
 				v.drawRune(s, di+1, int(ddm))
 			}
-			// draw the bar
-			v.drawBar(1, 1+di, int(ddm), 2+di)
-
-			// it will take some experimentation to align...
-			v.drawText(2, height-6+di, width+di, height+10+di, fmt.Sprintf("%s:%d", dm, ddm))
 		}
 	}
 
@@ -243,7 +226,7 @@ func (v *View) resizeScreen() {
 // run runs a loop and updates periodically
 // each iteration polls the configured Metric[]
 // and fills the related Mdata[Metric] in QNet,
-// which is then read by drawHarmonyView
+// which is then read by drawHarmonyViewMulti
 // TODO: parameterize run loop time
 func (v *View) run() {
 	slog.Info("Starting HarmonyView")
@@ -307,6 +290,11 @@ func (v *View) updateScreen() {
 
 // NewView creates the tcell screen that displays HarmonyView
 func NewView(q *Ms.QNet) (*View, error) {
+	if q == nil || q.Network == nil {
+		slog.Error("Could not get a QNet for display")
+		return nil, errors.New("quality network not found")
+	}
+
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		slog.Error("Could not get new screen", slog.Any("Error", err))
@@ -320,14 +308,13 @@ func NewView(q *Ms.QNet) (*View, error) {
 	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
 	screen.SetStyle(defStyle)
 
-	// this is temporary to get a list of metrics to show
-	// these are the three in the config file
+	// Get all configured metrics from all Endpoints
 	display := make([]string, 0)
-	display = append(display,
-		"NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL",
-		"NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL",
-		"NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL",
-	)
+	for _, ep := range q.Network {
+		for _, mv := range ep.Metric {
+			display = append(display, mv)
+		}
+	}
 
 	// create an attached prometheus registry
 	stats := Mo.NewStatsInternal()
@@ -335,7 +322,7 @@ func NewView(q *Ms.QNet) (*View, error) {
 	view := &View{
 		QNet:    q,
 		screen:  screen,
-		display: display,
+		display: display, // something is overranging this display slice!
 		stats:   stats,
 	}
 
@@ -356,6 +343,9 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 	}
 
 	qn := Ms.NewQNet(*eps)
+	if qn == nil {
+		slog.Error("Failed to init QNet", slog.Any("Error", err))
+	}
 
 	view, err := NewView(qn)
 	if err != nil {

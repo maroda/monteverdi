@@ -91,6 +91,7 @@ func TestNewEndpoint(t *testing.T) {
 
 }
 
+// TODO: Add a test to check for multiple endpoints
 func TestNewEndpointsFromConfig(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
