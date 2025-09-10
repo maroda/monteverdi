@@ -3,9 +3,11 @@ package monteverdi_test
 import (
 	"fmt"
 	"math"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,8 +22,8 @@ func TestNewQNet(t *testing.T) {
 	t.Run("Endpoint ID matches", func(t *testing.T) {
 		// create a slice of Endpoint (also type:Endpoints)
 		// using the Endpoint created above, just one element
-		var eps []Ms.Endpoint
-		eps = append(eps, *ep)
+		var eps Ms.Endpoints
+		eps = append(eps, ep)
 
 		// create a new QNet
 		// check that the ID was created OK
@@ -32,6 +34,7 @@ func TestNewQNet(t *testing.T) {
 	})
 }
 
+/*
 func TestNewEndpoint(t *testing.T) {
 	// create a new Endpoint
 	name := "craquemattic"
@@ -91,6 +94,30 @@ func TestNewEndpoint(t *testing.T) {
 
 }
 
+*/
+
+func TestQNet_PollMultiNetworkError(t *testing.T) {
+	qn := NewTestQNet(t)
+
+	t.Run("Error returned on bad URL", func(t *testing.T) {
+		qn.Network[0].URL = "http://unreachable-craquemattic:2345/metrics"
+
+		err := qn.PollMulti()
+		assertGotError(t, err)
+	})
+
+	t.Run("Error returned when endpoint times out", func(t *testing.T) {
+		slowServ := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(10 * time.Second)
+		}))
+		defer slowServ.Close()
+
+		qn.Network[0].URL = slowServ.URL
+		err := qn.PollMulti()
+		assertGotError(t, err)
+	})
+}
+
 // TODO: Add a test to check for multiple endpoints
 func TestNewEndpointsFromConfig(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
@@ -134,27 +161,33 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 }
 
 func TestQNet_FindAccent(t *testing.T) {
-	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
-		}]`)
-	defer delConfig()
-	fileName := configFile.Name()
-
-	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	qn := NewTestQNet(t)
+	err := qn.PollMulti()
 	assertError(t, err, nil)
 
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
+	t.Run("No accent with value below Maxval", func(t *testing.T) {
+		// Using CPU1:10 from NewTestQNet
+		k := "CPU1"
+		qn.Network[0].Mdata[k] = 6
+		accent := qn.FindAccent(k, 0)
+		if accent.SourceID != "" {
+			t.Errorf("Accent.SourceID expected to be blank, but got %s", accent.SourceID)
+		}
+	})
 
-	qn := Ms.NewQNet(*eps)
-
-	err = qn.PollMulti()
-	assertError(t, err, nil)
+	t.Run("Accent with value above Maxval", func(t *testing.T) {
+		// Using CPU1:10 from NewTestQNet
+		k := "CPU1"
+		qn.Network[0].Mdata[k] = 16
+		accent := qn.FindAccent(k, 0)
+		fmt.Println(accent)
+		if accent.SourceID != k {
+			t.Errorf("Accent.SourceID expected to be %s, but got %s", k, accent.SourceID)
+		}
+	})
 
 	// create fake data for each
-	for _, ep := range *eps {
+	for _, ep := range qn.Network {
 		for mi, mv := range ep.Metric {
 			ep.Mdata[mv] = 10 + int64(mi)
 		}
@@ -171,8 +204,58 @@ func TestQNet_FindAccent(t *testing.T) {
 	})
 }
 
-func truncateToDigits(n int64, digits int) int64 {
-	return int64(math.Pow10(digits)) % n
+func TestConcurrentAccentDetection(t *testing.T) {
+	qn := NewTestQNet(t)
+	k := "CPU1"
+
+	// create fake data for each
+	for _, ep := range qn.Network {
+		ep.MU.Lock()
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+		ep.MU.Unlock()
+	}
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+	iterations := 100
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(goroutineID int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				// Simulate varying data
+				qn.Network[0].MU.Lock()
+				if goroutineID%2 == 0 {
+					qn.Network[0].Mdata[k] = 18 // Above threshold
+				} else {
+					qn.Network[0].Mdata[k] = 6 // Below threshold
+				}
+				qn.Network[0].MU.Unlock()
+
+				qn.FindAccent(k, 0)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	// If we get here without panic, concurrent access is safe.
+
+	// Alternate simulation
+	/*
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := 0; j < 100; j++ {
+					qn.FindAccent(k, 0)
+				}
+			}()
+		}
+		wg.Wait()
+	*/
 }
 
 func TestQNet_PollMulti(t *testing.T) {
@@ -204,7 +287,7 @@ VAR5=11111
 	for i := range URL {
 		name := "SAAS_" + strconv.Itoa(i)
 		ep := makeEndpoint(name, URL[i])
-		eps = append(eps, *ep)
+		eps = append(eps, ep)
 	}
 
 	// create a new QNet
@@ -299,29 +382,17 @@ func TestEndpoint_ValToRuneWithCheck(t *testing.T) {
 }
 
 func TestEndpoint_AddSecondWithCheck(t *testing.T) {
-	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
-		}]`)
-	defer delConfig()
-	fileName := configFile.Name()
-
-	loadConfig, err := Ms.LoadConfigFileName(fileName)
-	assertError(t, err, nil)
-
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
+	qn := NewTestQNet(t)
 
 	// create fake data for each
-	for _, ep := range *eps {
+	for _, ep := range qn.Network {
 		for mi, mv := range ep.Metric {
 			ep.Mdata[mv] = 10 + int64(mi)
 		}
 	}
 
 	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
-		for _, ep := range *eps {
+		for _, ep := range qn.Network {
 			m := ep.Metric[0]
 			ep.AddSecondWithCheck(m, true)
 
@@ -428,6 +499,57 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 	})
 }
 
+func TestConcurrentPollAndDisplay(t *testing.T) {
+	qn := NewTestQNet(t)
+	var wg sync.WaitGroup
+
+	// Simulate polling goroutine
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			err := qn.PollMulti()
+			assertError(t, err, nil)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	// Simulate display reading goroutine
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			// Simulate what your display code does
+			for ni := range qn.Network {
+				qn.Network[ni].MU.RLock()
+				_ = qn.Network[ni].Mdata
+				_ = qn.Network[ni].Accent
+				qn.Network[ni].MU.RUnlock()
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+
+	wg.Wait()
+}
+
+func TestConfigWithMissingMetrics(t *testing.T) {
+	// Test empty MWithMax
+	config := []Ms.ConfigFile{{ID: "test", URL: "http://test", MWithMax: map[string]int{}}}
+	endpoints, err := Ms.NewEndpointsFromConfig(config)
+	assertError(t, err, nil)
+	fmt.Println(endpoints)
+}
+
+func TestConfigWithInvalidURL(t *testing.T) {
+	// Test malformed URLs
+	config := []Ms.ConfigFile{{ID: "test", URL: "not-a-url", MWithMax: map[string]int{"cpu": 80}}}
+	// Should this return an error, or handle gracefully?
+	fmt.Println(config)
+}
+
+// Helpers //
+
 // Create an endpoint with a customizable ID and URL
 // It contains three metrics and a data value for each metric
 func makeEndpoint(i, u string) *Ms.Endpoint {
@@ -476,4 +598,28 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		Accent: nil,
 		Layer:  l,
 	}
+}
+
+func truncateToDigits(n int64, digits int) int64 {
+	return int64(math.Pow10(digits)) % n
+}
+
+func NewTestQNet(t *testing.T) *Ms.QNet {
+	t.Helper()
+
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	return Ms.NewQNet(*eps)
 }

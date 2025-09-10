@@ -140,6 +140,9 @@ func (v *View) drawHarmonyViewMulti() {
 
 	// step through all Network endpoints
 	for ni := range v.QNet.Network {
+		// read lock
+		v.QNet.Network[ni].MU.RLock()
+
 		// step through metrics listed in View.display
 		// ranging on the global display variable is INCORRECT here!
 		// i should be ranging on THIS endpoint's metrics
@@ -173,6 +176,8 @@ func (v *View) drawHarmonyViewMulti() {
 				v.drawRune(s, di+1, int(ddm))
 			}
 		}
+
+		v.QNet.Network[ni].MU.RUnlock()
 	}
 
 	v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")

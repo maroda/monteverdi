@@ -3,6 +3,7 @@ package monteverdi
 import (
 	"log/slog"
 	"strconv"
+	"sync"
 )
 
 // QNet represents the entire connected Network of Qualities
@@ -16,6 +17,7 @@ type Monteverdi interface {
 }
 
 type QNet struct {
+	MU      sync.RWMutex
 	Network Endpoints // slice of *Endpoint
 }
 
@@ -49,6 +51,7 @@ func NewQNet(ep Endpoints) *QNet {
 //     However, the Accent is always located by the Metric key itself.
 //     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
+	MU     sync.RWMutex
 	ID     string                 // string describing the endpoint source
 	URL    string                 // URL endpoint for the service
 	Delim  string                 // delimiter for KV
@@ -59,8 +62,9 @@ type Endpoint struct {
 	Layer  map[string]*Timeseries // map of rolling timeseries by metric key
 }
 
-type Endpoints []Endpoint
+type Endpoints []*Endpoint
 
+/*
 // NewEndpoint returns a pointer to the Endpoint metadata and its data
 // This function syncs endpoint with data using an index
 func NewEndpoint(id, url string, m ...string) *Endpoint {
@@ -85,6 +89,8 @@ func NewEndpoint(id, url string, m ...string) *Endpoint {
 		Mdata:  colldata,
 	}
 }
+
+*/
 
 // NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
@@ -135,7 +141,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 			Accent: accent,
 			Layer:  metsdb,
 		}
-		endpoints = append(endpoints, NewEP)
+		endpoints = append(endpoints, &NewEP)
 	}
 	return &endpoints, nil
 }
@@ -226,6 +232,10 @@ func (ep *Endpoint) GetDisplay(m string) []rune {
 // i == Network index
 // p == Metric name
 func (q *QNet) FindAccent(m string, i int) *Accent {
+	// Lock endpoint for writing
+	q.Network[i].MU.Lock()
+	defer q.Network[i].MU.Unlock()
+
 	// The metric data
 	md := q.Network[i].Mdata[m]
 
