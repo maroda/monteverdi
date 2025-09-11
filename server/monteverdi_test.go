@@ -34,68 +34,6 @@ func TestNewQNet(t *testing.T) {
 	})
 }
 
-/*
-func TestNewEndpoint(t *testing.T) {
-	// create a new Endpoint
-	name := "craquemattic"
-	ep := makeEndpoint(name, "https://popg.xyz")
-	id := ep.ID
-	url := ep.URL
-
-	// Struct literal
-	want := struct {
-		ID     string
-		URL    string
-		Delim  string
-		metric map[int]string
-		mdata  map[string]int64
-		maxval map[string]int64
-		accent map[string]Ms.Accent
-		layer  map[string]Ms.Timeseries
-	}{
-		ID:     id,
-		URL:    url,
-		Delim:  "=",
-		metric: ep.Metric,
-		mdata:  ep.Mdata,
-		maxval: nil,
-		accent: nil,
-		layer:  nil,
-	}
-
-	t.Run("Returns correct metadata", func(t *testing.T) {
-		get := *Ms.NewEndpoint(id, url)
-		got := get.URL
-		match := want.URL
-		assertString(t, got, match)
-
-		got = get.ID
-		match = want.ID
-		assertString(t, got, match)
-	})
-
-	t.Run("Returns correct field count", func(t *testing.T) {
-		got := *Ms.NewEndpoint(id, url, ep.Metric[1], ep.Metric[2], ep.Metric[3])
-		gotSize := reflect.TypeOf(got).NumField()
-		wantSize := reflect.TypeOf(want).NumField()
-		if gotSize != wantSize {
-			t.Errorf("NewEndpoint returned wrong number of fields: got %d, want %d", gotSize, wantSize)
-		}
-	})
-
-	t.Run("number of collections is correct", func(t *testing.T) {
-		get := *Ms.NewEndpoint(id, url, ep.Metric[1], ep.Metric[2], ep.Metric[3])
-		got := len(get.Metric)
-		match := len(want.metric)
-		if got != match {
-			t.Errorf("NewEndpoint returned wrong number of collections: got %d, want %d", got, match)
-		}
-	})
-
-}
-
-*/
-
 func TestQNet_PollMultiNetworkError(t *testing.T) {
 	qn := NewTestQNet(t)
 
@@ -116,6 +54,28 @@ func TestQNet_PollMultiNetworkError(t *testing.T) {
 		err := qn.PollMulti()
 		assertGotError(t, err)
 	})
+}
+
+func TestQNet_PollMultiDataError(t *testing.T) {
+	partialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "CPU1=notanumber")
+		fmt.Fprintln(w, "CPU2=22.222")
+		fmt.Fprintln(w, "CPU3=123")
+		fmt.Fprintln(w, "CPU4=")
+	}))
+	defer partialServer.Close()
+
+	qn := NewTestQNet(t)
+	qn.Network[0].URL = partialServer.URL
+	qn.Network[0].Metric = map[int]string{
+		0: "CPU1",
+		1: "CPU2",
+		2: "CPU3",
+		3: "CPU4",
+	}
+
+	err := qn.PollMulti()
+	assertGotError(t, err)
 }
 
 // TODO: Add a test to check for multiple endpoints
@@ -161,14 +121,25 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 }
 
 func TestQNet_FindAccent(t *testing.T) {
-	qn := NewTestQNet(t)
+	var eps Ms.Endpoints
+
+	// Create remote server
+	_, u := makeRemoteMetricsServer(1)
+	for i := range u {
+		name := "SAAS_" + strconv.Itoa(i)
+		ep := makeEndpoint(name, *u[i])
+		eps = append(eps, ep)
+	}
+
+	// create a new QNet and poll
+	qn := Ms.NewQNet(eps)
 	err := qn.PollMulti()
 	assertError(t, err, nil)
 
 	t.Run("No accent with value below Maxval", func(t *testing.T) {
 		// Using CPU1:10 from NewTestQNet
 		k := "CPU1"
-		qn.Network[0].Mdata[k] = 6
+		qn.Network[0].Mdata[k] = 2
 		accent := qn.FindAccent(k, 0)
 		if accent.SourceID != "" {
 			t.Errorf("Accent.SourceID expected to be blank, but got %s", accent.SourceID)
@@ -187,11 +158,13 @@ func TestQNet_FindAccent(t *testing.T) {
 	})
 
 	// create fake data for each
-	for _, ep := range qn.Network {
-		for mi, mv := range ep.Metric {
-			ep.Mdata[mv] = 10 + int64(mi)
+	/*
+		for _, ep := range qn.Network {
+			for mi, mv := range ep.Metric {
+				ep.Mdata[mv] = 10 + int64(mi)
+			}
 		}
-	}
+	*/
 
 	t.Run("Fetches Correct Timestamp in Accent", func(t *testing.T) {
 		for i := range qn.Network {
@@ -259,41 +232,18 @@ func TestConcurrentAccentDetection(t *testing.T) {
 }
 
 func TestQNet_PollMulti(t *testing.T) {
-	// create KV data
-	kvbody := `VAR1=1
-VAR2=11 # comment
-VAR3=111
-VAR4=1111
-
-# A comment
-VAR5=11111
-`
-
-	// make /num/ mock webservers and their URLs
-	num := 2
-	var WWW []*httptest.Server
-	var URL []string
-
-	for i := 0; i < (num + 1); i++ {
-		mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
-		WWW = append(WWW, mockWWW)
-		URL = append(URL, WWW[i].URL)
-	}
-
-	// create Endpoints
 	var eps Ms.Endpoints
 
-	// step through all URLs
-	for i := range URL {
+	// Create remote server
+	_, u := makeRemoteMetricsServer(2)
+	for i := range u {
 		name := "SAAS_" + strconv.Itoa(i)
-		ep := makeEndpoint(name, URL[i])
+		ep := makeEndpoint(name, *u[i])
 		eps = append(eps, ep)
 	}
 
-	// create a new QNet
+	// create a new QNet and poll
 	qn := Ms.NewQNet(eps)
-
-	// finally, send it to PollMulti
 	err := qn.PollMulti()
 	assertError(t, err, nil)
 
@@ -308,15 +258,15 @@ VAR5=11111
 	})
 
 	t.Run("Fetches known KV", func(t *testing.T) {
-		got := qn.Network[0].Maxval["ONE"]
+		got := qn.Network[0].Maxval["CPU1"]
 		want := 4
 
 		assertInt64(t, got, int64(want))
 	})
 
 	t.Run("Reads Accent", func(t *testing.T) {
-		fmt.Println(qn.Network[0].Accent["ONE"])
-		fmt.Println(qn.Network[1].Accent["TWO"])
+		fmt.Println(qn.Network[0].Accent["CPU1"])
+		fmt.Println(qn.Network[1].Accent["CPU2"])
 	})
 }
 
@@ -382,25 +332,31 @@ func TestEndpoint_ValToRuneWithCheck(t *testing.T) {
 }
 
 func TestEndpoint_AddSecondWithCheck(t *testing.T) {
-	qn := NewTestQNet(t)
+	var eps Ms.Endpoints
 
-	// create fake data for each
-	for _, ep := range qn.Network {
-		for mi, mv := range ep.Metric {
-			ep.Mdata[mv] = 10 + int64(mi)
-		}
+	// Create remote server
+	_, u := makeRemoteMetricsServer(2)
+	for i := range u {
+		name := "SAAS_" + strconv.Itoa(i)
+		ep := makeEndpoint(name, *u[i])
+		eps = append(eps, ep)
 	}
+
+	// create a new QNet and poll
+	qn := Ms.NewQNet(eps)
 
 	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
 		for _, ep := range qn.Network {
-			m := ep.Metric[0]
-			ep.AddSecondWithCheck(m, true)
+			// Get the first metric that actually exists
+			for _, m := range ep.Metric {
+				ep.AddSecondWithCheck(m, true)
 
-			// Check the rune. This should be < 13
-			got := ep.Layer[m].Runes[1]
-			want := '▂'
-			if got != want {
-				t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
+				got := ep.Layer[m].Runes[1]
+				want := '▂'
+				if got != want {
+					t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
+				}
+				break
 			}
 		}
 	})
@@ -500,7 +456,16 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 }
 
 func TestConcurrentPollAndDisplay(t *testing.T) {
-	qn := NewTestQNet(t)
+	var eps Ms.Endpoints
+	_, u := makeRemoteMetricsServer(1)
+	for i := range u {
+		name := "SAAS_" + strconv.Itoa(i)
+		ep := makeEndpoint(name, *u[i])
+		eps = append(eps, ep)
+	}
+
+	//qn := NewTestQNet(t)
+	qn := Ms.NewQNet(eps)
 	var wg sync.WaitGroup
 
 	// Simulate polling goroutine
@@ -562,12 +527,13 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	// Collection map literal for Metric
 	// What metrics we want to keep from the Poll
 	c := make(map[int]string)
-	c[1] = "ONE"
-	c[2] = "TWO"
-	c[3] = "THREE"
+	c[1] = "CPU1"
+	c[2] = "CPU2"
+	c[3] = "CPU3"
 
 	// Collection data map literal for Mdata
-	// What data each of these metrics has from a Poll
+	// What data each of these metrics has from a PollMulti()
+	// Normally no metrics come with a new Endpoint
 	d := make(map[string]int64)
 	d[c[1]] = 11
 	d[c[2]] = 12
@@ -580,11 +546,14 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	x[c[2]] = 5
 	x[c[3]] = 6
 
+	// Initialize the Timeseries structure
 	l := make(map[string]*Ms.Timeseries)
-	l[c[1]] = &Ms.Timeseries{
-		Runes:   []rune{},
-		MaxSize: 60,
-		Current: 0,
+	for _, mName := range c {
+		l[mName] = &Ms.Timeseries{
+			Runes:   make([]rune, 60),
+			MaxSize: 60,
+			Current: 0,
+		}
 	}
 
 	// Struct matches the Endpoint type
@@ -604,22 +573,33 @@ func truncateToDigits(n int64, digits int) int64 {
 	return int64(math.Pow10(digits)) % n
 }
 
+// NewTestQNet is a special use func for tests that manually set up data and don't need network calls
 func NewTestQNet(t *testing.T) *Ms.QNet {
 	t.Helper()
+	endpoint := makeEndpoint("TESTING", "http://testing")
+	return &Ms.QNet{
+		MU:      sync.RWMutex{},
+		Network: Ms.Endpoints{endpoint},
+	}
+}
 
-	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
-		}]`)
-	defer delConfig()
-	fileName := configFile.Name()
+// makeRemoteMetricsServer is for tests that need working endpoints with realistic data
+// this data should match the metric values created by makeEndpoint
+func makeRemoteMetricsServer(num int) ([]*httptest.Server, []*string) {
+	// create KV data to look like prometheus
+	kvbody := `CPU1=9
+CPU2=23
+CPU3=420
+CPU4=1234`
 
-	loadConfig, err := Ms.LoadConfigFileName(fileName)
-	assertError(t, err, nil)
+	var WWW []*httptest.Server
+	var URL []*string
 
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
+	for i := 0; i < (num + 1); i++ {
+		mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
+		WWW = append(WWW, mockWWW)
+		URL = append(URL, &WWW[i].URL)
+	}
 
-	return Ms.NewQNet(*eps)
+	return WWW, URL
 }

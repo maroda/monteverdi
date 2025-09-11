@@ -64,34 +64,6 @@ type Endpoint struct {
 
 type Endpoints []*Endpoint
 
-/*
-// NewEndpoint returns a pointer to the Endpoint metadata and its data
-// This function syncs endpoint with data using an index
-func NewEndpoint(id, url string, m ...string) *Endpoint {
-	collection := make(map[int]string)
-	colldata := make(map[string]int64)
-
-	// index for the metric collection
-	index := len(m) - 1
-	index = 0
-
-	// Add values of entry parameters to the map as collection keys
-	// Initialize the mdata[key] for this to zero
-	for _, value := range m {
-		collection[index] = value
-		colldata[value] = 0
-		index++
-	}
-	return &Endpoint{
-		ID:     id,
-		URL:    url,
-		Metric: collection,
-		Mdata:  colldata,
-	}
-}
-
-*/
-
 // NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 	var endpoints Endpoints
@@ -102,8 +74,8 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		// initialized for each Endpoint
 		metric := make(map[int]string)
 
-		// fmt.Printf("Processing config ID: %s\n", c.ID)
-		// fmt.Printf("Config MWithMax: %+v\n", c.MWithMax)
+		// DEBUG ::: fmt.Printf("Processing config ID: %s\n", c.ID)
+		// DEBUG ::: fmt.Printf("Config MWithMax: %+v\n", c.MWithMax)
 
 		mdata := make(map[string]int64)
 		maxval := make(map[string]int64)
@@ -121,14 +93,10 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 				MaxSize: tsdbWindow,
 				Current: 0,
 			}
-			// Init all rune values - might not be necessary
-			//for t := 0; t < tsdbWindow; t++ {
-			//	metsdb[k].Runes[t] = rune(0)
-			//}
 			j++
 		}
 
-		// fmt.Printf("Final metric map: %+v\n", metric)
+		// DEBUG ::: fmt.Printf("Final metric map: %+v\n", metric)
 
 		// Assign data we know, initialize data we don't
 		NewEP := Endpoint{
@@ -232,15 +200,21 @@ func (ep *Endpoint) GetDisplay(m string) []rune {
 // i == Network index
 // p == Metric name
 func (q *QNet) FindAccent(m string, i int) *Accent {
+	// DEBUG ::: fmt.Printf("FindAccent: starting for metric %s, endpoint %d\n", m, i)
+
 	// Lock endpoint for writing
 	q.Network[i].MU.Lock()
 	defer q.Network[i].MU.Unlock()
 
+	// DEBUG ::: fmt.Printf("FindAccent: acquired lock\n")
+
 	// The metric data
 	md := q.Network[i].Mdata[m]
+	// DEBUG ::: fmt.Printf("FindAccent: md = %d\n", md)
 
 	// The metric max
 	mx := q.Network[i].Maxval[m]
+	// DEBUG ::: fmt.Printf("FindAccent: mx = %d\n", mx)
 
 	// init values
 	intensity := 1
@@ -249,24 +223,22 @@ func (q *QNet) FindAccent(m string, i int) *Accent {
 
 	// if the accent exists, fill in a bunch of metadata
 	if md >= mx {
+		// DEBUG ::: fmt.Printf("FindAccent: creating accent\n")
 		q.Network[i].Accent = make(map[string]*Accent)
 		q.Network[i].Accent[m] = NewAccent(intensity, m)
 		a = q.Network[i].Accent[m]
-
-		slog.Debug("ACCENT FOUND",
-			slog.Int64("Mdata", md),
-			slog.Int64("Maxval", mx),
-			slog.Int("Intensity", intensity),
-			slog.Int64("Timestamp", a.Timestamp),
-		)
-
 		isAccent = true
 	}
+
+	// DEBUG ::: fmt.Printf("FindAccent: about to call AddSecondWithCheck\n")
 
 	// ALWAYS add to timeline, regardless of accent status
 	// This will take the metric and fill
 	// the rune at the current Counter location
 	q.Network[i].AddSecondWithCheck(m, isAccent)
+
+	// DEBUG ::: fmt.Printf("FindAccent: AddSecondWithCheck completed\n")
+
 	return a
 }
 
@@ -284,7 +256,8 @@ func (q *QNet) PollMulti() error {
 		// get custom delimiter
 		delimiter = q.Network[ni].Delim
 
-		// pollSource is a map of KV
+		// pollSource is a map of KV extracted from the remote side
+		// map[METRIC_NAME]METRIC_VAL_STRING
 		pollSource, err := MetricKV(delimiter, q.Network[ni].URL)
 		if err != nil {
 			slog.Error("Could not poll metric", slog.Any("Error", err))
@@ -293,19 +266,36 @@ func (q *QNet) PollMulti() error {
 
 		// nv.Metric is the list of configured metrics we want to use
 		for _, mv := range nv.Metric {
-			// pollSource is the full list of metrics from above,
-			for k := range pollSource {
+			// pollSource is the full list of metrics from above
+
+			/* DEBUG
+			for k, v := range pollSource {
+				fmt.Printf("pollSource key: '%s', value: '%s'\n", k, v)
+			}
+			for _, mv := range nv.Metric {
+				fmt.Printf("Looking for metric: '%s'\n", mv)
+			}
+			*/
+
+			for k, v := range pollSource {
 				if k == mv {
 					// we've found the key, now grab its metric from the poll
 					// convert the metric to int64 on assignment
-					metric, err = strconv.ParseInt(pollSource[mv], 10, 64)
+
+					// Add this debug output in your PollMulti method temporarily
+					// DEBUG ::: fmt.Printf("pollSource contents: %+v\n", pollSource)
+					// DEBUG ::: fmt.Printf("Looking for metric: %s\n", mv)
+
+					metric, err = strconv.ParseInt(v, 10, 64)
 					if err != nil {
-						slog.Error("Could not convert metric to 64bits", slog.Any("Error", err))
+						slog.Error("invalid syntax in metric", slog.Any("Error", err))
 						return err
 					}
 
 					// Populate the map in the struct
 					q.Network[ni].Mdata[mv] = metric
+
+					// DEBUG ::: fmt.Printf("About to call FindAccent for metric: %s\n", mv)
 
 					// Find any Accents at the same time
 					accent := q.FindAccent(mv, ni)
@@ -313,6 +303,7 @@ func (q *QNet) PollMulti() error {
 						slog.Debug("ACCENT EMPTY: NIL")
 					}
 
+					// DEBUG ::: fmt.Printf("Successfully processed metric: %s\n", mv)
 				}
 			}
 		}
