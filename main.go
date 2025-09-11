@@ -41,7 +41,17 @@ func main() {
 	localJSON := "config.json"
 
 	// Create config
-	config, err := Ms.LoadConfigFileName(localJSON)
+	/*
+		config, err := Ms.LoadConfigFileName(localJSON)
+		if err != nil {
+			slog.Error("Error loading config.json", slog.Any("Error", err))
+			panic("Error loading config.json")
+		}
+	*/
+
+	// Create config with filesystem
+	localfs := Ms.RealFS{}
+	config, err := Ms.LoadConfigFileNameWithFS(localJSON, localfs)
 	if err != nil {
 		slog.Error("Error loading config.json", slog.Any("Error", err))
 		panic("Error loading config.json")

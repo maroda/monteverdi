@@ -1,8 +1,11 @@
 package monteverdi_test
 
 import (
+	"errors"
 	"os"
+	"runtime"
 	"testing"
+	"time"
 
 	Ms "github.com/maroda/monteverdi/server"
 )
@@ -14,6 +17,7 @@ func createTempFile(t testing.TB, data string) (*os.File, func()) {
 	if err != nil {
 		t.Fatalf("could not create temp file %v", err)
 	}
+	assertError(t, err, nil)
 
 	tmpfile.Write([]byte(data))
 	removeFile := func() {
@@ -23,7 +27,7 @@ func createTempFile(t testing.TB, data string) (*os.File, func()) {
 	return tmpfile, removeFile
 }
 
-// TODO: Test validation from here
+// TODO: DEPRECATE
 func TestLoadConfigFileName(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
@@ -87,3 +91,68 @@ func TestLoadConfigFileName(t *testing.T) {
 		assertGotError(t, err)
 	})
 }
+
+// No config file needed here, we're testing for no file
+func TestLoadConfigFileNameWithFS(t *testing.T) {
+	mockFS := MockFS{OpenError: true}
+	_, err := Ms.LoadConfigFileNameWithFS("anyfilename", mockFS)
+	assertGotError(t, err)
+	assertStringContains(t, err.Error(), "could not open file")
+}
+
+// Config file needed here, we're testing for bad file
+func TestValidateLoadWithFS_Error(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{fake}]`)
+	defer delConfig()
+
+	t.Run("Returns error if file does not exist", func(t *testing.T) {
+		mockFS := MockFS{StatError: true}
+		err := Ms.ValidateLoadWithFS(configFile, mockFS)
+		assertGotError(t, err)
+		assertStringContains(t, err.Error(), "could not stat file")
+	})
+
+	t.Run("Returns error if file is empty", func(t *testing.T) {
+		mockFS := MockFS{FileSize: 0}
+		err := Ms.ValidateLoadWithFS(configFile, mockFS)
+		assertGotError(t, err)
+		assertStringContains(t, err.Error(), "file is empty")
+	})
+}
+
+// MockFS for dependency injection on FileSystem to test config file
+type MockFS struct {
+	OpenError bool
+	StatError bool
+	FileSize  int64
+}
+
+func (fs MockFS) Open(name string) (*os.File, error) {
+	if fs.OpenError {
+		return nil, errors.New("mock: could not open file")
+	}
+
+	if runtime.GOOS == "windows" {
+		return os.Open("NUL")
+	}
+	return os.Open("/dev/null")
+}
+
+func (fs MockFS) Stat(file *os.File) (os.FileInfo, error) {
+	if fs.StatError {
+		return nil, errors.New("mock: could not stat file")
+	}
+
+	return &MockFileInfo{size: fs.FileSize}, nil
+}
+
+type MockFileInfo struct {
+	size int64
+}
+
+func (fi MockFileInfo) Size() int64        { return fi.size }
+func (fi MockFileInfo) Name() string       { return "mock-file" }
+func (fi MockFileInfo) Mode() os.FileMode  { return 0644 }
+func (fi MockFileInfo) ModTime() time.Time { return time.Now() }
+func (fi MockFileInfo) IsDir() bool        { return false }
+func (fi MockFileInfo) Sys() interface{}   { return nil }

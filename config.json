@@ -1,1 +1,20 @@
-config2.json
+[{
+  "id": "NETDATA",
+  "url": "http://localhost:19999/api/v3/allmetrics",
+  "delim": "=",
+  "metrics": {
+    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
+    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 10,
+    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 100
+  }
+},
+  {
+    "id": "PROMETHEUS",
+    "url": "http://localhost:8080/metrics",
+    "delim": " ",
+    "metrics": {
+      "poll_requests_total": 200,
+      "go_goroutines": 16,
+      "go_memory_classes_metadata_mcache_free_bytes": 4000
+    }
+  }]

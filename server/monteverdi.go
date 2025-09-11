@@ -298,10 +298,12 @@ func (q *QNet) PollMulti() error {
 					// DEBUG ::: fmt.Printf("About to call FindAccent for metric: %s\n", mv)
 
 					// Find any Accents at the same time
-					accent := q.FindAccent(mv, ni)
-					if accent == nil {
-						slog.Debug("ACCENT EMPTY: NIL")
-					}
+					q.FindAccent(mv, ni)
+					// DEBUG
+					// accent := q.FindAccent(mv, ni)
+					//if accent == nil {
+					//	slog.Debug("ACCENT EMPTY: NIL")
+					//}
 
 					// DEBUG ::: fmt.Printf("Successfully processed metric: %s\n", mv)
 				}

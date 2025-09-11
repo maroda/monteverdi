@@ -3,6 +3,7 @@ package monteverdi
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,9 +25,12 @@ func SingleFetch(url string) (int, []byte, error) {
 		return 0, nil, err
 	}
 
+	// This io.ReadAll block does not have test coverage
+	// Accepting this because of how difficult it is to mock
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("Could not read body", slog.Any("Error", err))
+		return 0, nil, err
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -40,15 +44,18 @@ func SingleFetch(url string) (int, []byte, error) {
 
 // MetricKV streams input from the endpoint body and populates
 // a map for all key/values, removing whitespace and comments
-// TODO: in order to support prometheus, we need a custom delimiter
 func MetricKV(d, url string) (map[string]string, error) {
-	envMap := make(map[string]string)
-
-	// Grab the body of the given URL, which is a known KV output
-	// in the format "KEY=VALUE" similar to a .env file
-	// This streams the result, which can be large from some sources.
 	_, body, err := SingleFetch(url)
-	scanner := bufio.NewScanner(bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	return ParseMetricKV(bytes.NewReader(body), d)
+}
+
+func ParseMetricKV(reader io.Reader, d string) (map[string]string, error) {
+	envMap := make(map[string]string)
+	scanner := bufio.NewScanner(reader)
+
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -60,6 +67,7 @@ func MetricKV(d, url string) (map[string]string, error) {
 		// Split on the delimiter /d/
 		parts := strings.SplitN(line, d, 2)
 		if len(parts) != 2 {
+			slog.Error("WARNING: Invalid line", slog.String("line", line))
 			continue
 		}
 
@@ -74,9 +82,11 @@ func MetricKV(d, url string) (map[string]string, error) {
 		}
 		envMap[key] = value
 	}
+
 	if err := scanner.Err(); err != nil {
 		slog.Error("Problem scanning input", slog.Any("Error", err))
+		return nil, fmt.Errorf("scanning error: %w", err)
 	}
 
-	return envMap, err
+	return envMap, nil
 }
