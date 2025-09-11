@@ -13,8 +13,8 @@
     "url": "http://localhost:8080/metrics",
     "delim": " ",
     "metrics": {
-      "poll_requests_total": 200,
-      "go_goroutines": 16,
-      "go_memory_classes_metadata_mcache_free_bytes": 4000
+      "poll_requests_total": 1,
+      "go_goroutines": 9,
+      "go_memory_classes_metadata_mcache_free_bytes": 3000
     }
   }]

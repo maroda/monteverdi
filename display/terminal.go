@@ -16,6 +16,11 @@ import (
 	Ms "github.com/maroda/monteverdi/server"
 )
 
+const (
+	screenWidth  = 80
+	screenHeight = 10
+)
+
 type ScreenViewer interface {
 	exit()
 	handleKeyBoardEvent()
@@ -25,26 +30,33 @@ type ScreenViewer interface {
 
 // View is updated by whatever is in the QNet
 type View struct {
-	mu      sync.Mutex
-	QNet    *Ms.QNet
-	screen  tcell.Screen
-	display []string
-	stats   *Mo.StatsInternal
-	server  *http.Server
+	mu       sync.Mutex
+	QNet     *Ms.QNet          // Quality Network
+	screen   tcell.Screen      // the screen itself
+	display  []string          // rune display sequence
+	stats    *Mo.StatsInternal // Internal status for prometheus
+	server   *http.Server      // Prometheus metrics server
+	selectEP int               // Selected Endpoint with MouseClick
+	showEP   bool              // Display Endpoint ID
+	selectMe string            // Selected Metric with MouseClick
+	showMe   bool              // Display Metric ID
 }
 
-// Display a single rune, probably a hex value?
-// Like: '' - this is a private char, should use something else?
-// for now just using it
-// But for this to "stay on the screen", i need a running histogram
-// to do that, i need a histogram type to use a cache in Accent
-// this way, a timeseries of runes is beside a metric's accents
+// Figure out where to draw the next Timeseries entry on the graph
+func (v *View) calcTimeseriesY(endpointIndex, metricIndex, gutter int) int {
+	metricCount := len(v.QNet.Network[endpointIndex].Metric)
+	return gutter + (endpointIndex * metricCount) + metricIndex
+}
+
+// place a single '' on the screen
+// used to draw the accents/second indicator
 func (v *View) drawRune(x, y, m int) {
 	color := tcell.NewRGBColor(int32(150+x), int32(150+y), int32(255-m))
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
 	v.screen.SetContent(x, y, '', nil, style)
 }
 
+// Display the current Timeseries data for a metric
 func (v *View) drawTimeseries(x, y, i int, m string) {
 	runes := v.QNet.Network[i].GetDisplay(m)
 
@@ -132,7 +144,7 @@ func (v *View) drawBar(x1, y1, x2, y2 int) {
 // Draw the HarmonyView itself
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := 80, 20
+	width, height := screenWidth, screenHeight
 
 	// Draw basic elements
 	v.drawViewBorder(width, height)
@@ -144,26 +156,19 @@ func (v *View) drawHarmonyViewMulti() {
 		v.QNet.Network[ni].MU.RLock()
 
 		// step through metrics listed in View.display
-		// ranging on the global display variable is INCORRECT here!
-		// i should be ranging on THIS endpoint's metrics
-		// for di, dm := range v.display {
 		for di, dm := range v.QNet.Network[ni].Metric {
 			// look up the key in this Network's Endpoint Metric data.
-			// For now, we're pulling raw data,
-			// but future this will be only Accents
 			ddm := v.QNet.Network[ni].Mdata[dm]
 
 			// Calculate unique y position for each endpoint/metric combination
-			yTS := 6 + (ni * len(v.display)) + di
+			yTS := v.calcTimeseriesY(ni, di, 2)
 
 			// draw timeseries - each endpoint gets its own line
 			v.drawTimeseries(1, yTS, ni, dm)
 
-			// it will take some experimentation to align...
-			v.drawText(2, yTS+3, width+di, height+10+di, fmt.Sprintf("%s:%d", dm, ddm))
-
-			// draw the bar
-			v.drawBar(1, 1+di, int(ddm), 2+di)
+			// Use these to draw the metric text with the value and a bar of runes to display it
+			// v.drawText(2, yTS+3, width+di, height+10+di, fmt.Sprintf("%s:%d", dm, ddm))
+			// v.drawBar(1, 1+di, int(ddm), 2+di)
 
 			// Can we see an Accent happen?
 			dda := v.QNet.Network[ni].Accent[dm]
@@ -172,15 +177,41 @@ func (v *View) drawHarmonyViewMulti() {
 				newTime := time.Unix(dda.Timestamp/1e9, dda.Timestamp%1e9)
 				s := newTime.Second()
 
-				// draw a rune
-				v.drawRune(s, di+1, int(ddm))
+				// draw a rune across the top
+				// v.drawRune(s, di+1, int(ddm))
+				v.drawRune(s, 1, int(ddm))
 			}
+		}
+
+		// A MouseClick has happened on a graph, show the metric name (and value???)
+		if v.showMe {
+			for ni := range v.QNet.Network {
+				if ni == v.selectEP {
+					for di, dm := range v.QNet.Network[ni].Metric {
+						if dm == v.selectMe {
+							yTS := v.calcTimeseriesY(ni, di, 2)
+
+							mdata := v.QNet.Network[ni].Mdata[dm]
+							label := fmt.Sprintf("%s:%d", dm, mdata)
+							v.drawText(1, yTS, 60, yTS, label)
+						}
+					}
+				}
+			}
+		}
+
+		// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
+		if v.showEP {
+			epName := v.QNet.Network[v.selectEP].ID
+			v.drawText(30, height-1, width, height, fmt.Sprintf("Polling: %s", epName))
 		}
 
 		v.QNet.Network[ni].MU.RUnlock()
 	}
 
-	v.drawText(width-20, height-1, width, height+10, "MONTEVERDI")
+	v.drawText(width-16, 1, width, height+10, "Click graph")
+	v.drawText(width-16, 2, width, height+10, "to see metric")
+	v.drawText(width-16, height-1, width, height+10, "MONTEVERDI")
 }
 
 // Exit cleanly
@@ -201,6 +232,39 @@ func (v *View) handleKeyBoardEvent() {
 		case *tcell.EventKey:
 			if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
 				v.exit()
+			}
+		case *tcell.EventMouse:
+			// Button1 is Left Mouse Button
+			if ev.Buttons() == tcell.Button1 {
+				v.handleMouseClick(ev.Position())
+			}
+		}
+	}
+}
+
+func (v *View) handleMouseClick(x, y int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	// Assume there is no label so the last one is cleared.
+	v.showEP = false
+	v.showMe = false
+
+	// Check for a click on any timeseries graph
+	for ni := range v.QNet.Network {
+		for di, dm := range v.QNet.Network[ni].Metric {
+			// yTS is the same as drawHarmonyViewMulti
+			yTS := v.calcTimeseriesY(ni, di, 2)
+
+			// Check if click is on this timeseries line
+			// Timeseries spans x=1 to x=60
+			// Exit if a match is found
+			if y == yTS && x >= 1 && x <= 60 {
+				v.selectEP = ni
+				v.selectMe = dm
+				v.showEP = true
+				v.showMe = true
+				return
 			}
 		}
 	}
@@ -310,8 +374,10 @@ func NewView(q *Ms.QNet) (*View, error) {
 		return nil, err
 	}
 
+	// Define and configure the default screen
 	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
 	screen.SetStyle(defStyle)
+	screen.EnableMouse()
 
 	// Get all configured metrics from all Endpoints
 	display := make([]string, 0)
