@@ -203,7 +203,7 @@ func (v *View) drawHarmonyViewMulti() {
 		// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
 		if v.showEP {
 			epName := v.QNet.Network[v.selectEP].ID
-			v.drawText(30, height-1, width, height, fmt.Sprintf("Polling: %s", epName))
+			v.drawText(30, height-1, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
 		}
 
 		v.QNet.Network[ni].MU.RUnlock()

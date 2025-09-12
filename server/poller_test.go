@@ -179,6 +179,25 @@ CPU5=value5#comment_no_spaces
 		assertString(t, parse["CPU4"], "value4")
 		assertString(t, parse["CPU5"], "value5")
 	})
+
+	t.Run("Metrics in exponential notation handled", func(t *testing.T) {
+		testData := `memory_bytes=4.21909151744e+11
+cpu_usage=1.5e+2
+disk_io=3.14159e-3
+network_packets=2.5E+6
+`
+
+		reader := strings.NewReader(testData)
+		parse, err := Ms.ParseMetricKV(reader, "=")
+
+		assertError(t, err, nil)
+		assertInt(t, len(parse), 4)
+
+		assertString(t, parse["memory_bytes"], "4.21909151744e+11")
+		assertString(t, parse["cpu_usage"], "1.5e+2")
+		assertString(t, parse["disk_io"], "3.14159e-3")
+		assertString(t, parse["network_packets"], "2.5E+6")
+	})
 }
 
 type FailingReader struct {

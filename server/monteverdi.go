@@ -286,11 +286,20 @@ func (q *QNet) PollMulti() error {
 					// DEBUG ::: fmt.Printf("pollSource contents: %+v\n", pollSource)
 					// DEBUG ::: fmt.Printf("Looking for metric: %s\n", mv)
 
-					metric, err = strconv.ParseInt(v, 10, 64)
-					if err != nil {
+					if floatVal, err := strconv.ParseFloat(v, 64); err != nil {
 						slog.Error("invalid syntax in metric", slog.Any("Error", err))
 						return err
+					} else {
+						metric = int64(floatVal) // Convert float to int64
 					}
+
+					/*
+						metric, err = strconv.ParseInt(v, 10, 64)
+						if err != nil {
+							slog.Error("invalid syntax in metric", slog.Any("Error", err))
+							return err
+						}
+					*/
 
 					// Populate the map in the struct
 					q.Network[ni].Mdata[mv] = metric

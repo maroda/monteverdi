@@ -46,7 +46,7 @@ func TestQNet_PollMultiNetworkError(t *testing.T) {
 
 	t.Run("Error returned when endpoint times out", func(t *testing.T) {
 		slowServ := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(10 * time.Second)
+			time.Sleep(1 + webTimeout)
 		}))
 		defer slowServ.Close()
 
