@@ -61,3 +61,5 @@ Here's an example from my laptop, running both Netdata and Monteverdi's promethe
     }
   }]
 ```
+
+With that in the same directory, run Monteverdi in the terminal you prefer. Currently its default size is 80x20. :)
