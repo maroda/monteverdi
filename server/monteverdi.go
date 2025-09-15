@@ -11,7 +11,7 @@ import (
 // And where pointers to the data are held
 
 type Monteverdi interface {
-	FindAccent() *Accent
+	FindAccent(string, int) *Accent
 	Poll() (int64, error)
 	PollMulti() error
 }
@@ -35,6 +35,14 @@ func NewQNet(ep Endpoints) *QNet {
 	return &QNet{
 		Network: ep,
 	}
+}
+
+type EndpointOperate interface {
+	AddSecond(string)
+	AddSecondWithCheck(string, bool)
+	ValToRuneWithCheck(int64, bool) rune
+	ValToRune(int64) rune
+	GetDisplay(string) []rune
 }
 
 // Endpoint is what the app uses to
@@ -117,7 +125,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 // AddSecond tallies each second as a counter
 // then adds a rune to the slice indexed by second
 // this needs to take the metric name
-// TODO: Clean this up, WithCheck should be the default
+/*
 func (ep *Endpoint) AddSecond(m string) {
 	// This is the index of the rune, and also the current second
 	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize
@@ -125,15 +133,48 @@ func (ep *Endpoint) AddSecond(m string) {
 	// translate this val into a rune for display
 	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRune(ep.Mdata[m])
 }
+*/
 
 func (ep *Endpoint) AddSecondWithCheck(m string, isAccent bool) {
 	// This is the index of the rune, and also the current second
 	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize
 
 	// translate this val into a rune for display
-	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRuneWithCheck(ep.Mdata[m], isAccent)
+	// ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRuneWithCheck(ep.Mdata[m], isAccent)
+	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRuneWithCheckMax(ep.Mdata[m], ep.Maxval[m], isAccent)
+
+	// TODO: Can the value range be derived from or relative to ep.maxval?
 }
 
+func (ep *Endpoint) ValToRuneWithCheckMax(val, max int64, isAccent bool) rune {
+	if !isAccent {
+		return ' '
+	}
+
+	r := max / 8
+
+	switch {
+	case val < max+r:
+		return '▁'
+	case val < max+(2*r):
+		return '▂'
+	case val < max+(3*r):
+		return '▃'
+	case val < max+(4*r):
+		return '▄'
+	case val < max+(5*r):
+		return '▅'
+	case val < max+(6*r):
+		return '▆'
+	case val < max+(7*r):
+		return '▇'
+	default:
+		return '█'
+	}
+}
+
+/*
+// ValToRuneWithCheck returns a rune associated with a value range
 func (ep *Endpoint) ValToRuneWithCheck(val int64, isAccent bool) rune {
 	if !isAccent {
 		return ' '
@@ -159,6 +200,9 @@ func (ep *Endpoint) ValToRuneWithCheck(val int64, isAccent bool) rune {
 	}
 }
 
+*/
+
+/*
 func (ep *Endpoint) ValToRune(val int64) rune {
 	switch {
 	case val < 10:
@@ -179,6 +223,7 @@ func (ep *Endpoint) ValToRune(val int64) rune {
 		return '█'
 	}
 }
+*/
 
 // GetDisplay provides the string of runes for drawing using the metric name
 func (ep *Endpoint) GetDisplay(m string) []rune {

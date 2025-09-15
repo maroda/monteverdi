@@ -68,12 +68,22 @@ func (v *View) drawTimeseries(x, y, i int, m string) {
 		// Choose color based on the rune (intensity)
 		var style tcell.Style
 		switch r {
-		case '▁', '▂':
-			style = tcell.StyleDefault.Foreground(tcell.ColorGreen)
-		case '▃', '▄', '▅':
-			style = tcell.StyleDefault.Foreground(tcell.ColorYellow)
-		case '▆', '▇', '█':
-			style = tcell.StyleDefault.Foreground(tcell.ColorRed)
+		case '▁':
+			style = tcell.StyleDefault.Foreground(tcell.ColorSeaGreen)
+		case '▂':
+			style = tcell.StyleDefault.Foreground(tcell.ColorMediumSeaGreen)
+		case '▃':
+			style = tcell.StyleDefault.Foreground(tcell.ColorLightSeaGreen)
+		case '▄':
+			style = tcell.StyleDefault.Foreground(tcell.ColorDarkTurquoise)
+		case '▅':
+			style = tcell.StyleDefault.Foreground(tcell.ColorMediumTurquoise)
+		case '▆':
+			style = tcell.StyleDefault.Foreground(tcell.ColorTurquoise)
+		case '▇':
+			style = tcell.StyleDefault.Foreground(tcell.ColorLightGreen)
+		case '█':
+			style = tcell.StyleDefault.Foreground(tcell.ColorAquaMarine)
 		default:
 			style = tcell.StyleDefault
 		}
@@ -426,7 +436,7 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 
 	// Server for stats endpoint
 	view.server = &http.Server{
-		Addr:    ":8080",
+		Addr:    ":8090",
 		Handler: view.setupMux(),
 	}
 
@@ -435,7 +445,7 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 
 	// Run stats endpoint
 	go func() {
-		addr := ":8080"
+		addr := ":8090"
 		slog.Info("Starting Monteverdi stats endpoint...", slog.String("Port", addr))
 		if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Could not start stats endpoint", slog.Any("Error", err))

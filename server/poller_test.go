@@ -63,6 +63,7 @@ func TestSingleFetch(t *testing.T) {
 		assertError(t, err, nil)
 	})
 
+	// This is a finicky test, sometimes it works and sometimes it doesn't
 	t.Run("Returns Timeout Error", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(5 + webTimeout)
@@ -72,7 +73,9 @@ func TestSingleFetch(t *testing.T) {
 
 		_, _, err := Ms.SingleFetch(server.URL)
 		assertGotError(t, err)
-		assertStringContains(t, err.Error(), "Timeout")
+		if err != nil {
+			assertStringContains(t, err.Error(), "Timeout")
+		}
 	})
 
 	/* io.ReadAll is extremely robust, it is very difficult to get it to break

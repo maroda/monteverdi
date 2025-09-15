@@ -270,6 +270,7 @@ func TestQNet_PollMulti(t *testing.T) {
 	})
 }
 
+/*
 func TestEndpoint_ValToRune(t *testing.T) {
 	// create KV data
 	kvbody := `VAR1=1`
@@ -293,6 +294,51 @@ func TestEndpoint_ValToRune(t *testing.T) {
 	})
 }
 
+*/
+
+func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
+	configFile, delConfig := createTempFile(t, `[{
+		  "id": "NETDATA",
+		  "url": "http://localhost:19999/api/v3/allmetrics",
+		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+		}]`)
+	defer delConfig()
+	fileName := configFile.Name()
+
+	loadConfig, err := Ms.LoadConfigFileName(fileName)
+	assertError(t, err, nil)
+
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
+	assertError(t, err, nil)
+
+	// create fake data for each
+	for _, ep := range *eps {
+		for mi, mv := range ep.Metric {
+			ep.Mdata[mv] = 10 + int64(mi)
+		}
+	}
+
+	// We know the function divides by 8,
+	// so use a single maxval and a series
+	// of numbers that will draw each rune
+	m := int64(80)
+	numset := []int64{81, 91, 101, 111, 121, 131, 141, 151}
+	runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+	t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
+		for _, ep := range *eps {
+			for i, n := range numset {
+				r := ep.ValToRuneWithCheckMax(n, m, true)
+				if r != runes[i] {
+					t.Errorf("ValToRune returned incorrect value for %d, got: %q, want: %q", n, r, runes[i])
+				}
+			}
+
+		}
+	})
+}
+
+/*
 func TestEndpoint_ValToRuneWithCheck(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
@@ -331,6 +377,8 @@ func TestEndpoint_ValToRuneWithCheck(t *testing.T) {
 	})
 }
 
+*/
+
 func TestEndpoint_AddSecondWithCheck(t *testing.T) {
 	var eps Ms.Endpoints
 
@@ -352,7 +400,7 @@ func TestEndpoint_AddSecondWithCheck(t *testing.T) {
 				ep.AddSecondWithCheck(m, true)
 
 				got := ep.Layer[m].Runes[1]
-				want := '▂'
+				want := '█'
 				if got != want {
 					t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
 				}
@@ -362,6 +410,7 @@ func TestEndpoint_AddSecondWithCheck(t *testing.T) {
 	})
 }
 
+/*
 func TestEndpoint_AddSecond(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
@@ -398,6 +447,7 @@ func TestEndpoint_AddSecond(t *testing.T) {
 		}
 	})
 }
+*/
 
 func TestEndpoint_GetDisplay(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
@@ -441,8 +491,8 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 		for _, ep := range *eps {
 			m := ep.Metric[0]
 			for i := 0; i < ep.Layer[m].MaxSize; i++ {
-				ep.AddSecond(m)
-				testrunes = append(testrunes, '▂')
+				ep.AddSecondWithCheck(m, true)
+				testrunes = append(testrunes, '▁')
 			}
 
 			got := ep.GetDisplay(ep.Metric[0])
