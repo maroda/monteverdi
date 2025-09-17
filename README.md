@@ -1,28 +1,35 @@
 # Monteverdi
 
-Seconda Practica Reliability Observability
+_Seconda Practica Reliability Observability_
 
 ## What This Is
 
-Monteverdi is a live data streaming system that uses _Harmonic Accent Analysis_ to identify patterns and relate them to each other.
+Monteverdi is a live data streaming system that uses _Harmonic Accent Analysis_ to identify operational pulses of the system.
 
-This is an observability tool that applies Leonard Meyer's musical analysis techniques to distributed systems monitoring. The idea is that it provides operators (like SREs) with multi-spacial pattern recognition for understanding complex interaction dynamics.
+An observability tool that applies Leonard Meyer's musical analysis techniques to distributed systems monitoring, Monteverdi looks at form present in structure. The idea is that it provides operators (like SREs) with multi-spacial pattern recognition for understanding complex interaction dynamics. It pays attention to the _pulse_ of the system rather than the codified rhythms.
+
+> **Monteverdi measures how well the whole system is breathing, rather than how much air the lungs can use.**
 
 Traditional monitoring observes individual component metric in isolation. Monteverdi analyzes the **interaction harmonics** between system components. The hope is that this will reveal emergent patterns and early warning signals that conventional dashboards miss. Events like "near misses" and "gray failures" can become more observable as interactions of patterns propagate through the system.
 
 ## What it can do now
 
-- It is optimized to stream data from multiple endpoints and draw histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
-- Does not save these accent histograms anywhere yet.
+- It is optimized to stream data from multiple endpoints.
+- It draws histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
+- It can do pattern recognition on this stream of accents, currently only logs them in DEBUG.
 - Can take the metrics and maxvals from the configured endpoints and draw the accent values in the display as they happen.
 - These graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually).
-- The blocky runes used in the drawing are being colored by static ranges right now, so very large numbers just look red. This may or may not change, since the important part is only the accent.
+
+### asciinema demo v0.2
+
+[![asciicast](https://asciinema.org/a/741183.svg)](https://asciinema.org/a/741183)
 
 ## What is to come
 
-- Pattern recognition via ML (GoLearn or others)
-- Graphics to show pattern recognition and interaction relationships
-- Histogram saving
+- Viz to show pattern recognition
+- Pulse histogram data capture
+- Better JSON config handling
+- Automatic screen resizing
 
 ## How to use
 
@@ -63,3 +70,8 @@ Here's an example from my laptop, running both Netdata and Monteverdi's promethe
 ```
 
 With that in the same directory, run Monteverdi in the terminal you prefer. Currently its default size is 80x20. :)
+
+## Known bugs
+
+1. The JSON config is quite finnicky, it has not been extensively tested on more than two sources.
+
