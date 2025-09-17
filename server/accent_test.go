@@ -1,6 +1,7 @@
 package monteverdi_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -38,34 +39,35 @@ func TestNewAccent(t *testing.T) {
 	})
 }
 
-func TestAccent_ValToRune(t *testing.T) {
-	a := Ms.NewAccent(1, "craquemattic")
-	runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-	numset := []int64{1 - 1, 2 - 1, 3 - 1, 5 - 1, 8 - 1, 13 - 1, 21 - 1, 34}
+/*
+	func TestAccent_ValToRune(t *testing.T) {
+		a := Ms.NewAccent(1, "craquemattic")
+		runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+		numset := []int64{1 - 1, 2 - 1, 3 - 1, 5 - 1, 8 - 1, 13 - 1, 21 - 1, 34}
 
-	t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
-		for i, n := range numset {
-			r := a.ValToRune(n)
-			if r != runes[i] {
-				t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
+		t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
+			for i, n := range numset {
+				r := a.ValToRune(n)
+				if r != runes[i] {
+					t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
+				}
 			}
-		}
-	})
-}
+		})
+	}
 
-func TestAccent_AddSecond(t *testing.T) {
-	a := Ms.NewAccent(1, "craquemattic")
+	func TestAccent_AddSecond(t *testing.T) {
+		a := Ms.NewAccent(1, "craquemattic")
 
-	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
-		a.AddSecond(1.0)
-		got := a.DestLayer.Runes[1]
-		want := '▂'
+		t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
+			a.AddSecond(1.0)
+			got := a.DestLayer.Runes[1]
+			want := '▂'
 
-		if got != want {
-			t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
-		}
-	})
-}
+			if got != want {
+				t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
+			}
+		})
+	}
 
 func TestAccent_GetDisplay(t *testing.T) {
 	a := Ms.NewAccent(1, "craquemattic")
@@ -81,6 +83,125 @@ func TestAccent_GetDisplay(t *testing.T) {
 
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("GetDisplay returned incorrect value, got: %q, want: %q", got, want)
+		}
+	})
+}
+*/
+
+func TestIctusSequence_DetectPulses(t *testing.T) {
+	qn := makeQNet(2)
+
+	t.Run("Returns Iamb", func(t *testing.T) {
+		tmetric := "CPU1"
+		dSec1 := int64(90)
+		dSec2 := int64(110)
+
+		qn.Network[0].Maxval[tmetric] = 100
+
+		// create data
+		qn.Network[0].Mdata[tmetric] = dSec1
+		// create []ictus
+		qn.Network[0].RecordIctus(tmetric, false, dSec1)
+		// create data
+		qn.Network[0].Mdata[tmetric] = dSec2
+		// create []ictus
+		qn.Network[0].RecordIctus(tmetric, true, dSec2)
+
+		sequence := qn.Network[0].Sequence[tmetric]
+		pulseEvent := sequence.DetectPulses()
+
+		for _, pulse := range pulseEvent {
+			if pulse.Pattern != Ms.Iamb {
+				t.Errorf("Did not detect Iamb: %d", pulse.Pattern)
+			}
+		}
+	})
+
+	t.Run("Returns Trochee", func(t *testing.T) {
+		tmetric := "CPU2"
+		dSec1 := int64(110)
+		dSec2 := int64(90)
+
+		qn.Network[1].Maxval[tmetric] = 100
+
+		// create data
+		qn.Network[1].Mdata[tmetric] = dSec1
+		// create []ictus
+		qn.Network[1].RecordIctus(tmetric, true, dSec1)
+		// create data
+		qn.Network[1].Mdata[tmetric] = dSec2
+		// create []ictus
+		qn.Network[1].RecordIctus(tmetric, false, dSec2)
+
+		sequence := qn.Network[1].Sequence[tmetric]
+		pulseEvent := sequence.DetectPulses()
+
+		for _, pulse := range pulseEvent {
+			if pulse.Pattern != Ms.Trochee {
+				t.Errorf("Did not detect Trochee: %d", pulse.Pattern)
+			}
+		}
+	})
+}
+
+func TestTemporalGrouper_AddPulse(t *testing.T) {
+	grouper := &Ms.TemporalGrouper{
+		WindowSize: 60 * time.Second,
+		Buffer:     make([]Ms.PulseEvent, 0),
+		Groups:     make([]*Ms.PulseTree, 0),
+	}
+
+	// Don't need a fake QNet here, just a representation of an IctusSequence
+	ictusSeq := &Ms.IctusSequence{
+		Metric: "CPU1",
+		Events: []Ms.Ictus{
+			{Timestamp: time.Now(), IsAccent: false, Value: 45},
+			{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
+			{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
+			{Timestamp: time.Now().Add(15 * time.Second), IsAccent: true, Value: 90},
+		},
+	}
+
+	// Collect the pulses from the ictus sequence
+	pulses := ictusSeq.DetectPulses()
+
+	t.Run("Adds correct number of pulses to a group", func(t *testing.T) {
+		for _, pulse := range pulses {
+			grouper.AddPulse(pulse)
+
+			// Print which pattern was detected
+			switch pulse.Pattern {
+			case Ms.Iamb:
+				fmt.Printf("Detected Iamb at %v, duration: %v\n", pulse.StartTime, pulse.Duration)
+			case Ms.Trochee:
+				fmt.Printf("Detected Trochee at %v, duration: %v\n", pulse.StartTime, pulse.Duration)
+			}
+		}
+
+		// First check that just one group was created
+		got := len(grouper.Groups)
+		want := 1
+		assertInt(t, got, want)
+
+		// Now check that there are three in the group
+		for i, group := range grouper.Groups {
+			count := len(group.Pulses)
+			if count != want*3 {
+				t.Errorf("Group %d: Expected %d pulses, got %d", i, want*3, count)
+			}
+			// fmt.Printf("Group %d: %d pulses over %v\n", i, len(group.Pulses), group.Duration)
+		}
+	})
+
+	// Use the timing from the literal ictus sequence above
+	t.Run("Registers correct timing for pulses", func(t *testing.T) {
+		for _, pulse := range pulses {
+			grouper.AddPulse(pulse)
+			expectedSec := int64(5)
+			actualSec := int64(pulse.Duration / time.Second)
+			if expectedSec != actualSec {
+				t.Errorf("Expected: %d, got: %d", expectedSec, actualSec)
+			}
 		}
 	})
 }

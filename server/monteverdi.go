@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // QNet represents the entire connected Network of Qualities
@@ -59,15 +60,17 @@ type EndpointOperate interface {
 //     However, the Accent is always located by the Metric key itself.
 //     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
-	MU     sync.RWMutex
-	ID     string                 // string describing the endpoint source
-	URL    string                 // URL endpoint for the service
-	Delim  string                 // delimiter for KV
-	Metric map[int]string         // map of all metric keys to be retrieved
-	Mdata  map[string]int64       // map of all metric data by metric key
-	Maxval map[string]int64       // map of metric data max val to find accents
-	Accent map[string]*Accent     // map of accents by metric key, timestamped
-	Layer  map[string]*Timeseries // map of rolling timeseries by metric key
+	MU       sync.RWMutex
+	ID       string                    // string describing the endpoint source
+	URL      string                    // URL endpoint for the service
+	Delim    string                    // delimiter for KV
+	Metric   map[int]string            // map of all metric keys to be retrieved
+	Mdata    map[string]int64          // map of all metric data by metric key
+	Maxval   map[string]int64          // map of metric data max val to find accents
+	Accent   map[string]*Accent        // map of accents by metric key, timestamped
+	Layer    map[string]*Timeseries    // map of rolling timeseries by metric key
+	Sequence map[string]*IctusSequence // map of total timeseries for pattern matching
+	Groups   *TemporalGrouper          // accent groups arranged by pattern in time
 }
 
 type Endpoints []*Endpoint
@@ -76,19 +79,22 @@ type Endpoints []*Endpoint
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 	var endpoints Endpoints
 
-	// cf is a ConfigFile: ID, URL, MWithMax
-	// on each member a new endpoint is created
+	// cf is a ConfigFile (JSON) of Endpoints
+	// in the format: ID, URL, MWithMax
+	//
+	// This initializes each Endpoint
 	for _, c := range cf {
-		// initialized for each Endpoint
-		metric := make(map[int]string)
-
 		// DEBUG ::: fmt.Printf("Processing config ID: %s\n", c.ID)
 		// DEBUG ::: fmt.Printf("Config MWithMax: %+v\n", c.MWithMax)
 
-		mdata := make(map[string]int64)
-		maxval := make(map[string]int64)
-		accent := make(map[string]*Accent)
-		metsdb := make(map[string]*Timeseries)
+		// All string Keys are /metric/
+		metric := make(map[int]string)            // The metric name
+		mdata := make(map[string]int64)           // Data
+		maxval := make(map[string]int64)          // Value triggers an accent
+		accent := make(map[string]*Accent)        // The accent metadata
+		metsdb := make(map[string]*Timeseries)    // Timeseries tracking accents
+		ictseq := make(map[string]*IctusSequence) // Running change Sequence
+		groups := &TemporalGrouper{}              // Group patterns in time
 		tsdbWindow := 60
 
 		// This locates the desired metrics from the on-disk config
@@ -108,33 +114,24 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 
 		// Assign data we know, initialize data we don't
 		NewEP := Endpoint{
-			ID:     c.ID,
-			URL:    c.URL,
-			Delim:  c.Delim,
-			Metric: metric,
-			Mdata:  mdata,
-			Maxval: maxval,
-			Accent: accent,
-			Layer:  metsdb,
+			ID:       c.ID,
+			URL:      c.URL,
+			Delim:    c.Delim,
+			Metric:   metric,
+			Mdata:    mdata,
+			Maxval:   maxval,
+			Accent:   accent,
+			Layer:    metsdb,
+			Sequence: ictseq,
+			Groups:   groups,
 		}
 		endpoints = append(endpoints, &NewEP)
 	}
 	return &endpoints, nil
 }
 
-// AddSecond tallies each second as a counter
+// AddSecondWithCheck tallies each second as a counter
 // then adds a rune to the slice indexed by second
-// this needs to take the metric name
-/*
-func (ep *Endpoint) AddSecond(m string) {
-	// This is the index of the rune, and also the current second
-	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize
-
-	// translate this val into a rune for display
-	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRune(ep.Mdata[m])
-}
-*/
-
 func (ep *Endpoint) AddSecondWithCheck(m string, isAccent bool) {
 	// This is the index of the rune, and also the current second
 	ep.Layer[m].Current = (ep.Layer[m].Current + 1) % ep.Layer[m].MaxSize
@@ -173,58 +170,6 @@ func (ep *Endpoint) ValToRuneWithCheckMax(val, max int64, isAccent bool) rune {
 	}
 }
 
-/*
-// ValToRuneWithCheck returns a rune associated with a value range
-func (ep *Endpoint) ValToRuneWithCheck(val int64, isAccent bool) rune {
-	if !isAccent {
-		return ' '
-	}
-
-	switch {
-	case val < 10:
-		return '▁'
-	case val < 20:
-		return '▂'
-	case val < 30:
-		return '▃'
-	case val < 50:
-		return '▄'
-	case val < 80:
-		return '▅'
-	case val < 130:
-		return '▆'
-	case val < 210:
-		return '▇'
-	default:
-		return '█'
-	}
-}
-
-*/
-
-/*
-func (ep *Endpoint) ValToRune(val int64) rune {
-	switch {
-	case val < 10:
-		return '▁'
-	case val < 20:
-		return '▂'
-	case val < 30:
-		return '▃'
-	case val < 50:
-		return '▄'
-	case val < 80:
-		return '▅'
-	case val < 130:
-		return '▆'
-	case val < 210:
-		return '▇'
-	default:
-		return '█'
-	}
-}
-*/
-
 // GetDisplay provides the string of runes for drawing using the metric name
 func (ep *Endpoint) GetDisplay(m string) []rune {
 	display := make([]rune, ep.Layer[m].MaxSize)
@@ -235,6 +180,47 @@ func (ep *Endpoint) GetDisplay(m string) []rune {
 		display[i] = ep.Layer[m].Runes[idx]
 	}
 	return display
+}
+
+// RecordIctus takes the metric, accent state, and metric data (pointer)
+// and records either an ongoing duration if an existing state is continuing,
+// or it creates a new start for a new state.
+func (ep *Endpoint) RecordIctus(m string, isAccent bool, d int64) {
+	now := time.Now()
+
+	// Initialize the sequence map if it doesn't exist for this metric
+	if ep.Sequence[m] == nil {
+		ep.Sequence[m] = &IctusSequence{
+			Metric:    m,
+			Events:    make([]Ictus, 0),
+			StartTime: now,
+		}
+	}
+
+	seq := ep.Sequence[m]
+
+	// Are we changing state from or to accent?
+	if len(seq.Events) > 0 {
+		previousIctus := &seq.Events[len(seq.Events)-1]
+		if previousIctus.IsAccent == isAccent {
+			// It's the same so we update duration of the previous ictus
+			previousIctus.Duration = now.Sub(previousIctus.Timestamp)
+			slog.Debug("Ictus Update", slog.String("metric", m), slog.String("duration", previousIctus.Duration.String()))
+			return
+		}
+	}
+
+	// State is changing! Record the new Ictus
+	ictus := Ictus{
+		Timestamp: now,
+		IsAccent:  isAccent,
+		Value:     d,
+		Duration:  0,
+	}
+
+	seq.Events = append(seq.Events, ictus)
+	seq.EndTime = now
+	slog.Debug("NEW Accent Ictus", slog.String("metric", m), slog.Int64("value", ictus.Value))
 }
 
 // FindAccent is configured with the parameters applied to a single metric
@@ -275,16 +261,49 @@ func (q *QNet) FindAccent(m string, i int) *Accent {
 		isAccent = true
 	}
 
-	// DEBUG ::: fmt.Printf("FindAccent: about to call AddSecondWithCheck\n")
-
 	// ALWAYS add to timeline, regardless of accent status
 	// This will take the metric and fill
 	// the rune at the current Counter location
 	q.Network[i].AddSecondWithCheck(m, isAccent)
 
-	// DEBUG ::: fmt.Printf("FindAccent: AddSecondWithCheck completed\n")
+	// Record an Ictus or update the previously
+	// recorded Ictus duration in the sequence
+	q.Network[i].RecordIctus(m, isAccent, md)
+
+	// Run pulse detection on the updated sequence
+	q.PulseDetect(m, i)
 
 	return a
+}
+
+func (q *QNet) PulseDetect(m string, i int) {
+	// retrieve an updated sequence
+	seq := q.Network[i].Sequence[m]
+
+	// This isn't useful until there is at least one IctusPattern present
+	if seq != nil && len(seq.Events) >= 2 { // characters in one IctusPattern
+		// Convert to IctusSequence format first
+		ictusSeq := &IctusSequence{
+			Metric: m,
+			Events: make([]Ictus, len(seq.Events)),
+		}
+
+		for j, e := range seq.Events {
+			ictusSeq.Events[j] = Ictus{
+				Timestamp: e.Timestamp,
+				IsAccent:  e.IsAccent,
+				Value:     e.Value,
+				Duration:  e.Duration,
+			}
+		}
+
+		// Detect new pulses and add to the temporal grouper
+		pulses := ictusSeq.DetectPulses()
+		for _, pulse := range pulses {
+			q.Network[i].Groups.AddPulse(pulse)
+			slog.Debug("ADD PULSE", slog.Any("pattern", pulse.Pattern), slog.String("metric", m), slog.String("duration", pulse.Duration.String()))
+		}
+	}
 }
 
 // PollMulti reads all configured metrics from QNet and retrieves them.

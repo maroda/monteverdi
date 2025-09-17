@@ -78,7 +78,6 @@ func TestQNet_PollMultiDataError(t *testing.T) {
 	assertGotError(t, err)
 }
 
-// TODO: Add a test to check for multiple endpoints
 func TestNewEndpointsFromConfig(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
@@ -270,32 +269,6 @@ func TestQNet_PollMulti(t *testing.T) {
 	})
 }
 
-/*
-func TestEndpoint_ValToRune(t *testing.T) {
-	// create KV data
-	kvbody := `VAR1=1`
-	// create a mock web server
-	mockWWW := makeMockWebServBody(0*time.Millisecond, kvbody)
-	urlWWW := mockWWW.URL
-	// create a new Endpoint
-	name := "craquemattic"
-	ep := makeEndpoint(name, urlWWW)
-
-	runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-	numset := []int64{10 - 1, 20 - 1, 30 - 1, 50 - 1, 80 - 1, 130 - 1, 210 - 1, 340}
-
-	t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
-		for i, n := range numset {
-			r := ep.ValToRune(n)
-			if r != runes[i] {
-				t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
-			}
-		}
-	})
-}
-
-*/
-
 func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
 		  "id": "NETDATA",
@@ -338,47 +311,6 @@ func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
 	})
 }
 
-/*
-func TestEndpoint_ValToRuneWithCheck(t *testing.T) {
-	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
-		}]`)
-	defer delConfig()
-	fileName := configFile.Name()
-
-	loadConfig, err := Ms.LoadConfigFileName(fileName)
-	assertError(t, err, nil)
-
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
-
-	// create fake data for each
-	for _, ep := range *eps {
-		for mi, mv := range ep.Metric {
-			ep.Mdata[mv] = 10 + int64(mi)
-		}
-	}
-
-	runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-	numset := []int64{10 - 1, 20 - 1, 30 - 1, 50 - 1, 80 - 1, 130 - 1, 210 - 1, 340}
-
-	t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
-		for _, ep := range *eps {
-			for i, n := range numset {
-				r := ep.ValToRuneWithCheck(n, true)
-				if r != runes[i] {
-					t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
-				}
-			}
-
-		}
-	})
-}
-
-*/
-
 func TestEndpoint_AddSecondWithCheck(t *testing.T) {
 	var eps Ms.Endpoints
 
@@ -390,7 +322,7 @@ func TestEndpoint_AddSecondWithCheck(t *testing.T) {
 		eps = append(eps, ep)
 	}
 
-	// create a new QNet and poll
+	// create a new QNet
 	qn := Ms.NewQNet(eps)
 
 	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
@@ -410,44 +342,38 @@ func TestEndpoint_AddSecondWithCheck(t *testing.T) {
 	})
 }
 
-/*
-func TestEndpoint_AddSecond(t *testing.T) {
-	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
-		}]`)
-	defer delConfig()
-	fileName := configFile.Name()
+func TestEndpoint_RecordIctus(t *testing.T) {
+	qn := makeQNet(2)
 
-	loadConfig, err := Ms.LoadConfigFileName(fileName)
-	assertError(t, err, nil)
+	t.Run("Records an ictus", func(t *testing.T) {
+		for _, ep := range qn.Network {
+			// Get the first metric that actually exists
+			for _, m := range ep.Metric {
+				d := ep.Mdata[m]
+				ep.AddSecondWithCheck(m, true)
+				ep.RecordIctus(m, true, d)
 
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
-
-	// create fake data for each
-	for _, ep := range *eps {
-		for mi, mv := range ep.Metric {
-			ep.Mdata[mv] = 10 + int64(mi)
-		}
-	}
-
-	t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
-		for _, ep := range *eps {
-			m := ep.Metric[0]
-			ep.AddSecond(m)
-
-			// Check the rune. This should be < 13
-			got := ep.Layer[m].Runes[1]
-			want := '▂'
-			if got != want {
-				t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
+				got := ep.Sequence[m].Metric
+				want := m
+				assertString(t, got, want)
+				break
 			}
 		}
 	})
+
+	/*
+		t.Run("Updates an ictus duration", func(t *testing.T) {
+			for _, ep := range qn.Network {
+				for _, m := range ep.Metric {
+					// create a new ictus
+					// for the subsequent one, update the previous one
+					// then check the previous one for the update
+				}
+			}
+		})
+
+	*/
 }
-*/
 
 func TestEndpoint_GetDisplay(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
@@ -606,17 +532,35 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		}
 	}
 
+	is := make(map[string]*Ms.IctusSequence)
+	tg := &Ms.TemporalGrouper{}
+
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{
-		ID:     id,
-		URL:    url,
-		Delim:  "=",
-		Metric: c,
-		Mdata:  d,
-		Maxval: x,
-		Accent: nil,
-		Layer:  l,
+		MU:       sync.RWMutex{},
+		ID:       id,
+		URL:      url,
+		Delim:    "=",
+		Metric:   c,
+		Mdata:    d,
+		Maxval:   x,
+		Accent:   nil,
+		Layer:    l,
+		Sequence: is,
+		Groups:   tg,
 	}
+}
+
+// Initialize a QNet for use with testing
+func makeQNet(n int) *Ms.QNet {
+	var eps Ms.Endpoints
+	_, u := makeRemoteMetricsServer(n)
+	for i := range u {
+		name := "SAAS_" + strconv.Itoa(i)
+		ep := makeEndpoint(name, *u[i])
+		eps = append(eps, ep)
+	}
+	return Ms.NewQNet(eps)
 }
 
 func truncateToDigits(n int64, digits int) int64 {

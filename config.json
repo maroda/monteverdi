@@ -14,7 +14,7 @@
     "delim": " ",
     "metrics": {
       "process_resident_memory_bytes": 20000000,
-      "go_memstats_heap_inuse_bytes": 4000000,
+      "go_memstats_heap_inuse_bytes": 5500000,
       "poll_requests_seconds_bucket{le=\"1\"}": 10000
     }
   }]

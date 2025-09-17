@@ -5,13 +5,8 @@ import (
 )
 
 // The Accent is the building block of this tool.
-// What really should show up in the display is the accent,
-// not the raw value.
-//
-// TODO: *Timeseries has to move to Endpoint
-// don't remove it here yet, just build an identical one there
 type Accent struct {
-	Timestamp int64       // Unix timestamp
+	Timestamp int64       // Unix timestamp TODO: this should be time.Time
 	Intensity int         // raw, unweighted accent strength
 	SourceID  string      // identifies the source
 	DestLayer *Timeseries // identifies the output
@@ -38,47 +33,158 @@ func NewAccent(i int, s string) *Accent {
 	}
 }
 
-func (a *Accent) ValToRune(val int64) rune {
-	switch {
-	case val < 1.0:
-		return '▁'
-	case val < 2.0:
-		return '▂'
-	case val < 3.0:
-		return '▃'
-	case val < 5.0:
-		return '▄'
-	case val < 8.0:
-		return '▅'
-	case val < 13.0:
-		return '▆'
-	case val < 21.0:
-		return '▇'
-	default:
-		return '█'
+type Ictus struct {
+	Timestamp time.Time
+	IsAccent  bool
+	Value     int64
+	Duration  time.Duration
+}
+
+type IctusSequence struct {
+	Metric    string
+	Events    []Ictus
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+// These trigrams are read top-down, representing an accent/non-accent sequence
+const (
+	axnt       = "⚊" // U+268B is an accent (yang)
+	noax       = "⚋" // U+268A is a non-accent (yin)
+	iamb       = "⚍" // U+268D is noax, axnt (lesser yin)
+	anapest    = "☳" // U+2633 is noax, noax, axnt (thunder)
+	trochee    = "⚎" // U+268E is axnt, noax (lesser yang)
+	dactyl     = "☶" // U+2636 is axnt, noax, noax (mountain)
+	amphibrach = "☵" // U+2635 is noax, axnt, noax (water)
+)
+
+// PulsePattern is the seed of Meyer pattern matching
+// But why pulse?
+// Meyer explicitly points out the difference between rhythm and pulse.
+// Accents define the pulse of something, which are separate from its regular rhythms.
+// For example, the expected rhythm of an operational system can include health checks,
+// garbage collection, predictable load, etc. But the pulse represents a deeper, more
+// fundamental force as the system interacts with the real-world, as its rhythms continue.
+type PulsePattern int
+
+const (
+	Iamb PulsePattern = iota
+	Trochee
+	// Amphibrach
+)
+
+type PulseEvent struct {
+	Pattern   PulsePattern
+	StartTime time.Time
+	Duration  time.Duration
+	Metric    []string
+}
+
+// DetectPulses takes the ictus sequence and
+// recognizes two patterns that make up a pulse:
+// Iamb has no accent followed by an accent,
+// Trochee has an accent followed by no accent.
+func (is *IctusSequence) DetectPulses() []PulseEvent {
+	var pulses []PulseEvent
+
+	// Take all ictus events and determine what we're seeing
+	for i := 0; i < len(is.Events)-1; i++ {
+		curr := is.Events[i]
+		next := is.Events[i+1]
+
+		// Detect Iamb: non-accent → accent
+		if !curr.IsAccent && next.IsAccent {
+			pulses = append(pulses, PulseEvent{
+				Pattern:   Iamb,
+				StartTime: curr.Timestamp,
+				Duration:  next.Timestamp.Sub(curr.Timestamp),
+			})
+		}
+
+		// Detect Trochee: accent → non-accent
+		if curr.IsAccent && !next.IsAccent {
+			pulses = append(pulses, PulseEvent{
+				Pattern:   Trochee,
+				StartTime: curr.Timestamp,
+				Duration:  next.Timestamp.Sub(curr.Timestamp),
+			})
+		}
+	}
+	return pulses
+}
+
+type PulseTree struct {
+	Dimension int            // 0=individual Iamb / Trochee, 1=phrases, 2=periods
+	Pulses    []PulsePattern // The constituent pulses
+	StartTime time.Time
+	Duration  time.Duration
+	Frequency int          // How often this grouping occurs
+	Children  []*PulseTree // Lower-level patterns that comprise this one
+}
+
+type PulseAgg struct {
+	TimeWindow time.Duration // How long to collect pulses before grouping
+	MinPulses  int           // Minimum pulses needed to form a group
+	SimThresh  float64       // How similar pulses must be to group together
+}
+
+type TemporalGrouper struct {
+	WindowSize time.Duration
+	Buffer     []PulseEvent
+	Groups     []*PulseTree
+}
+
+type ConfigurableGrouper struct {
+	WindowSizes  []time.Duration
+	ActiveWindow time.Duration
+}
+
+func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
+	// Add to current buffer
+	tg.Buffer = append(tg.Buffer, pulse)
+
+	// Remove pulses outside the window
+	limiter := time.Now().Add(-tg.WindowSize)
+	tg.trimBuffer(limiter)
+
+	// Check if buffer has minimum pulses to form a group
+	if len(tg.Buffer) >= 3 {
+		group := tg.createGroup()
+		tg.Groups = append(tg.Groups, group)
 	}
 }
 
-// AddSecond tallies each second as a counter
-// then adds a rune to the slice indexed by second
-func (a *Accent) AddSecond(val int64) {
-	// This is the index of the rune, and also the current second
-	a.DestLayer.Current = (a.DestLayer.Current + 1) % a.DestLayer.MaxSize
+func (tg *TemporalGrouper) createGroup() *PulseTree {
+	pulses := make([]PulsePattern, len(tg.Buffer))
+	for i, p := range tg.Buffer {
+		pulses[i] = p.Pattern
+	}
 
-	// Translate the val parameter into a rune for display
-	a.DestLayer.Runes[a.DestLayer.Current] = a.ValToRune(val)
+	return &PulseTree{
+		Dimension: 1, // Phrase level, could be dynamic?
+		Pulses:    pulses,
+		StartTime: tg.Buffer[0].StartTime,
+		Duration:  tg.Buffer[len(tg.Buffer)-1].StartTime.Sub(tg.Buffer[0].StartTime),
+		Frequency: 1, // Track this over time...
+		Children:  nil,
+	}
 }
 
-// TODO: FIND THE RIGHT PLACE FOR THIS COUNTER
-// This adds a second to the rolling timeseries using the metric value
-// q.Network[ni].Accent[mv].AddSecond(metric)
-
-// GetDisplay provides the string of runes for drawing
-func (a *Accent) GetDisplay() []rune {
-	display := make([]rune, a.DestLayer.MaxSize)
-	for i := 0; i < a.DestLayer.MaxSize; i++ {
-		idx := (a.DestLayer.Current + 1 + i) % a.DestLayer.MaxSize
-		display[i] = a.DestLayer.Runes[idx]
+func (tg *TemporalGrouper) trimBuffer(limit time.Time) {
+	// Find the first pattern that is still inside the window
+	keepIndex := 0
+	for i, pulse := range tg.Buffer {
+		if pulse.StartTime.After(limit) {
+			keepIndex = i
+			break
+		}
+		keepIndex = len(tg.Buffer) // If no pulses are after limit, remove all
 	}
-	return display
+
+	// Keep only pulses inside the window
+	if keepIndex < len(tg.Buffer) {
+		tg.Buffer = tg.Buffer[keepIndex:]
+	} else {
+		tg.Buffer = tg.Buffer[:0] // Clear the buffer
+	}
 }
