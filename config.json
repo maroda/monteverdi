@@ -13,8 +13,8 @@
     "url": "http://verificat.rainbowq.net/metrics",
     "delim": " ",
     "metrics": {
-      "process_resident_memory_bytes": 20000000,
-      "go_memstats_heap_inuse_bytes": 5500000,
-      "poll_requests_seconds_bucket{le=\"1\"}": 10000
+      "go_memstats_heap_alloc_bytes": 3000000,
+      "go_memstats_heap_inuse_bytes": 6000000,
+      "go_memstats_heap_objects": 10000
     }
   }]

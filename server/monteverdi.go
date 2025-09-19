@@ -70,7 +70,7 @@ type Endpoint struct {
 	Accent   map[string]*Accent        // map of accents by metric key, timestamped
 	Layer    map[string]*Timeseries    // map of rolling timeseries by metric key
 	Sequence map[string]*IctusSequence // map of total timeseries for pattern matching
-	Groups   *TemporalGrouper          // accent groups arranged by pattern in time
+	Pulses   *TemporalGrouper          // accent groups arranged by pattern in time
 }
 
 type Endpoints []*Endpoint
@@ -94,7 +94,11 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		accent := make(map[string]*Accent)        // The accent metadata
 		metsdb := make(map[string]*Timeseries)    // Timeseries tracking accents
 		ictseq := make(map[string]*IctusSequence) // Running change Sequence
-		groups := &TemporalGrouper{}              // Group patterns in time
+		pulses := &TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]PulseEvent, 0),
+			Groups:     make([]*PulseTree, 0),
+		} // Group patterns in time
 		tsdbWindow := 60
 
 		// This locates the desired metrics from the on-disk config
@@ -123,7 +127,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 			Accent:   accent,
 			Layer:    metsdb,
 			Sequence: ictseq,
-			Groups:   groups,
+			Pulses:   pulses,
 		}
 		endpoints = append(endpoints, &NewEP)
 	}
@@ -223,6 +227,138 @@ func (ep *Endpoint) RecordIctus(m string, isAccent bool, d int64) {
 	slog.Debug("NEW Accent Ictus", slog.String("metric", m), slog.Int64("value", ictus.Value))
 }
 
+// GetPulseVizData takes a metric name and returns its viz point data
+func (ep *Endpoint) GetPulseVizData(m string) []PulseVizPoint {
+	ep.MU.RLock()
+	defer ep.MU.RUnlock()
+
+	if ep.Pulses == nil {
+		// fmt.Printf("DEBUG: Pulses is nil for %s\n", m)
+		return []PulseVizPoint{}
+	}
+
+	// Use a map to store the list
+	// and deduplicate pulses where necessary,
+	// giving display priority to the Trochee
+	// (configured in ChooseBetterPoint)
+	pointMap := make(map[int]PulseVizPoint)
+	now := time.Now()
+
+	// Process pulses held in the buffer
+	for _, pulse := range ep.Pulses.Buffer {
+		if len(pulse.Metric) == 0 || contains(pulse.Metric, m) {
+			pulsePoints := ep.PulseToPoints(pulse, now)
+			for _, point := range pulsePoints {
+				if existing, exists := pointMap[point.Position]; !exists {
+					// Only keep the point if position is empty
+					pointMap[point.Position] = point
+				} else {
+					// Implement priority (e.g., prefer certain, or use priority logic patterns)
+					pointMap[point.Position] = ChooseBetterPoint(existing, point)
+				}
+			}
+		}
+	}
+
+	// Same logic for completed groups...
+	limiter := now.Add(-60 * time.Second)
+	for _, group := range ep.Pulses.Groups {
+		if group.StartTime.After(limiter) && len(group.OGEvents) > 0 {
+			for _, pulse := range group.OGEvents {
+				if len(pulse.Metric) == 0 || contains(pulse.Metric, m) {
+					pulsePoints := ep.PulseToPoints(pulse, now)
+					for _, point := range pulsePoints {
+						if existing, exists := pointMap[point.Position]; !exists {
+							pointMap[point.Position] = point
+						} else {
+							pointMap[point.Position] = ChooseBetterPoint(existing, point)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Convert map back to slice
+	points := make([]PulseVizPoint, 0, len(pointMap))
+	for _, point := range pointMap {
+		points = append(points, point)
+	}
+
+	return points
+}
+
+// ChooseBetterPoint gives priority to one type of pattern,
+// here configured with Trochee: accent → non-accent
+func ChooseBetterPoint(existing, new PulseVizPoint) PulseVizPoint {
+	// Prioritize Trochee: accent → non-accent
+	if new.Pattern == Trochee && existing.Pattern != Trochee {
+		return new
+	}
+	return existing
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoint {
+	var points []PulseVizPoint
+
+	// Calculate timeline position (0-59, where 59 is most recent)
+	secAgo := int(now.Sub(pulse.StartTime).Seconds())
+	startPos := 59 - secAgo
+	durWidth := int(pulse.Duration.Seconds())
+
+	// Clamp to visible range
+	if startPos < 0 {
+		startPos = 0
+	}
+	endPos := startPos + durWidth
+	if endPos >= 60 {
+		endPos = 59
+	}
+
+	// Generate points for each timeline position this pulse occupies
+	for pos := startPos; pos <= endPos; pos++ {
+		isAccent := ep.CalcAccentStateForPos(pulse, pos, startPos, endPos)
+
+		points = append(points, PulseVizPoint{
+			Position: pos,
+			Pattern:  pulse.Pattern,
+			IsAccent: isAccent,
+			Duration: pulse.Duration,
+		})
+	}
+
+	return points
+}
+
+func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPos int) bool {
+	switch pulse.Pattern {
+	case Iamb:
+		// non-accent → accent: first half false, second half true
+		midPoint := startPos + ((endPos - startPos) / 2)
+		return pos >= midPoint
+	case Trochee:
+		// accent → non-accent: first half true, second half false
+		midPoint := startPos + ((endPos - startPos) / 2)
+		return pos < midPoint
+	case Amphibrach:
+		// non-accent → accent → non-accent: thirds
+		span := endPos - startPos
+		firstThird := startPos + (span / 3)
+		secondThird := startPos + (2 * span / 3)
+		return pos >= firstThird && pos < secondThird
+	}
+	return false
+}
+
 // FindAccent is configured with the parameters applied to a single metric
 // for now, intensity is 1 for everything later on, intensity is used to
 // 'weight' metrics i.e. give them greater harmonic meaning.
@@ -300,7 +436,7 @@ func (q *QNet) PulseDetect(m string, i int) {
 		// Detect new pulses and add to the temporal grouper
 		pulses := ictusSeq.DetectPulses()
 		for _, pulse := range pulses {
-			q.Network[i].Groups.AddPulse(pulse)
+			q.Network[i].Pulses.AddPulse(pulse)
 			slog.Debug("ADD PULSE", slog.Any("pattern", pulse.Pattern), slog.String("metric", m), slog.String("duration", pulse.Duration.String()))
 		}
 	}

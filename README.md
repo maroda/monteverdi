@@ -14,11 +14,10 @@ Traditional monitoring observes individual component metric in isolation. Montev
 
 ## What it can do now
 
-- It is optimized to stream data from multiple endpoints.
-- It draws histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
-- It can do pattern recognition on this stream of accents, currently only logs them in DEBUG.
-- Can take the metrics and maxvals from the configured endpoints and draw the accent values in the display as they happen.
-- These graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually).
+- Pulse View is now working! Pattern recognition can be seen floating by if you hit 'p'.
+- Streams data from multiple endpoints to draw histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
+- Draws the accent values in the display as they happen.
+- Graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually). Pulse view shows only the metric name.
 
 ### asciinema demo v0.2
 
@@ -26,10 +25,7 @@ Traditional monitoring observes individual component metric in isolation. Montev
 
 ## What is to come
 
-- Viz to show pattern recognition
-- Pulse histogram data capture
-- Better JSON config handling
-- Automatic screen resizing
+- Pulse Histogram output to file
 
 ## How to use
 

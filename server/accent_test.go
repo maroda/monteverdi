@@ -144,7 +144,7 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 	})
 }
 
-func TestTemporalGrouper_AddPulse(t *testing.T) {
+func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
 	grouper := &Ms.TemporalGrouper{
 		WindowSize: 60 * time.Second,
 		Buffer:     make([]Ms.PulseEvent, 0),
@@ -163,7 +163,11 @@ func TestTemporalGrouper_AddPulse(t *testing.T) {
 	}
 
 	// Collect the pulses from the ictus sequence
-	pulses := ictusSeq.DetectPulses()
+	return ictusSeq.DetectPulses(), grouper
+}
+
+func TestTemporalGrouper_AddPulse(t *testing.T) {
+	pulses, grouper := makePulsesWithGrouper()
 
 	t.Run("Adds correct number of pulses to a group", func(t *testing.T) {
 		for _, pulse := range pulses {
@@ -202,6 +206,82 @@ func TestTemporalGrouper_AddPulse(t *testing.T) {
 			if expectedSec != actualSec {
 				t.Errorf("Expected: %d, got: %d", expectedSec, actualSec)
 			}
+		}
+	})
+}
+
+func TestTemporalGrouper_TrimBuffer(t *testing.T) {
+	t.Run("Removes all pulses when none are after limit", func(t *testing.T) {
+		tg := &Ms.TemporalGrouper{
+			Buffer: []Ms.PulseEvent{
+				{StartTime: time.Now().Add(-120 * time.Second)}, // 2 minutes ago
+				{StartTime: time.Now().Add(-90 * time.Second)},  // 1.5 minutes ago
+				{StartTime: time.Now().Add(-80 * time.Second)},  // 80 seconds ago
+			},
+		}
+
+		// Set limit to 30 seconds ago - all pulses are older
+		limit := time.Now().Add(-30 * time.Second)
+
+		tg.TrimBuffer(limit)
+
+		// Buffer should be completely empty
+		if len(tg.Buffer) != 0 {
+			t.Errorf("Did not remove all pulses")
+		}
+	})
+
+	t.Run("Clears buffer when keepIndex equals buffer length", func(t *testing.T) {
+		tg := &Ms.TemporalGrouper{
+			Buffer: []Ms.PulseEvent{
+				{StartTime: time.Now().Add(-100 * time.Second)}, // Old pulse
+				{StartTime: time.Now().Add(-80 * time.Second)},  // Old pulse
+			},
+		}
+
+		// Set limit such that no pulses are after it
+		limit := time.Now().Add(-10 * time.Second)
+
+		tg.TrimBuffer(limit)
+
+		// Should trigger the "Clear the buffer" path: tg.Buffer[:0]
+		if len(tg.Buffer) != 0 {
+			t.Errorf("Did not clear the buffer")
+		}
+
+		// Verify it's empty slice, not nil
+		if tg.Buffer == nil {
+			t.Errorf("Expected empty slice, got nil")
+		}
+	})
+
+	t.Run("Keeps pulses that are after the limit", func(t *testing.T) {
+		now := time.Now()
+		tg := &Ms.TemporalGrouper{
+			Buffer: []Ms.PulseEvent{
+				{StartTime: now.Add(-80 * time.Second)}, // Too old
+				{StartTime: now.Add(-70 * time.Second)}, // Too old
+				{StartTime: now.Add(-20 * time.Second)}, // Keep this
+				{StartTime: now.Add(-10 * time.Second)}, // Keep this
+			},
+		}
+
+		limit := now.Add(-30 * time.Second)
+
+		tg.TrimBuffer(limit)
+
+		// Should keep only the last 2 pulses
+		if len(tg.Buffer) != 2 {
+			t.Errorf("Should have kept 2 pulses, got %d", len(tg.Buffer))
+		}
+
+		buff1 := tg.Buffer[0].StartTime.After(limit)
+		buff2 := tg.Buffer[1].StartTime.After(limit)
+		if !buff1 {
+			t.Errorf("Should have been true, got %v", buff1)
+		}
+		if !buff2 {
+			t.Errorf("Should have been true, got %v", buff2)
 		}
 	})
 }

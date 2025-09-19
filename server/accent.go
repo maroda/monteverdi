@@ -70,7 +70,7 @@ type PulsePattern int
 const (
 	Iamb PulsePattern = iota
 	Trochee
-	// Amphibrach
+	Amphibrach
 )
 
 type PulseEvent struct {
@@ -98,6 +98,7 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 				Pattern:   Iamb,
 				StartTime: curr.Timestamp,
 				Duration:  next.Timestamp.Sub(curr.Timestamp),
+				Metric:    []string{is.Metric},
 			})
 		}
 
@@ -107,6 +108,7 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 				Pattern:   Trochee,
 				StartTime: curr.Timestamp,
 				Duration:  next.Timestamp.Sub(curr.Timestamp),
+				Metric:    []string{is.Metric},
 			})
 		}
 	}
@@ -116,16 +118,25 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 type PulseTree struct {
 	Dimension int            // 0=individual Iamb / Trochee, 1=phrases, 2=periods
 	Pulses    []PulsePattern // The constituent pulses
+	OGEvents  []PulseEvent   // Preserve source event data
 	StartTime time.Time
 	Duration  time.Duration
-	Frequency int          // How often this grouping occurs
-	Children  []*PulseTree // Lower-level patterns that comprise this one
+	Frequency int             // How often this grouping occurs
+	Children  []*PulseTree    // Lower-level patterns that comprise this one
+	VizData   []PulseVizPoint // Generic visualization descriptor
 }
 
 type PulseAgg struct {
 	TimeWindow time.Duration // How long to collect pulses before grouping
 	MinPulses  int           // Minimum pulses needed to form a group
 	SimThresh  float64       // How similar pulses must be to group together
+}
+
+type PulseVizPoint struct {
+	Position int // 0-59 on the timeline
+	Pattern  PulsePattern
+	IsAccent bool
+	Duration time.Duration
 }
 
 type TemporalGrouper struct {
@@ -145,7 +156,7 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 
 	// Remove pulses outside the window
 	limiter := time.Now().Add(-tg.WindowSize)
-	tg.trimBuffer(limiter)
+	tg.TrimBuffer(limiter)
 
 	// Check if buffer has minimum pulses to form a group
 	if len(tg.Buffer) >= 3 {
@@ -170,7 +181,7 @@ func (tg *TemporalGrouper) createGroup() *PulseTree {
 	}
 }
 
-func (tg *TemporalGrouper) trimBuffer(limit time.Time) {
+func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
 	// Find the first pattern that is still inside the window
 	keepIndex := 0
 	for i, pulse := range tg.Buffer {

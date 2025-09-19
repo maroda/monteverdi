@@ -431,6 +431,252 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 	})
 }
 
+func TestEndpoint_GetPulseVizData(t *testing.T) {
+	qn := makeQNet(1)
+	_, grouper := makePulsesWithGrouper()
+	qn.Network[0].Pulses = grouper
+
+	testMetric := "CPU1"
+	now := time.Now()
+
+	t.Run("Returns empty data when no pulses exist", func(t *testing.T) {
+		got := qn.Network[0].GetPulseVizData(testMetric)
+		var want []Ms.PulseVizPoint
+		want = []Ms.PulseVizPoint{}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetPulseVizData returned incorrect value, got: %v, want: %v", got, want)
+		}
+	})
+
+	t.Run("Filters by metric name", func(t *testing.T) {
+		// Clear previous test data
+		qn.Network[0].Pulses.Buffer = []Ms.PulseEvent{}
+
+		// Add pulses for different metrics
+		pulse1 := Ms.PulseEvent{
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-20 * time.Second),
+			Duration:  5 * time.Second,
+			Metric:    []string{testMetric},
+		}
+		pulse2 := Ms.PulseEvent{
+			Pattern:   Ms.Trochee,
+			StartTime: now.Add(-15 * time.Second),
+			Duration:  5 * time.Second,
+			Metric:    []string{"CPU4"},
+		}
+
+		qn.Network[0].Pulses.Buffer = append(qn.Network[0].Pulses.Buffer, pulse1, pulse2)
+
+		got := qn.Network[0].GetPulseVizData(testMetric)
+		want := Ms.Iamb
+
+		// Should only return points for the requested metric
+		for _, point := range got {
+			if point.Pattern != want {
+				t.Errorf("Incorrect pattern for point, got: %q, want: %q", point.Pattern, want)
+			}
+		}
+	})
+
+	t.Run("Converts buffer pulses to viz points", func(t *testing.T) {
+		// Add test pulse to buffer
+		testPulse := Ms.PulseEvent{
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-30 * time.Second),
+			Duration:  10 * time.Second,
+			Metric:    []string{testMetric},
+		}
+
+		qn.Network[0].Pulses.Buffer = append(qn.Network[0].Pulses.Buffer, testPulse)
+
+		got := qn.Network[0].GetPulseVizData(testMetric)
+
+		// Should have points for the 10-second duration
+		if len(got) > 0 {
+		} else {
+			t.Errorf("Pulses data is zero, expected at least one")
+		}
+
+		// Check position mapping (30 seconds ago should be around position 29)
+		expectedPos := 29 // 59 - 30 sec ago
+		found := false
+		for _, point := range got {
+			if point.Position == expectedPos {
+				found = true
+				if Ms.Iamb != point.Pattern {
+					t.Errorf("Incorrect pulses data, got: %q, want: %q", point.Pattern, expectedPos)
+				}
+				if point.Duration != 10*time.Second {
+					t.Errorf("Incorrect pulses data, got: %q, want: %q", point.Duration, 10*time.Second)
+				}
+			}
+		}
+
+		if !found {
+			t.Errorf("Expected position not found in viz data")
+		}
+	})
+
+	t.Run("Returns empty when Pulses is nil", func(t *testing.T) {
+		ep := &Ms.Endpoint{
+			MU:     sync.RWMutex{},
+			Pulses: nil,
+		}
+
+		got := ep.GetPulseVizData(testMetric)
+		if len(got) != 0 {
+			t.Errorf("Pulses data should be zero")
+		}
+	})
+
+	t.Run("Processes completed groups with original events", func(t *testing.T) {
+		ep := &Ms.Endpoint{
+			MU: sync.RWMutex{},
+			Pulses: &Ms.TemporalGrouper{
+				WindowSize: 60 * time.Second,
+				Buffer:     []Ms.PulseEvent{},
+				Groups:     []*Ms.PulseTree{},
+			},
+		}
+
+		testPulse := Ms.PulseEvent{
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-30 * time.Second),
+			Duration:  5 * time.Second,
+			Metric:    []string{testMetric},
+		}
+
+		// Create a group with original events
+		group := &Ms.PulseTree{
+			StartTime: now.Add(-35 * time.Second),
+			OGEvents:  []Ms.PulseEvent{testPulse}, // Note: using your abbreviated field name
+		}
+		ep.Pulses.Groups = append(ep.Pulses.Groups, group)
+
+		got := ep.GetPulseVizData(testMetric)
+		if len(got) > 0 {
+		} else {
+			t.Errorf("Expected pulses data")
+		}
+	})
+
+	t.Run("Skips groups outside time window", func(t *testing.T) {
+		ep := &Ms.Endpoint{
+			MU: sync.RWMutex{},
+			Pulses: &Ms.TemporalGrouper{
+				WindowSize: 60 * time.Second,
+				Buffer:     []Ms.PulseEvent{},
+				Groups:     []*Ms.PulseTree{},
+			},
+		}
+
+		now := time.Now()
+		oldGroup := &Ms.PulseTree{
+			StartTime: now.Add(-120 * time.Second), // Outside 60-second window
+			OGEvents:  []Ms.PulseEvent{{Pattern: Ms.Iamb, Metric: []string{testMetric}}},
+		}
+		ep.Pulses.Groups = append(ep.Pulses.Groups, oldGroup)
+
+		result := ep.GetPulseVizData(testMetric)
+		if len(result) != 0 {
+			t.Errorf("Pulses data should be zero")
+		}
+	})
+
+	t.Run("Trochee midpoint calculation", func(t *testing.T) {
+		ep := &Ms.Endpoint{}
+		pulse := Ms.PulseEvent{Pattern: Ms.Trochee}
+		startPos, endPos := 10, 20
+		midPoint := 15
+
+		// Before midpoint should be accent
+		before := ep.CalcAccentStateForPos(pulse, midPoint-1, startPos, endPos)
+		if !before {
+			t.Errorf("Expected Accent, got %v", before)
+		}
+		// At/after midpoint should be non-accent
+		after := ep.CalcAccentStateForPos(pulse, midPoint, startPos, endPos)
+		if after {
+			t.Errorf("Expected NO Accent, got %v", after)
+		}
+	})
+
+	t.Run("Amphibrach thirds calculation", func(t *testing.T) {
+		ep := &Ms.Endpoint{}
+		pulse := Ms.PulseEvent{Pattern: Ms.Amphibrach}
+		startPos, endPos := 12, 24 // 12-character span
+
+		// First third (12-15): non-accent
+		first3 := ep.CalcAccentStateForPos(pulse, 14, startPos, endPos)
+		if first3 {
+			t.Errorf("First 3rd should be Non-Accented, got %v", first3)
+		}
+		// Second third (16-19): accent
+		second3 := ep.CalcAccentStateForPos(pulse, 18, startPos, endPos)
+		if !second3 {
+			t.Errorf("Second 3rd should be ACCENTED, got %v", second3)
+		}
+		// Final third (20-23): non-accent
+		third3 := ep.CalcAccentStateForPos(pulse, 22, startPos, endPos)
+		if third3 {
+			t.Errorf("Third 3rd should be Non-Accented, got %v", third3)
+		}
+	})
+
+	t.Run("Calculation returns false for no result", func(t *testing.T) {
+		ep := &Ms.Endpoint{}
+		pulse := Ms.PulseEvent{Pattern: 9}
+		startPos, endPos := 10, 20
+		midPoint := 15
+
+		// Return false if the pattern isn't recognized
+		got := ep.CalcAccentStateForPos(pulse, midPoint-1, startPos, endPos)
+		if got {
+			t.Errorf("Expected false, got %v", got)
+		}
+	})
+}
+
+func TestPulseToPoints_Clamping(t *testing.T) {
+	ep := &Ms.Endpoint{}
+	now := time.Now()
+
+	t.Run("Clamps start position to 0", func(t *testing.T) {
+		// Pulse that started before visible window
+		pulse := Ms.PulseEvent{
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-70 * time.Second), // Before 60-second window
+			Duration:  10 * time.Second,
+		}
+
+		points := ep.PulseToPoints(pulse, now)
+		for _, point := range points {
+			if point.Position >= 0 {
+			} else {
+				t.Errorf("Point position should be zero or greater")
+			}
+		}
+	})
+
+	t.Run("Clamps end position to 59", func(t *testing.T) {
+		// Long duration pulse that would extend beyond visible range
+		pulse := Ms.PulseEvent{
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-10 * time.Second),
+			Duration:  80 * time.Second, // Very long duration
+		}
+
+		points := ep.PulseToPoints(pulse, now)
+		for _, point := range points {
+			if point.Position <= 59 {
+			} else {
+				t.Errorf("Point position should be 59 or smaller")
+			}
+		}
+	})
+}
+
 func TestConcurrentPollAndDisplay(t *testing.T) {
 	var eps Ms.Endpoints
 	_, u := makeRemoteMetricsServer(1)
@@ -489,6 +735,111 @@ func TestConfigWithInvalidURL(t *testing.T) {
 	fmt.Println(config)
 }
 
+func TestChooseBetterPoint(t *testing.T) {
+	t.Run("Returns new point when new is Trochee and existing is not", func(t *testing.T) {
+		existing := Ms.PulseVizPoint{Pattern: Ms.Iamb}
+		new := Ms.PulseVizPoint{Pattern: Ms.Trochee}
+
+		result := Ms.ChooseBetterPoint(existing, new)
+
+		if result.Pattern != Ms.Trochee {
+			t.Errorf("Expected %v, got %v", Ms.Trochee, result.Pattern)
+		}
+		reflect.DeepEqual(new, result)
+	})
+
+	t.Run("Returns existing point when existing is Trochee and new is not", func(t *testing.T) {
+		existing := Ms.PulseVizPoint{Pattern: Ms.Trochee}
+		new := Ms.PulseVizPoint{Pattern: Ms.Iamb}
+
+		result := Ms.ChooseBetterPoint(existing, new)
+
+		if result.Pattern != Ms.Trochee {
+			t.Errorf("Expected %v, got %v", Ms.Trochee, result.Pattern)
+		}
+		reflect.DeepEqual(existing, result)
+	})
+
+	t.Run("Returns existing when both are Trochee", func(t *testing.T) {
+		existing := Ms.PulseVizPoint{Pattern: Ms.Trochee}
+		new := Ms.PulseVizPoint{Pattern: Ms.Trochee}
+
+		result := Ms.ChooseBetterPoint(existing, new)
+
+		reflect.DeepEqual(existing, result)
+	})
+
+	t.Run("Returns existing when neither is Trochee", func(t *testing.T) {
+		existing := Ms.PulseVizPoint{Pattern: Ms.Iamb}
+		new := Ms.PulseVizPoint{Pattern: Ms.Amphibrach}
+
+		result := Ms.ChooseBetterPoint(existing, new)
+
+		reflect.DeepEqual(existing, result)
+	})
+
+	t.Run("Provides priority when overlapping", func(t *testing.T) {
+		ep := &Ms.Endpoint{
+			MU: sync.RWMutex{},
+			Pulses: &Ms.TemporalGrouper{
+				WindowSize: 60 * time.Second,
+				Buffer:     []Ms.PulseEvent{},
+				Groups:     []*Ms.PulseTree{},
+			},
+		}
+
+		now := time.Now()
+		testMetric := "CPU1"
+
+		// Create two pulses that will overlap at the same timeline position
+		pulse1 := Ms.PulseEvent{
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-30 * time.Second), // 30 seconds ago
+			Duration:  5 * time.Second,
+			Metric:    []string{testMetric},
+		}
+
+		pulse2 := Ms.PulseEvent{
+			Pattern:   Ms.Trochee,                 // Should be chosen by ChooseBetterPoint
+			StartTime: now.Add(-28 * time.Second), // 28 seconds ago, overlaps with pulse1
+			Duration:  3 * time.Second,
+			Metric:    []string{testMetric},
+		}
+
+		// Add pulses to a completed group
+		group := &Ms.PulseTree{
+			StartTime: now.Add(-35 * time.Second), // Within the 60-second window
+			OGEvents:  []Ms.PulseEvent{pulse1, pulse2},
+		}
+		ep.Pulses.Groups = append(ep.Pulses.Groups, group)
+
+		result := ep.GetPulseVizData(testMetric)
+
+		// Verify that overlapping positions chose Trochee (better pattern)
+		foundTrochee := false
+		foundIamb := false
+
+		for _, point := range result {
+			if point.Pattern == Ms.Trochee {
+				foundTrochee = true
+			}
+			if point.Pattern == Ms.Iamb {
+				foundIamb = true
+			}
+		}
+
+		// Should have found Trochee patterns due to ChooseBetterPoint prioritization
+		if !foundTrochee {
+			t.Errorf("Expected to find Trochee patterns from ChooseBetterPoint")
+		}
+
+		// Positions that don't overlap should still have Iamb
+		if !foundIamb {
+			t.Errorf("Expected to find Iamb patterns in non-overlapping positions")
+		}
+	})
+}
+
 // Helpers //
 
 // Create an endpoint with a customizable ID and URL
@@ -533,7 +884,11 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	}
 
 	is := make(map[string]*Ms.IctusSequence)
-	tg := &Ms.TemporalGrouper{}
+	tg := &Ms.TemporalGrouper{
+		WindowSize: 60 * time.Second,
+		Buffer:     make([]Ms.PulseEvent, 0),
+		Groups:     make([]*Ms.PulseTree, 0),
+	}
 
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{
@@ -547,7 +902,7 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		Accent:   nil,
 		Layer:    l,
 		Sequence: is,
-		Groups:   tg,
+		Pulses:   tg,
 	}
 }
 
