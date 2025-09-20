@@ -67,23 +67,102 @@ const (
 // fundamental force as the system interacts with the real-world, as its rhythms continue.
 type PulsePattern int
 
+// PulsePattern entries
+// Iamb: non-accent → accent
+// Trochee: accent → non-accent
+// Amphibrach: non-accent → accent → non-accent (not yet implemented)
 const (
 	Iamb PulsePattern = iota
 	Trochee
-	Amphibrach
 )
 
 type PulseEvent struct {
-	Pattern   PulsePattern
-	StartTime time.Time
-	Duration  time.Duration
-	Metric    []string
+	Pattern      PulsePattern
+	StartTime    time.Time
+	Duration     time.Duration
+	Metric       []string
+	Significance float64
+}
+
+type PulseConfig struct {
+	IambStartPeriod    float64 // 0.0 = start of non-accent, 0.5 = middle, 1.0 = end
+	IambEndPeriod      float64 // 0.0 = start of accent, 0.5 = middle, 1.0 = end
+	TrocheeStartPeriod float64 // For accent period
+	TrocheeEndPeriod   float64 // For non-accent period
+}
+
+// NewPulseConfig returns a set of parameters
+// used to define pulse pattern periodicity
+func NewPulseConfig(is, ie, ts, te float64) *PulseConfig {
+	return &PulseConfig{
+		IambStartPeriod:    is,
+		IambEndPeriod:      ie,
+		TrocheeStartPeriod: ts,
+		TrocheeEndPeriod:   te,
+	}
+}
+
+// DetectPulsesWithConfig takes the ictus sequence and
+// recognizes two patterns that make up a pulse:
+// Iamb has no accent followed by an accent,
+// Trochee has an accent followed by no accent.
+func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent {
+	var pulses []PulseEvent
+
+	// We need at least three events to process
+	if len(is.Events) < 3 {
+		return pulses
+	}
+
+	for i := 1; i < len(is.Events)-2; i++ {
+		prev := is.Events[i-1]
+		curr := is.Events[i]
+		next := is.Events[i+1]
+
+		// Iamb pattern: non-accent → accent transition
+		if !prev.IsAccent && curr.IsAccent {
+			nonAccentDur := curr.Timestamp.Sub(prev.Timestamp)
+			accentDur := next.Timestamp.Sub(curr.Timestamp)
+
+			// Configurable START within the non-accent period
+			patternStart := prev.Timestamp.Add(time.Duration(float64(nonAccentDur) * config.IambStartPeriod))
+
+			// Configurable END within the non-accent period
+			patternEnd := curr.Timestamp.Add(time.Duration(float64(accentDur) * config.IambEndPeriod))
+
+			pulses = append(pulses, PulseEvent{
+				Pattern:   Iamb,
+				StartTime: patternStart,
+				Duration:  patternEnd.Sub(patternStart),
+				Metric:    []string{is.Metric},
+			})
+		}
+
+		// Trochee pattern: accent → non-accent transition
+		if prev.IsAccent && !curr.IsAccent {
+			accentDur := curr.Timestamp.Sub(prev.Timestamp)
+			nonAccentDur := next.Timestamp.Sub(curr.Timestamp)
+
+			patternStart := prev.Timestamp.Add(time.Duration(float64(accentDur) * config.TrocheeStartPeriod))
+			patternEnd := curr.Timestamp.Add(time.Duration(float64(nonAccentDur) * config.TrocheeEndPeriod))
+
+			pulses = append(pulses, PulseEvent{
+				Pattern:   Trochee,
+				StartTime: patternStart,
+				Duration:  patternEnd.Sub(patternStart),
+				Metric:    []string{is.Metric},
+			})
+		}
+	}
+
+	return pulses
 }
 
 // DetectPulses takes the ictus sequence and
 // recognizes two patterns that make up a pulse:
 // Iamb has no accent followed by an accent,
 // Trochee has an accent followed by no accent.
+// TODO: this version of the algorithm is broken
 func (is *IctusSequence) DetectPulses() []PulseEvent {
 	var pulses []PulseEvent
 
@@ -126,28 +205,19 @@ type PulseTree struct {
 	VizData   []PulseVizPoint // Generic visualization descriptor
 }
 
-type PulseAgg struct {
-	TimeWindow time.Duration // How long to collect pulses before grouping
-	MinPulses  int           // Minimum pulses needed to form a group
-	SimThresh  float64       // How similar pulses must be to group together
-}
-
 type PulseVizPoint struct {
-	Position int // 0-59 on the timeline
-	Pattern  PulsePattern
-	IsAccent bool
-	Duration time.Duration
+	Position  int          // 0-59 on the timeline
+	Pattern   PulsePattern // Iamb or Trochee
+	IsAccent  bool         // Is an accent
+	Duration  time.Duration
+	StartTime time.Time
+	Extends   bool // pattern extends beyond display
 }
 
 type TemporalGrouper struct {
 	WindowSize time.Duration
 	Buffer     []PulseEvent
 	Groups     []*PulseTree
-}
-
-type ConfigurableGrouper struct {
-	WindowSizes  []time.Duration
-	ActiveWindow time.Duration
 }
 
 func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {

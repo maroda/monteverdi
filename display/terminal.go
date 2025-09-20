@@ -19,6 +19,7 @@ import (
 const (
 	screenWidth  = 80
 	screenHeight = 20
+	screenGutter = 4
 )
 
 type ScreenViewer interface {
@@ -30,17 +31,18 @@ type ScreenViewer interface {
 
 // View is updated by whatever is in the QNet
 type View struct {
-	mu        sync.Mutex
-	QNet      *Ms.QNet          // Quality Network
-	screen    tcell.Screen      // the screen itself
-	display   []string          // rune display sequence
-	stats     *Mo.StatsInternal // Internal status for prometheus
-	server    *http.Server      // Prometheus metrics server
-	selectEP  int               // Selected Endpoint with MouseClick
-	showEP    bool              // Display Endpoint ID
-	selectMe  string            // Selected Metric with MouseClick
-	showMe    bool              // Display Metric ID
-	showPulse bool              // Display pulse view overlay
+	mu          sync.Mutex
+	QNet        *Ms.QNet          // Quality Network
+	screen      tcell.Screen      // the screen itself
+	display     []string          // rune display sequence
+	stats       *Mo.StatsInternal // Internal status for prometheus
+	server      *http.Server      // Prometheus metrics server
+	selectEP    int               // Selected Endpoint with MouseClick
+	showEP      bool              // Display Endpoint ID
+	selectMe    string            // Selected Metric with MouseClick
+	showMe      bool              // Display Metric ID
+	showPulse   bool              // Display pulse view overlay
+	pulseFilter *Ms.PulsePattern  // For filtering the display
 }
 
 // Figure out where to draw the next Timeseries entry on the graph
@@ -92,21 +94,6 @@ func (v *View) getAccentStateAtPos(pulse Ms.PulseEvent, pos int) bool {
 		// First part is accent, second part is non-accent
 		midPoint := v.calcTimePos(pulse.StartTime) + (v.calcDurationWidth(pulse.Duration) / 2)
 		return pos < midPoint
-
-	case Ms.Amphibrach:
-		// Amphibrach: non-accent → accent → non-accent
-		// Three parts: non-accent, accent, non-accent
-		startPos := v.calcTimePos(pulse.StartTime)
-		duration := v.calcDurationWidth(pulse.Duration)
-		thirdPoint := duration / 3
-
-		if pos < startPos+thirdPoint {
-			return false // First third: non-accent
-		} else if pos < startPos+(2*thirdPoint) {
-			return true // Middle third: accent
-		} else {
-			return false // Final third: non-accent
-		}
 	}
 
 	return false
@@ -124,9 +111,6 @@ func (v *View) getPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell
 	case Ms.Trochee:
 		baseColor = tcell.ColorDarkOrange
 		symbol = '⚎'
-	case Ms.Amphibrach:
-		baseColor = tcell.ColorDarkMagenta
-		symbol = '☵'
 	}
 
 	// Shade based on accent state
@@ -151,30 +135,59 @@ func (v *View) renderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
 
 func (v *View) drawPulseView() {
 	// Clear or dim the background first
-	v.drawPulseBackground()
+	// v.drawPulseBackground()
 
-	// Debug: show how many endpoints we're processing
-	// v.drawText(1, 3, 40, 4, fmt.Sprintf("Processing %d endpoints", len(v.QNet.Network)))
+	// Show current filter mode
+	filterText := "All Patterns"
+	if v.pulseFilter != nil {
+		switch *v.pulseFilter {
+		case Ms.Iamb:
+			filterText = "Iamb Only"
+		case Ms.Trochee:
+			filterText = "Trochee Only"
+		}
+	}
+
+	v.drawText(1, 1, 70, 2, fmt.Sprintf("PULSE VIEW - %s (triple ictus analysis)", filterText))
+	v.drawText(1, 2, 70, 3, "i=Iamb | t=Trochee | x=All | ► stacked long pulses ◄ ")
 
 	// Draw pulse visualization for each endpoint/metric
 	for ni := range v.QNet.Network {
 		for di, dm := range v.QNet.Network[ni].Metric {
-			yTS := v.calcTimeseriesY(ni, di, 2)
+			yTS := v.calcTimeseriesY(ni, di, screenGutter)
 
-			// Get pulse visualization data
-			timelineData := v.QNet.Network[ni].GetPulseVizData(dm)
-			// DEBUG
-			// v.drawText(1, yTS-1, 80, yTS, fmt.Sprintf("Metric: %s, Pulses: %d", dm, len(timelineData)))
+			// Pass the filter for display
+			timelineData := v.QNet.Network[ni].GetPulseVizData(dm, v.pulseFilter)
+			v.renderPulseViz(1, yTS, timelineData)
 
-			if len(timelineData) > 0 {
-				v.renderPulseViz(1, yTS, timelineData)
-			} else {
-				// Show placeholder if no pulse data
-				v.drawText(1, yTS, 30, yTS+1, "No pulse data available")
+			// Track long pulse boundaries
+			var longPulseStart, longPulseEnd int = -1, -1
+			now := time.Now()
+
+			for _, point := range timelineData {
+				pulseAge := now.Sub(point.StartTime).Seconds()
+
+				// Find pulses that started before our 60-second window
+				if pulseAge > 60 {
+					if longPulseStart == -1 || point.Position < longPulseStart {
+						longPulseStart = point.Position
+					}
+					if longPulseEnd == -1 || point.Position > longPulseEnd {
+						longPulseEnd = point.Position
+					}
+				}
 			}
 
-			// Show metric labels in pulse view
-			// v.drawText(65, yTS, 80, yTS+1, fmt.Sprintf("Pulse: %s", dm))
+			// Mark start and end of frozen section
+			if longPulseStart >= 0 {
+				leftStyle := tcell.StyleDefault.Foreground(tcell.ColorDodgerBlue)
+				v.screen.SetContent(1+longPulseStart, yTS, '►', nil, leftStyle)
+			}
+
+			if longPulseEnd >= 0 && longPulseEnd != longPulseStart {
+				rightStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkTurquoise)
+				v.screen.SetContent(1+longPulseEnd, yTS, '◄', nil, rightStyle)
+			}
 		}
 	}
 
@@ -302,13 +315,13 @@ func (v *View) drawBar(x1, y1, x2, y2 int) {
 }
 
 // Draw the HarmonyView itself
+// Includes a toggle for view mode
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
 	width, height := screenWidth, screenHeight
 
 	// Draw basic elements
 	v.drawViewBorder(width, height)
-	// v.drawText(1, height-1, width, height+10, "Press ESC or Ctrl+C to quit")
 
 	// Support toggle to pulse view by wrapping in a boolean
 	if v.showPulse {
@@ -321,7 +334,7 @@ func (v *View) drawHarmonyViewMulti() {
 			v.showEndpoint(40, 1)
 		}
 		if v.showMe {
-			v.showMetric(2, 2, 0, 4)
+			v.showMetric(2, screenGutter, 0, 4)
 		}
 
 		v.drawText(1, height-1, width, height+10, "/p/ to exit | /ESC/ to quit")
@@ -337,16 +350,12 @@ func (v *View) drawHarmonyViewMulti() {
 				ddm := v.QNet.Network[ni].Mdata[dm]
 
 				// Calculate unique y position for each endpoint/metric combination
-				yTS := v.calcTimeseriesY(ni, di, 2)
+				yTS := v.calcTimeseriesY(ni, di, screenGutter)
 
 				// draw timeseries - each endpoint gets its own line
 				v.drawTimeseries(1, yTS, ni, dm)
 
-				// Use these to draw the metric text with the value and a bar of runes to display it
-				// v.drawText(2, yTS+3, width+di, height+10+di, fmt.Sprintf("%s:%d", dm, ddm))
-				// v.drawBar(1, 1+di, int(ddm), 2+di)
-
-				// Can we see an Accent happen?
+				// See an Accent happen
 				dda := v.QNet.Network[ni].Accent[dm]
 				if dda != nil {
 					// now get the second from the Timestamp. this is the X position on the display
@@ -359,13 +368,13 @@ func (v *View) drawHarmonyViewMulti() {
 				}
 			}
 
-			// A MouseClick has happened on a graph, show the metric name (and value???)
+			// A MouseClick has happened on a graph, show the metric name and value
 			if v.showMe {
 				for ni := range v.QNet.Network {
 					if ni == v.selectEP {
 						for di, dm := range v.QNet.Network[ni].Metric {
 							if dm == v.selectMe {
-								yTS := v.calcTimeseriesY(ni, di, 2)
+								yTS := v.calcTimeseriesY(ni, di, screenGutter)
 
 								mdata := v.QNet.Network[ni].Mdata[dm]
 								label := fmt.Sprintf("... %s ...", dm) // The Metric
@@ -389,12 +398,10 @@ func (v *View) drawHarmonyViewMulti() {
 		v.drawText(1, height-1, width, height+10, "/p/ for pulses | /ESC/ to quit")
 	}
 
-	// v.drawText(width-16, 1, width, height+10, "Click graph")
-	// v.drawText(width-16, 2, width, height+10, "to see metric")
 	v.drawText(width-12, height-1, width, height+10, "MONTEVERDI")
 }
 
-// g = gutter
+// g = gutter, typically screenGutter
 // dx = start metric (was 62)
 // lx = start label (was 4)
 // by = y offset from the bottom (was 2)
@@ -453,7 +460,32 @@ func (v *View) handleKeyBoardEvent() {
 			if ev.Rune() == 'p' {
 				v.mu.Lock()
 				v.showPulse = !v.showPulse
+				/*
+					if !v.showPulse {
+						v.pulseFilter = nil // reset filter when exiting pulse view
+					}
+				*/
 				v.mu.Unlock()
+			}
+
+			// Pattern filtering (only when in pulse view)
+			if v.showPulse {
+				switch ev.Rune() {
+				case 'i':
+					v.mu.Lock()
+					iamb := Ms.Iamb
+					v.pulseFilter = &iamb
+					v.mu.Unlock()
+				case 't':
+					v.mu.Lock()
+					trochee := Ms.Trochee
+					v.pulseFilter = &trochee
+					v.mu.Unlock()
+				case 'x':
+					v.mu.Lock()
+					v.pulseFilter = nil // Show all patterns
+					v.mu.Unlock()
+				}
 			}
 
 		case *tcell.EventMouse:
@@ -477,7 +509,7 @@ func (v *View) handleMouseClick(x, y int) {
 	for ni := range v.QNet.Network {
 		for di, dm := range v.QNet.Network[ni].Metric {
 			// yTS is the same as drawHarmonyViewMulti
-			yTS := v.calcTimeseriesY(ni, di, 2)
+			yTS := v.calcTimeseriesY(ni, di, screenGutter)
 
 			// Check if click is on this timeseries line
 			// Timeseries spans x=1 to x=60

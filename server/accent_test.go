@@ -39,54 +39,94 @@ func TestNewAccent(t *testing.T) {
 	})
 }
 
-/*
-	func TestAccent_ValToRune(t *testing.T) {
-		a := Ms.NewAccent(1, "craquemattic")
-		runes := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
-		numset := []int64{1 - 1, 2 - 1, 3 - 1, 5 - 1, 8 - 1, 13 - 1, 21 - 1, 34}
-
-		t.Run("Returns the correct rune for each metric value", func(t *testing.T) {
-			for i, n := range numset {
-				r := a.ValToRune(n)
-				if r != runes[i] {
-					t.Errorf("ValToRune returned incorrect value, got: %q, want: %q", r, runes[i])
-				}
-			}
-		})
+func TestNewPulseConfig(t *testing.T) {
+	want := struct {
+		IambStartPeriod    float64
+		IambEndPeriod      float64
+		TrocheeStartPeriod float64
+		TrocheeEndPeriod   float64
+	}{
+		IambStartPeriod:    0.0,
+		IambEndPeriod:      1.0,
+		TrocheeStartPeriod: 0.0,
+		TrocheeEndPeriod:   1.0,
 	}
 
-	func TestAccent_AddSecond(t *testing.T) {
-		a := Ms.NewAccent(1, "craquemattic")
+	t.Run("Returns the correct field assignments", func(t *testing.T) {
+		config := Ms.NewPulseConfig(0.0, 1.0, 0.0, 1.0)
+		if want.IambStartPeriod != config.IambStartPeriod {
+			t.Errorf("IambStartPeriod returned incorrect value, got: %f, want: %f", config.IambStartPeriod, want.IambStartPeriod)
+		}
+		if want.IambEndPeriod != config.IambEndPeriod {
+			t.Errorf("IambEndPeriod returned incorrect value, got: %f, want: %f", config.IambEndPeriod, want.IambEndPeriod)
+		}
+		if want.TrocheeStartPeriod != config.TrocheeStartPeriod {
+			t.Errorf("TrocheeStartPeriod returned incorrect value, got: %f, want: %f", config.TrocheeStartPeriod, want.TrocheeStartPeriod)
+		}
+		if want.TrocheeEndPeriod != config.TrocheeEndPeriod {
+			t.Errorf("TrocheeEndPeriod returned incorrect value, got: %f, want: %f", config.TrocheeEndPeriod, want.TrocheeEndPeriod)
+		}
+	})
 
-		t.Run("Adds a metric/second and retrieves the correct rune", func(t *testing.T) {
-			a.AddSecond(1.0)
-			got := a.DestLayer.Runes[1]
-			want := '▂'
+}
 
-			if got != want {
-				t.Errorf("AddSecond returned incorrect value, got: %q, want: %q", got, want)
-			}
-		})
+func TestIctusSequence_DetectPulsesWithConfig(t *testing.T) {
+	config := struct {
+		IambStartPeriod    float64
+		IambEndPeriod      float64
+		TrocheeStartPeriod float64
+		TrocheeEndPeriod   float64
+	}{
+		IambStartPeriod:    0.0,
+		IambEndPeriod:      1.0,
+		TrocheeStartPeriod: 0.0,
+		TrocheeEndPeriod:   1.0,
 	}
 
-func TestAccent_GetDisplay(t *testing.T) {
-	a := Ms.NewAccent(1, "craquemattic")
-
-	t.Run("Returns the correct display value", func(t *testing.T) {
-		// Without any data added, this should return 60 zeroes
-		got := a.GetDisplay()
-		want := []rune{
-			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	t.Run("Returns Iamb", func(t *testing.T) {
+		ictusSeq := &Ms.IctusSequence{
+			Metric: "CPU1",
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now(), IsAccent: false, Value: 45},
+				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
+				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
+				{Timestamp: time.Now().Add(15 * time.Second), IsAccent: true, Value: 90},
+			},
 		}
 
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetDisplay returned incorrect value, got: %q, want: %q", got, want)
+		pulseEvent := ictusSeq.DetectPulsesWithConfig(config)
+
+		for _, pulse := range pulseEvent {
+			fmt.Printf("pulse in test: %v\n", pulse)
+			fmt.Println(pulse.Pattern)
+			if pulse.Pattern != Ms.Iamb {
+				t.Errorf("Expected Iamb to be %v, got: %v", Ms.Iamb, pulse.Pattern)
+			}
+		}
+	})
+
+	t.Run("Returns Trochee", func(t *testing.T) {
+		ictusSeq := &Ms.IctusSequence{
+			Metric: "CPU1",
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now(), IsAccent: true, Value: 85},
+				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: false, Value: 45},
+				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: true, Value: 90},
+				{Timestamp: time.Now().Add(15 * time.Second), IsAccent: false, Value: 50},
+			},
+		}
+
+		pulseEvent := ictusSeq.DetectPulsesWithConfig(config)
+
+		for _, pulse := range pulseEvent {
+			fmt.Printf("pulse in test: %v\n", pulse)
+			fmt.Println(pulse.Pattern)
+			if pulse.Pattern != Ms.Trochee {
+				t.Errorf("Expected Iamb to be %v, got: %v", Ms.Trochee, pulse.Pattern)
+			}
 		}
 	})
 }
-*/
 
 func TestIctusSequence_DetectPulses(t *testing.T) {
 	qn := makeQNet(2)

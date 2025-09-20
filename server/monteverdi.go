@@ -1,6 +1,7 @@
 package monteverdi
 
 import (
+	"fmt"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -228,7 +229,8 @@ func (ep *Endpoint) RecordIctus(m string, isAccent bool, d int64) {
 }
 
 // GetPulseVizData takes a metric name and returns its viz point data
-func (ep *Endpoint) GetPulseVizData(m string) []PulseVizPoint {
+// Second argument is used to filter the results on a specific PulsePattern
+func (ep *Endpoint) GetPulseVizData(m string, fp *PulsePattern) []PulseVizPoint {
 	ep.MU.RLock()
 	defer ep.MU.RUnlock()
 
@@ -244,34 +246,50 @@ func (ep *Endpoint) GetPulseVizData(m string) []PulseVizPoint {
 	pointMap := make(map[int]PulseVizPoint)
 	now := time.Now()
 
+	// Track processed pulses to avoid duplicates
+	seenPulses := make(map[string]bool)
+
+	// Helper to create unique pulse key
+	createPulseKey := func(pulse PulseEvent) string {
+		return fmt.Sprintf("%v_%d_%v", pulse.StartTime.UnixNano(), pulse.Pattern, pulse.Duration.Nanoseconds())
+	}
+
 	// Process pulses held in the buffer
 	for _, pulse := range ep.Pulses.Buffer {
+		// Apply pattern filter
+		if fp != nil && pulse.Pattern != *fp {
+			continue
+		}
+
 		if len(pulse.Metric) == 0 || contains(pulse.Metric, m) {
-			pulsePoints := ep.PulseToPoints(pulse, now)
-			for _, point := range pulsePoints {
-				if existing, exists := pointMap[point.Position]; !exists {
-					// Only keep the point if position is empty
+			key := createPulseKey(pulse)
+			if !seenPulses[key] {
+				seenPulses[key] = true
+				pulsePoints := ep.PulseToPoints(pulse, now)
+				for _, point := range pulsePoints {
 					pointMap[point.Position] = point
-				} else {
-					// Implement priority (e.g., prefer certain, or use priority logic patterns)
-					pointMap[point.Position] = ChooseBetterPoint(existing, point)
 				}
 			}
 		}
 	}
 
-	// Same logic for completed groups...
+	// Process pulses from completed groups
 	limiter := now.Add(-60 * time.Second)
 	for _, group := range ep.Pulses.Groups {
 		if group.StartTime.After(limiter) && len(group.OGEvents) > 0 {
 			for _, pulse := range group.OGEvents {
+				// Apply pattern filter
+				if fp != nil && pulse.Pattern != *fp {
+					continue
+				}
+
 				if len(pulse.Metric) == 0 || contains(pulse.Metric, m) {
-					pulsePoints := ep.PulseToPoints(pulse, now)
-					for _, point := range pulsePoints {
-						if existing, exists := pointMap[point.Position]; !exists {
+					key := createPulseKey(pulse)
+					if !seenPulses[key] {
+						seenPulses[key] = true
+						pulsePoints := ep.PulseToPoints(pulse, now)
+						for _, point := range pulsePoints {
 							pointMap[point.Position] = point
-						} else {
-							pointMap[point.Position] = ChooseBetterPoint(existing, point)
 						}
 					}
 				}
@@ -286,16 +304,6 @@ func (ep *Endpoint) GetPulseVizData(m string) []PulseVizPoint {
 	}
 
 	return points
-}
-
-// ChooseBetterPoint gives priority to one type of pattern,
-// here configured with Trochee: accent → non-accent
-func ChooseBetterPoint(existing, new PulseVizPoint) PulseVizPoint {
-	// Prioritize Trochee: accent → non-accent
-	if new.Pattern == Trochee && existing.Pattern != Trochee {
-		return new
-	}
-	return existing
 }
 
 func contains(slice []string, item string) bool {
@@ -315,6 +323,9 @@ func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoi
 	startPos := 59 - secAgo
 	durWidth := int(pulse.Duration.Seconds())
 
+	// Track if pulse extends beyond visible range
+	extends := startPos < 0
+
 	// Clamp to visible range
 	if startPos < 0 {
 		startPos = 0
@@ -329,10 +340,12 @@ func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoi
 		isAccent := ep.CalcAccentStateForPos(pulse, pos, startPos, endPos)
 
 		points = append(points, PulseVizPoint{
-			Position: pos,
-			Pattern:  pulse.Pattern,
-			IsAccent: isAccent,
-			Duration: pulse.Duration,
+			Position:  pos,
+			Pattern:   pulse.Pattern,
+			IsAccent:  isAccent,
+			Duration:  pulse.Duration,
+			StartTime: pulse.StartTime,
+			Extends:   extends && pos == 0, // Only mark leftmost visible
 		})
 	}
 
@@ -349,12 +362,6 @@ func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPo
 		// accent → non-accent: first half true, second half false
 		midPoint := startPos + ((endPos - startPos) / 2)
 		return pos < midPoint
-	case Amphibrach:
-		// non-accent → accent → non-accent: thirds
-		span := endPos - startPos
-		firstThird := startPos + (span / 3)
-		secondThird := startPos + (2 * span / 3)
-		return pos >= firstThird && pos < secondThird
 	}
 	return false
 }
@@ -433,10 +440,15 @@ func (q *QNet) PulseDetect(m string, i int) {
 			}
 		}
 
+		// Tuning period ratios is important for pulse detection
+		config := NewPulseConfig(0.5, 0.5, 0.5, 0.5)
+
 		// Detect new pulses and add to the temporal grouper
-		pulses := ictusSeq.DetectPulses()
+		pulses := ictusSeq.DetectPulsesWithConfig(*config)
 		for _, pulse := range pulses {
+			// Add the pulse itself
 			q.Network[i].Pulses.AddPulse(pulse)
+
 			slog.Debug("ADD PULSE", slog.Any("pattern", pulse.Pattern), slog.String("metric", m), slog.String("duration", pulse.Duration.String()))
 		}
 	}

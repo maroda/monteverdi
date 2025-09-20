@@ -440,7 +440,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 	now := time.Now()
 
 	t.Run("Returns empty data when no pulses exist", func(t *testing.T) {
-		got := qn.Network[0].GetPulseVizData(testMetric)
+		got := qn.Network[0].GetPulseVizData(testMetric, nil)
 		var want []Ms.PulseVizPoint
 		want = []Ms.PulseVizPoint{}
 		if !reflect.DeepEqual(got, want) {
@@ -468,13 +468,97 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 		qn.Network[0].Pulses.Buffer = append(qn.Network[0].Pulses.Buffer, pulse1, pulse2)
 
-		got := qn.Network[0].GetPulseVizData(testMetric)
+		got := qn.Network[0].GetPulseVizData(testMetric, nil)
 		want := Ms.Iamb
 
 		// Should only return points for the requested metric
 		for _, point := range got {
 			if point.Pattern != want {
 				t.Errorf("Incorrect pattern for point, got: %q, want: %q", point.Pattern, want)
+			}
+		}
+	})
+
+	t.Run("Filters by pattern", func(t *testing.T) {
+		// Setup endpoint with mixed pulse patterns
+		ep := makeEndpoint("TEST", "http://test")
+		ep.Pulses = &Ms.TemporalGrouper{
+			Buffer: []Ms.PulseEvent{
+				{Pattern: Ms.Iamb, StartTime: time.Now().Add(-10 * time.Second), Duration: 5 * time.Second, Metric: []string{testMetric}},
+				{Pattern: Ms.Trochee, StartTime: time.Now().Add(-5 * time.Second), Duration: 3 * time.Second, Metric: []string{testMetric}},
+			},
+			Groups: []*Ms.PulseTree{
+				{OGEvents: []Ms.PulseEvent{
+					{Pattern: Ms.Iamb, StartTime: time.Now().Add(-20 * time.Second), Duration: 4 * time.Second, Metric: []string{testMetric}},
+				}},
+			},
+		}
+
+		patterns := []Ms.PulsePattern{Ms.Iamb, Ms.Trochee}
+		for _, pattern := range patterns {
+			points := ep.GetPulseVizData(testMetric, &pattern)
+			for _, point := range points {
+				if point.Pattern != pattern {
+					t.Errorf("Expected only %q, got %q", pattern, point.Pattern)
+				}
+			}
+		}
+
+		// Use nil directly for no filter
+		// This should get both pattern types
+		points := ep.GetPulseVizData(testMetric, nil)
+		hasIamb := false
+		hasTrochee := false
+		for _, point := range points {
+			if point.Pattern == Ms.Iamb {
+				hasIamb = true
+			}
+			if point.Pattern == Ms.Trochee {
+				hasTrochee = true
+			}
+		}
+
+		if !hasIamb {
+			t.Error("Expected to find Iamb patterns when no filter applied")
+		}
+		if !hasTrochee {
+			t.Error("Expected to find Trochee patterns when no filter applied")
+		}
+	})
+
+	t.Run("Filters completed groups by pattern", func(t *testing.T) {
+		ep := makeEndpoint("TEST", "http://test")
+
+		// Setup completed groups with different patterns (no buffer pulses)
+		ep.Pulses = &Ms.TemporalGrouper{
+			Buffer: []Ms.PulseEvent{}, // Empty buffer to isolate groups testing
+			Groups: []*Ms.PulseTree{
+				{
+					StartTime: time.Now().Add(-30 * time.Second),
+					OGEvents: []Ms.PulseEvent{
+						{Pattern: Ms.Iamb, StartTime: time.Now().Add(-25 * time.Second), Duration: 4 * time.Second, Metric: []string{"CPU1"}},
+						{Pattern: Ms.Trochee, StartTime: time.Now().Add(-20 * time.Second), Duration: 3 * time.Second, Metric: []string{"CPU1"}},
+					},
+				},
+				{
+					StartTime: time.Now().Add(-15 * time.Second),
+					OGEvents: []Ms.PulseEvent{
+						{Pattern: Ms.Iamb, StartTime: time.Now().Add(-12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+					},
+				},
+			},
+		}
+
+		patterns := []Ms.PulsePattern{Ms.Iamb, Ms.Trochee}
+		for _, pattern := range patterns {
+			points := ep.GetPulseVizData(testMetric, &pattern)
+			for _, point := range points {
+				if point.Pattern != pattern {
+					t.Errorf("Expected only %q from completed groups, got %d", pattern, point.Pattern)
+				}
+			}
+			if len(points) == 0 {
+				t.Errorf("Expected to find %q in completed groups", pattern)
 			}
 		}
 	})
@@ -490,7 +574,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 		qn.Network[0].Pulses.Buffer = append(qn.Network[0].Pulses.Buffer, testPulse)
 
-		got := qn.Network[0].GetPulseVizData(testMetric)
+		got := qn.Network[0].GetPulseVizData(testMetric, nil)
 
 		// Should have points for the 10-second duration
 		if len(got) > 0 {
@@ -524,7 +608,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 			Pulses: nil,
 		}
 
-		got := ep.GetPulseVizData(testMetric)
+		got := ep.GetPulseVizData(testMetric, nil)
 		if len(got) != 0 {
 			t.Errorf("Pulses data should be zero")
 		}
@@ -554,7 +638,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		}
 		ep.Pulses.Groups = append(ep.Pulses.Groups, group)
 
-		got := ep.GetPulseVizData(testMetric)
+		got := ep.GetPulseVizData(testMetric, nil)
 		if len(got) > 0 {
 		} else {
 			t.Errorf("Expected pulses data")
@@ -578,7 +662,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		}
 		ep.Pulses.Groups = append(ep.Pulses.Groups, oldGroup)
 
-		result := ep.GetPulseVizData(testMetric)
+		result := ep.GetPulseVizData(testMetric, nil)
 		if len(result) != 0 {
 			t.Errorf("Pulses data should be zero")
 		}
@@ -599,28 +683,6 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		after := ep.CalcAccentStateForPos(pulse, midPoint, startPos, endPos)
 		if after {
 			t.Errorf("Expected NO Accent, got %v", after)
-		}
-	})
-
-	t.Run("Amphibrach thirds calculation", func(t *testing.T) {
-		ep := &Ms.Endpoint{}
-		pulse := Ms.PulseEvent{Pattern: Ms.Amphibrach}
-		startPos, endPos := 12, 24 // 12-character span
-
-		// First third (12-15): non-accent
-		first3 := ep.CalcAccentStateForPos(pulse, 14, startPos, endPos)
-		if first3 {
-			t.Errorf("First 3rd should be Non-Accented, got %v", first3)
-		}
-		// Second third (16-19): accent
-		second3 := ep.CalcAccentStateForPos(pulse, 18, startPos, endPos)
-		if !second3 {
-			t.Errorf("Second 3rd should be ACCENTED, got %v", second3)
-		}
-		// Final third (20-23): non-accent
-		third3 := ep.CalcAccentStateForPos(pulse, 22, startPos, endPos)
-		if third3 {
-			t.Errorf("Third 3rd should be Non-Accented, got %v", third3)
 		}
 	})
 
@@ -735,107 +797,143 @@ func TestConfigWithInvalidURL(t *testing.T) {
 	fmt.Println(config)
 }
 
-func TestChooseBetterPoint(t *testing.T) {
-	t.Run("Returns new point when new is Trochee and existing is not", func(t *testing.T) {
-		existing := Ms.PulseVizPoint{Pattern: Ms.Iamb}
-		new := Ms.PulseVizPoint{Pattern: Ms.Trochee}
+// trying to cover...
 
-		result := Ms.ChooseBetterPoint(existing, new)
+func TestPulseDetect_AddPulseCoverage(t *testing.T) {
+	qn := makeQNet(1)
+	testMetric := "CPU1"
 
-		if result.Pattern != Ms.Trochee {
-			t.Errorf("Expected %v, got %v", Ms.Trochee, result.Pattern)
-		}
-		reflect.DeepEqual(new, result)
-	})
+	// Create a sequence that should generate pulses
+	qn.Network[0].Sequence[testMetric] = &Ms.IctusSequence{
+		Metric: testMetric,
+		Events: []Ms.Ictus{
+			{Timestamp: time.Now().Add(-10 * time.Second), IsAccent: false, Value: 5},
+			{Timestamp: time.Now().Add(-7 * time.Second), IsAccent: true, Value: 15},
+			{Timestamp: time.Now().Add(-3 * time.Second), IsAccent: false, Value: 8},
+		},
+	}
 
-	t.Run("Returns existing point when existing is Trochee and new is not", func(t *testing.T) {
-		existing := Ms.PulseVizPoint{Pattern: Ms.Trochee}
-		new := Ms.PulseVizPoint{Pattern: Ms.Iamb}
-
-		result := Ms.ChooseBetterPoint(existing, new)
-
-		if result.Pattern != Ms.Trochee {
-			t.Errorf("Expected %v, got %v", Ms.Trochee, result.Pattern)
-		}
-		reflect.DeepEqual(existing, result)
-	})
-
-	t.Run("Returns existing when both are Trochee", func(t *testing.T) {
-		existing := Ms.PulseVizPoint{Pattern: Ms.Trochee}
-		new := Ms.PulseVizPoint{Pattern: Ms.Trochee}
-
-		result := Ms.ChooseBetterPoint(existing, new)
-
-		reflect.DeepEqual(existing, result)
-	})
-
-	t.Run("Returns existing when neither is Trochee", func(t *testing.T) {
-		existing := Ms.PulseVizPoint{Pattern: Ms.Iamb}
-		new := Ms.PulseVizPoint{Pattern: Ms.Amphibrach}
-
-		result := Ms.ChooseBetterPoint(existing, new)
-
-		reflect.DeepEqual(existing, result)
-	})
-
-	t.Run("Provides priority when overlapping", func(t *testing.T) {
-		ep := &Ms.Endpoint{
-			MU: sync.RWMutex{},
-			Pulses: &Ms.TemporalGrouper{
-				WindowSize: 60 * time.Second,
-				Buffer:     []Ms.PulseEvent{},
-				Groups:     []*Ms.PulseTree{},
+	t.Run("PulseDetect adds pulses to temporal grouper", func(t *testing.T) {
+		// Make sure we have a fresh sequence that will generate pulses
+		qn.Network[0].Sequence[testMetric] = &Ms.IctusSequence{
+			Metric: testMetric,
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now().Add(-15 * time.Second), IsAccent: false, Value: 5},
+				{Timestamp: time.Now().Add(-10 * time.Second), IsAccent: true, Value: 15},
+				{Timestamp: time.Now().Add(-5 * time.Second), IsAccent: false, Value: 8},
+				{Timestamp: time.Now(), IsAccent: true, Value: 12},
 			},
 		}
 
-		now := time.Now()
-		testMetric := "CPU1"
+		initialBufferSize := len(qn.Network[0].Pulses.Buffer)
 
-		// Create two pulses that will overlap at the same timeline position
-		pulse1 := Ms.PulseEvent{
+		// This should trigger pulse detection and addition
+		qn.PulseDetect(testMetric, 0)
+
+		finalBufferSize := len(qn.Network[0].Pulses.Buffer)
+
+		if finalBufferSize <= initialBufferSize {
+			t.Errorf("Expected pulses to be added to buffer via PulseDetect. Initial: %d, Final: %d",
+				initialBufferSize, finalBufferSize)
+		}
+	})
+
+	t.Run("Debug boundary calculations", func(t *testing.T) {
+		seq := qn.Network[0].Sequence[testMetric]
+
+		// Print the raw events
+		for i, event := range seq.Events {
+			t.Logf("Event %d: IsAccent=%v, Time=%v", i, event.IsAccent, event.Timestamp.Format("15:04:05"))
+		}
+
+		// Check what your config is
+		config := Ms.NewPulseConfig(0.0, 1.0, 0.0, 1.0)
+		t.Logf("Config: IambStart=%.1f, IambEnd=%.1f, TrocheeStart=%.1f, TrocheeEnd=%.1f",
+			config.IambStartPeriod, config.IambEndPeriod, config.TrocheeStartPeriod, config.TrocheeEndPeriod)
+	})
+
+	t.Run("Test with middle-to-middle config", func(t *testing.T) {
+		seq := qn.Network[0].Sequence[testMetric]
+		ictusSeq := &Ms.IctusSequence{
+			Metric: testMetric,
+			Events: make([]Ms.Ictus, len(seq.Events)),
+		}
+
+		for j, e := range seq.Events {
+			ictusSeq.Events[j] = Ms.Ictus{
+				Timestamp: e.Timestamp,
+				IsAccent:  e.IsAccent,
+				Value:     e.Value,
+				Duration:  e.Duration,
+			}
+		}
+
+		// Try middle-to-middle instead of 0.0,1.0,0.0,1.0
+		config := Ms.NewPulseConfig(0.5, 0.5, 0.5, 0.5)
+		pulses := ictusSeq.DetectPulsesWithConfig(*config)
+
+		t.Logf("Middle-to-middle config returned %d pulses", len(pulses))
+	})
+
+	t.Run("Direct pulse addition to buffer", func(t *testing.T) {
+		initialBufferSize := len(qn.Network[0].Pulses.Buffer)
+
+		// Create a pulse directly and add it
+		testPulse := Ms.PulseEvent{
 			Pattern:   Ms.Iamb,
-			StartTime: now.Add(-30 * time.Second), // 30 seconds ago
+			StartTime: time.Now().Add(-10 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
 		}
 
-		pulse2 := Ms.PulseEvent{
-			Pattern:   Ms.Trochee,                 // Should be chosen by ChooseBetterPoint
-			StartTime: now.Add(-28 * time.Second), // 28 seconds ago, overlaps with pulse1
-			Duration:  3 * time.Second,
-			Metric:    []string{testMetric},
+		qn.Network[0].Pulses.AddPulse(testPulse)
+
+		finalBufferSize := len(qn.Network[0].Pulses.Buffer)
+
+		if finalBufferSize <= initialBufferSize {
+			t.Errorf("Expected pulse to be added to buffer. Initial: %d, Final: %d",
+				initialBufferSize, finalBufferSize)
+		}
+	})
+
+	t.Run("No pulses added with insufficient events", func(t *testing.T) {
+		// Create sequence with only 1 event (insufficient for pulse detection)
+		qn.Network[0].Sequence["CPU2"] = &Ms.IctusSequence{
+			Metric: "CPU2",
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now(), IsAccent: true, Value: 10},
+			},
 		}
 
-		// Add pulses to a completed group
-		group := &Ms.PulseTree{
-			StartTime: now.Add(-35 * time.Second), // Within the 60-second window
-			OGEvents:  []Ms.PulseEvent{pulse1, pulse2},
+		initialBufferSize := len(qn.Network[0].Pulses.Buffer)
+		qn.PulseDetect("CPU2", 0)
+		finalBufferSize := len(qn.Network[0].Pulses.Buffer)
+
+		if finalBufferSize != initialBufferSize {
+			t.Errorf("Expected no pulses added with insufficient events. Buffer size changed from %d to %d",
+				initialBufferSize, finalBufferSize)
 		}
-		ep.Pulses.Groups = append(ep.Pulses.Groups, group)
+	})
 
-		result := ep.GetPulseVizData(testMetric)
-
-		// Verify that overlapping positions chose Trochee (better pattern)
-		foundTrochee := false
-		foundIamb := false
-
-		for _, point := range result {
-			if point.Pattern == Ms.Trochee {
-				foundTrochee = true
-			}
-			if point.Pattern == Ms.Iamb {
-				foundIamb = true
-			}
-		}
-
-		// Should have found Trochee patterns due to ChooseBetterPoint prioritization
-		if !foundTrochee {
-			t.Errorf("Expected to find Trochee patterns from ChooseBetterPoint")
+	t.Run("Empty pulse detection result", func(t *testing.T) {
+		// Create sequence that won't generate pulses (no state transitions)
+		qn.Network[0].Sequence["CPU3"] = &Ms.IctusSequence{
+			Metric: "CPU3",
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now().Add(-10 * time.Second), IsAccent: true, Value: 15},
+				{Timestamp: time.Now().Add(-5 * time.Second), IsAccent: true, Value: 16},
+				{Timestamp: time.Now(), IsAccent: true, Value: 17},
+			},
 		}
 
-		// Positions that don't overlap should still have Iamb
-		if !foundIamb {
-			t.Errorf("Expected to find Iamb patterns in non-overlapping positions")
+		initialBufferSize := len(qn.Network[0].Pulses.Buffer)
+		qn.PulseDetect("CPU3", 0)
+		finalBufferSize := len(qn.Network[0].Pulses.Buffer)
+
+		// Should not add any pulses since there are no state transitions
+		if finalBufferSize != initialBufferSize {
+			t.Errorf("Expected no pulses added when no state transitions. Buffer size changed from %d to %d",
+				initialBufferSize, finalBufferSize)
 		}
 	})
 }
