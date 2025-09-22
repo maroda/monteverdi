@@ -205,29 +205,15 @@ func TestConcurrentAccentDetection(t *testing.T) {
 				} else {
 					qn.Network[0].Mdata[k] = 6 // Below threshold
 				}
-				qn.Network[0].MU.Unlock()
 
 				qn.FindAccent(k, 0)
+				qn.Network[0].MU.Unlock()
 			}
 		}(i)
 	}
 
 	wg.Wait()
 	// If we get here without panic, concurrent access is safe.
-
-	// Alternate simulation
-	/*
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for j := 0; j < 100; j++ {
-					qn.FindAccent(k, 0)
-				}
-			}()
-		}
-		wg.Wait()
-	*/
 }
 
 func TestQNet_PollMulti(t *testing.T) {

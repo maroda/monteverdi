@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/gorilla/mux"
 	Mo "github.com/maroda/monteverdi/obvy"
 	Ms "github.com/maroda/monteverdi/server"
 )
@@ -31,7 +30,7 @@ type ScreenViewer interface {
 
 // View is updated by whatever is in the QNet
 type View struct {
-	mu          sync.Mutex
+	mu          sync.Mutex        // State locks to read data
 	QNet        *Ms.QNet          // Quality Network
 	screen      tcell.Screen      // the screen itself
 	display     []string          // rune display sequence
@@ -135,7 +134,7 @@ func (v *View) renderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
 
 func (v *View) drawPulseView() {
 	// Clear or dim the background first
-	// v.drawPulseBackground()
+	v.drawPulseBackground()
 
 	// Show current filter mode
 	filterText := "All Patterns"
@@ -323,17 +322,26 @@ func (v *View) drawHarmonyViewMulti() {
 	// Draw basic elements
 	v.drawViewBorder(width, height)
 
+	// Obtain a lock and grab needed display data
+	v.mu.Lock()
+	showEP := v.showEP
+	showMe := v.showMe
+	showPulse := v.showPulse
+	selectEP := v.selectEP
+	selectMe := v.selectMe
+	v.mu.Unlock()
+
 	// Support toggle to pulse view by wrapping in a boolean
-	if v.showPulse {
+	if showPulse {
 		v.drawPulseView()
 
 		// A MouseClick has happened on a graph
 		// - show the Endpoint ID at the bottom
 		// - show the metric name and value to the side
-		if v.showEP {
+		if showEP {
 			v.showEndpoint(40, 1)
 		}
-		if v.showMe {
+		if showMe {
 			v.showMetric(2, screenGutter, 0, 4)
 		}
 
@@ -369,11 +377,12 @@ func (v *View) drawHarmonyViewMulti() {
 			}
 
 			// A MouseClick has happened on a graph, show the metric name and value
-			if v.showMe {
+			// retrieve the data via lock
+			if showMe {
 				for ni := range v.QNet.Network {
-					if ni == v.selectEP {
+					if ni == selectEP {
 						for di, dm := range v.QNet.Network[ni].Metric {
-							if dm == v.selectMe {
+							if dm == selectMe {
 								yTS := v.calcTimeseriesY(ni, di, screenGutter)
 
 								mdata := v.QNet.Network[ni].Mdata[dm]
@@ -388,7 +397,7 @@ func (v *View) drawHarmonyViewMulti() {
 			}
 
 			// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
-			if v.showEP {
+			if showEP {
 				v.showEndpoint(40, 1)
 			}
 
@@ -407,20 +416,28 @@ func (v *View) drawHarmonyViewMulti() {
 // by = y offset from the bottom (was 2)
 func (v *View) showMetric(by, g, dx, lx int) {
 	width, height := screenWidth, screenHeight
-	for ni := range v.QNet.Network {
-		if ni == v.selectEP {
-			for di, dm := range v.QNet.Network[ni].Metric {
-				if dm == v.selectMe {
-					yTS := v.calcTimeseriesY(ni, di, g)
-					mdata := v.QNet.Network[ni].Mdata[dm]
-					data := fmt.Sprintf("%d", mdata)       // The raw data
-					label := fmt.Sprintf("... %s ...", dm) // The Metric
+	v.mu.Lock()
+	showMe := v.showMe
+	selectEP := v.selectEP
+	selectMe := v.selectMe
+	v.mu.Unlock()
 
-					// Turn off drawing raw metrics by using dx=0
-					if dx != 0 {
-						v.drawText(dx, yTS, width, yTS, data)
+	if showMe {
+		for ni := range v.QNet.Network {
+			if ni == selectEP {
+				for di, dm := range v.QNet.Network[ni].Metric {
+					if dm == selectMe {
+						yTS := v.calcTimeseriesY(ni, di, g)
+						mdata := v.QNet.Network[ni].Mdata[dm]
+						data := fmt.Sprintf("%d", mdata)       // The raw data
+						label := fmt.Sprintf("... %s ...", dm) // The Metric
+
+						// Turn off drawing raw metrics by using dx=0
+						if dx != 0 {
+							v.drawText(dx, yTS, width, yTS, data)
+						}
+						v.drawText(lx, height-by, width, height-by, label)
 					}
-					v.drawText(lx, height-by, width, height-by, label)
 				}
 			}
 		}
@@ -431,8 +448,15 @@ func (v *View) showMetric(by, g, dx, lx int) {
 // by = y offset from the bottom
 func (v *View) showEndpoint(x, by int) {
 	width, height := screenWidth, screenHeight
-	epName := v.QNet.Network[v.selectEP].ID
-	v.drawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
+	v.mu.Lock()
+	showEP := v.showEP
+	selectEP := v.selectEP
+	v.mu.Unlock()
+
+	if showEP {
+		epName := v.QNet.Network[selectEP].ID
+		v.drawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
+	}
 }
 
 // Exit cleanly
@@ -562,17 +586,6 @@ func (v *View) run() {
 		}
 		v.updateScreen()
 	}
-}
-
-func (v *View) setupMux() *mux.Router {
-	r := mux.NewRouter()
-
-	r.Handle("/metrics", v.stats.Handler())
-
-	api := r.PathPrefix("/api").Subrouter()
-	api.Use(v.statsMiddleware)
-
-	return r
 }
 
 type responseWriter struct {

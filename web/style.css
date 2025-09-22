@@ -1,0 +1,86 @@
+/* style.css - Styles for our D3.js circles */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+#container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+#chart {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fafafa;
+    display: block;
+    margin: 0 auto;
+}
+
+/* Time ring styles */
+.time-ring {
+    opacity: 0.7;
+}
+
+/* Center dot */
+.center-dot {
+    fill: #333;
+    stroke: none;
+}
+
+/* Pulse styles - smaller circles without borders */
+.pulse-iamb {
+    fill: #ff7f00;           /* Orange for iamb */
+    stroke: none;            /* No border */
+    opacity: 0.8;
+}
+
+.pulse-trochee {
+    fill: #2196f3;           /* Blue for trochee */
+    stroke: none;            /* No border */
+    opacity: 0.8;
+}
+
+/* Ring labels */
+.ring-label {
+    fill: #666;
+    font-size: 11px;
+    font-weight: normal;
+    pointer-events: none;
+}
+
+/* Keep the original orange circle styles for reference */
+.orange-circle {
+    fill: #ff7f00;
+    stroke: #e55100;
+    stroke-width: 2px;
+    cursor: pointer;
+    opacity: 1;
+    transition: all 0.2s ease;
+}
+
+.orange-circle:hover {
+    fill: #ff9800;
+    stroke: #d84315;
+    stroke-width: 3px;
+}
+
+.metric-label {
+    fill: #666;
+    font-size: 12px;
+    font-weight: normal;
+    pointer-events: none;
+}

@@ -6,19 +6,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-/*
-const (
-	id   = "craquemattic"
-	url  = "https://popg.xyz"
-	stat = "CPU"
-)
-
-var ep *Ms.Endpoint
-var eps []Ms.Endpoint
-*/
-
-// it's probably not right to have a func that creates a screen
-// Instead, the screen would be mocked as part of testing an interface
 func TestScreen(t *testing.T) {
 	s := mkTestScreen(t, "")
 	defer s.Fini()

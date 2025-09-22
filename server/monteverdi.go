@@ -376,9 +376,9 @@ func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPo
 func (q *QNet) FindAccent(m string, i int) *Accent {
 	// DEBUG ::: fmt.Printf("FindAccent: starting for metric %s, endpoint %d\n", m, i)
 
-	// Lock endpoint for writing
-	q.Network[i].MU.Lock()
-	defer q.Network[i].MU.Unlock()
+	// Lock endpoint for writing - not needed here now, the caller PollMulti() is locking
+	// q.Network[i].MU.Lock()
+	// defer q.Network[i].MU.Unlock()
 
 	// DEBUG ::: fmt.Printf("FindAccent: acquired lock\n")
 
@@ -494,10 +494,6 @@ func (q *QNet) PollMulti() error {
 					// we've found the key, now grab its metric from the poll
 					// convert the metric to int64 on assignment
 
-					// Add this debug output in your PollMulti method temporarily
-					// DEBUG ::: fmt.Printf("pollSource contents: %+v\n", pollSource)
-					// DEBUG ::: fmt.Printf("Looking for metric: %s\n", mv)
-
 					if floatVal, err := strconv.ParseFloat(v, 64); err != nil {
 						slog.Error("invalid syntax in metric", slog.Any("Error", err))
 						return err
@@ -505,28 +501,16 @@ func (q *QNet) PollMulti() error {
 						metric = int64(floatVal) // Convert float to int64
 					}
 
-					/*
-						metric, err = strconv.ParseInt(v, 10, 64)
-						if err != nil {
-							slog.Error("invalid syntax in metric", slog.Any("Error", err))
-							return err
-						}
-					*/
+					// Lock endpoint for the entire op
+					q.Network[ni].MU.Lock()
 
 					// Populate the map in the struct
 					q.Network[ni].Mdata[mv] = metric
 
-					// DEBUG ::: fmt.Printf("About to call FindAccent for metric: %s\n", mv)
-
 					// Find any Accents at the same time
 					q.FindAccent(mv, ni)
-					// DEBUG
-					// accent := q.FindAccent(mv, ni)
-					//if accent == nil {
-					//	slog.Debug("ACCENT EMPTY: NIL")
-					//}
 
-					// DEBUG ::: fmt.Printf("Successfully processed metric: %s\n", mv)
+					q.Network[ni].MU.Unlock()
 				}
 			}
 		}
