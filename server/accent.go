@@ -6,10 +6,10 @@ import (
 
 // The Accent is the building block of this tool.
 type Accent struct {
-	Timestamp int64       // Unix timestamp TODO: this should be time.Time
-	Intensity int         // raw, unweighted accent strength
-	SourceID  string      // identifies the source
-	DestLayer *Timeseries // identifies the output
+	Timestamp int64  // Unix timestamp TODO: this should be time.Time
+	Intensity int    // raw, unweighted accent strength
+	SourceID  string // identifies the source
+	// DestLayer *Timeseries // identifies the output
 }
 
 // Timeseries is a generic fixed TimeSeries DB
@@ -26,10 +26,12 @@ func NewAccent(i int, s string) *Accent {
 		Timestamp: time.Now().UnixNano(),
 		Intensity: i,
 		SourceID:  s,
-		DestLayer: &Timeseries{
-			Runes:   make([]rune, 60),
-			MaxSize: 60,
-		},
+		/*
+			DestLayer: &Timeseries{
+				Runes:   make([]rune, 60),
+				MaxSize: 60,
+			},
+		*/
 	}
 }
 
@@ -206,7 +208,7 @@ type PulseTree struct {
 }
 
 type PulseVizPoint struct {
-	Position  int          // 0-59 on the timeline
+	Position  int          // position on the timeline
 	Pattern   PulsePattern // Iamb or Trochee
 	IsAccent  bool         // Is an accent
 	Duration  time.Duration

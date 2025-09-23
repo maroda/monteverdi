@@ -2,10 +2,36 @@ package monteverdi_test
 
 import (
 	"os"
+	"strconv"
 	"testing"
 
 	Ms "github.com/maroda/monteverdi/server"
 )
+
+func TestFillEnvVarInt(t *testing.T) {
+
+	t.Run("returns the set default", func(t *testing.T) {
+		ev := "ANYTHING"
+		evDefault := 100
+		want := evDefault
+		got := Ms.FillEnvVarInt(ev, evDefault)
+
+		assertInt(t, got, want)
+	})
+
+	t.Run("returns a set value", func(t *testing.T) {
+		ev := "MEASUREMENT"
+		evDefault := 123123
+		want := evDefault
+
+		// Set an env var to check
+		err := os.Setenv(ev, strconv.Itoa(evDefault))
+		assertError(t, err, nil)
+
+		got := Ms.FillEnvVarInt(ev, evDefault)
+		assertInt(t, got, want)
+	})
+}
 
 func TestFillEnvVar(t *testing.T) {
 

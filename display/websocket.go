@@ -1,6 +1,7 @@
 package monteverdi
 
 import (
+	"log/slog"
 	"math"
 	"net/http"
 	"time"
@@ -64,11 +65,12 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 				recent := seq.DetectPulses()
 				for _, pulse := range recent {
 					d3pulse := PulseDataD3{
-						Ring:      calcRing(pulse.StartTime),  // Based on age
-						Angle:     calcAngle(pulse.StartTime), // Time-based position
-						Type:      pulsePatternToString(pulse.Pattern),
-						Intensity: calcIntensity(pulse.StartTime, endpoint),
-						Speed:     v.calcSpeedForPulse(pulse),
+						Ring:  CalcRing(pulse.StartTime),  // Based on age
+						Angle: CalcAngle(pulse.StartTime), // Time-based position
+						Type:  PulsePatternToString(pulse.Pattern),
+						// Intensity: CalcIntensity(pulse.StartTime, endpoint),
+						Intensity: CalcIntensity(endpoint),
+						Speed:     v.CalcSpeedForPulse(pulse),
 						Metric:    metric,
 					}
 					pulses = append(pulses, d3pulse)
@@ -81,7 +83,7 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 	return pulses
 }
 
-func pulsePatternToString(pattern Ms.PulsePattern) string {
+func PulsePatternToString(pattern Ms.PulsePattern) string {
 	switch pattern {
 	case Ms.Iamb:
 		return "iamb"
@@ -92,27 +94,46 @@ func pulsePatternToString(pattern Ms.PulsePattern) string {
 	}
 }
 
-func calcAngle(ps time.Time) float64 {
+func CalcAngle(ps time.Time) float64 {
 	now := time.Now()
 	age := now.Sub(ps)
+	ring := CalcRing(ps)
 
-	// Map age to angle, based on which ring it belongs
-	ring := calcRing(ps)
+	slog.Info("DEBUG", slog.Any("age", age), slog.Any("ring", ring))
+
+	/*
+		// Use total age for continuous rotation, regardless of ring
+		totalSec := age.Seconds()
+		var rotationPeriod float64
+
+		switch ring {
+		case 0:
+			rotationPeriod = 60.0 // 1 minute
+		case 1:
+			rotationPeriod = 600.0 // 10 minutes
+		case 2:
+			rotationPeriod = 3600.0 // 1 hour
+		default:
+			return 0
+		}
+
+	*/
 
 	var windowDur time.Duration
 	var angleInWindow float64
 
 	switch ring {
-	case 0: // Inner ring: 60s
-		windowDur = 60 * time.Second
-		// Recent pulses appear at "12 o'clock" (270°), older ones rotate clockwise
-		angleInWindow = age.Seconds() / windowDur.Seconds()
-	case 1: // Middle ring: 10m
-		windowDur = 10 * time.Minute
-		angleInWindow = age.Seconds() / windowDur.Seconds()
-	case 2: // Outer ring: 1h
-		windowDur = 1 * time.Hour
-		angleInWindow = age.Seconds() / windowDur.Seconds()
+	case 0:
+		// Inner ring: 60s
+		angleInWindow = age.Seconds() / 60.0
+	case 1:
+		// Middle ring: 10m
+		ageInRing := age.Seconds() - 60.0 // 60s subtracted from ring 0
+		angleInWindow = ageInRing / 540.0 // 9m remaining in ring 1
+	case 2:
+		// Outer ring: 1h
+		ageInRing := age.Seconds() - 600.0 // 600s subtracted from ring 1
+		angleInWindow = ageInRing / 3000.0 // 50m remaining in ring 2
 	default:
 		return 0
 	}
@@ -121,13 +142,25 @@ func calcAngle(ps time.Time) float64 {
 	// Start at 270° (12 o'clock) and rotate clockwise as age increases
 	angle := 270.0 + (angleInWindow * 360.0)
 
+	//angleInPeriod := math.Mod(totalSec, rotationPeriod) / rotationPeriod
+	// angle := 270.0 + (angleInPeriod * 360.0)
+
 	// Normalize to 0-360 range
-	return math.Mod(angle, 360.0)
+	result := math.Mod(angle, 360.0)
+
+	slog.Debug("DEBUG",
+		slog.Any("windowDur", windowDur),
+		slog.Any("angleInWindow", angleInWindow),
+		slog.Any("angle", angle),
+		slog.Any("result", result))
+
+	return result
 }
 
+// CalcIntensity returns an intensity float
 // ps = pulse start
 // NB: endpoint.MU is already RLocked by the caller (GetPulseDataD3)
-func calcIntensity(ps time.Time, ep *Ms.Endpoint) float64 {
+func CalcIntensity(ep *Ms.Endpoint) float64 {
 	for metric, accent := range ep.Accent {
 		if accent != nil {
 			baseIntensity := float64(accent.Intensity) / 10.0 // Normalize?
@@ -148,7 +181,7 @@ func calcIntensity(ps time.Time, ep *Ms.Endpoint) float64 {
 	return 0.5
 }
 
-func calcRing(ps time.Time) int {
+func CalcRing(ps time.Time) int {
 	now := time.Now()
 	age := now.Sub(ps)
 
@@ -172,12 +205,12 @@ type SpeedConfig struct {
 	GlobalBase float64 // Configurable global multiplier
 }
 
-// Base speeds for each ring (degrees per 50ms update)
+// CalcSpeed has the following Base speeds for each ring (degrees per 50ms update)
 // Inner ring completes full rotation in ~18 seconds (360° / 2°/frame * 50ms)
 // Middle ring completes full rotation in ~36 seconds
 // Outer ring completes full rotation in ~72 seconds
-func calcSpeed(ps time.Time, config SpeedConfig) float64 {
-	ring := calcRing(ps)
+func CalcSpeed(ps time.Time, config SpeedConfig) float64 {
+	ring := CalcRing(ps)
 
 	var baseSpeed float64
 	switch ring {
@@ -195,7 +228,7 @@ func calcSpeed(ps time.Time, config SpeedConfig) float64 {
 	return baseSpeed * config.GlobalBase
 }
 
-func (v *View) calcSpeedForPulse(pe Ms.PulseEvent) float64 {
+func (v *View) CalcSpeedForPulse(pe Ms.PulseEvent) float64 {
 	// Default configuration - completely configurable
 	config := SpeedConfig{
 		InnerBase:  2.0,
@@ -204,7 +237,7 @@ func (v *View) calcSpeedForPulse(pe Ms.PulseEvent) float64 {
 		GlobalBase: 1.0,
 	}
 
-	return calcSpeed(pe.StartTime, config)
+	return CalcSpeed(pe.StartTime, config)
 }
 
 // Mux handles both Prometheus metrics and WebSocket data delivery

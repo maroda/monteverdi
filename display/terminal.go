@@ -16,8 +16,6 @@ import (
 )
 
 const (
-	screenWidth  = 80
-	screenHeight = 20
 	screenGutter = 4
 )
 
@@ -53,13 +51,14 @@ func (v *View) calcTimeseriesY(endpointIndex, metricIndex, gutter int) int {
 ////////// PULSE VIS
 
 func (v *View) calcTimePos(pulseStartTime time.Time) int {
-	// Convert pulse timestamp to position on 60-character timeline
-	// Assuming timeline shows last 60 seconds, rightmost = most recent
+	width, _ := v.getScreenSize()
+	timelineW := width - 2 // room for border drawing
+
 	now := time.Now()
 	secondsAgo := int(now.Sub(pulseStartTime).Seconds())
 
-	// Timeline position (0-59, where 59 is most recent)
-	position := 59 - secondsAgo
+	// Timeline position (0 to timelineWidth-1, where timelineWidth-1 is most recent)
+	position := timelineW - 1 - secondsAgo
 	if position < 0 {
 		position = 0 // Pulse started before visible window
 	}
@@ -67,12 +66,15 @@ func (v *View) calcTimePos(pulseStartTime time.Time) int {
 }
 
 func (v *View) calcDurationWidth(duration time.Duration) int {
+	width, _ := v.getScreenSize()
+	maxW := width - 2 // room for border drawing
+
 	// Convert pulse duration to character width on timeline
 	durationSeconds := int(duration.Seconds())
 
 	// Cap at reasonable width to prevent overflow
-	if durationSeconds > 59 {
-		durationSeconds = 59
+	if durationSeconds > maxW {
+		durationSeconds = maxW
 	}
 	return durationSeconds
 }
@@ -133,6 +135,9 @@ func (v *View) renderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
 }
 
 func (v *View) drawPulseView() {
+	width, _ := v.getScreenSize()
+	timelineW := width - 2 // room for border drawing
+
 	// Clear or dim the background first
 	v.drawPulseBackground()
 
@@ -147,8 +152,8 @@ func (v *View) drawPulseView() {
 		}
 	}
 
-	v.drawText(1, 1, 70, 2, fmt.Sprintf("PULSE VIEW - %s (triple ictus analysis)", filterText))
-	v.drawText(1, 2, 70, 3, "i=Iamb | t=Trochee | x=All | ► stacked long pulses ◄ ")
+	v.drawText(1, 1, width-10, 2, fmt.Sprintf("PULSE VIEW - %s (triple ictus analysis)", filterText))
+	v.drawText(1, 2, width-10, 3, "i=Iamb | t=Trochee | x=All | ► stacked long pulses ◄ ")
 
 	// Draw pulse visualization for each endpoint/metric
 	for ni := range v.QNet.Network {
@@ -160,14 +165,13 @@ func (v *View) drawPulseView() {
 			v.renderPulseViz(1, yTS, timelineData)
 
 			// Track long pulse boundaries
-			var longPulseStart, longPulseEnd int = -1, -1
+			var longPulseStart, longPulseEnd = -1, -1
 			now := time.Now()
 
 			for _, point := range timelineData {
 				pulseAge := now.Sub(point.StartTime).Seconds()
 
-				// Find pulses that started before our 60-second window
-				if pulseAge > 60 {
+				if pulseAge > float64(timelineW) {
 					if longPulseStart == -1 || point.Position < longPulseStart {
 						longPulseStart = point.Position
 					}
@@ -195,7 +199,7 @@ func (v *View) drawPulseView() {
 }
 
 func (v *View) drawPulseBackground() {
-	width, height := 80, 20
+	width, height := v.getScreenSize()
 
 	// Dim the existing content
 	for y := 2; y < height-2; y++ {
@@ -317,36 +321,50 @@ func (v *View) drawBar(x1, y1, x2, y2 int) {
 // Includes a toggle for view mode
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := screenWidth, screenHeight
+	// width, height := 80, 20
+	width, height := v.getScreenSize()
+	slog.Info("Starting drawHarmonyViewMulti")
 
 	// Draw basic elements
+	slog.Info("About to draw a border...")
 	v.drawViewBorder(width, height)
+	slog.Info("border DONE")
 
 	// Obtain a lock and grab needed display data
+	slog.Info("About to lock v.mu")
 	v.mu.Lock()
+	slog.Info("v.mu lock retrieved")
+
 	showEP := v.showEP
 	showMe := v.showMe
 	showPulse := v.showPulse
 	selectEP := v.selectEP
 	selectMe := v.selectMe
+	slog.Info("About to unlock v.mu")
 	v.mu.Unlock()
+	slog.Info("v.mu unlocked")
 
 	// Support toggle to pulse view by wrapping in a boolean
+	slog.Info("About to check showPulse")
 	if showPulse {
+		slog.Info("Drawing pulse view")
 		v.drawPulseView()
 
 		// A MouseClick has happened on a graph
 		// - show the Endpoint ID at the bottom
 		// - show the metric name and value to the side
 		if showEP {
-			v.showEndpoint(40, 1)
+			// v.showEndpoint(40, 1)
+			v.showEndpointWithState(40, 1, showEP, selectEP)
 		}
 		if showMe {
-			v.showMetric(2, screenGutter, 0, 4)
+			// v.showMetric(2, screenGutter, 0, 4)
+			v.showMetricWithState(2, screenGutter, 0, 4, showMe, selectEP, selectMe)
 		}
 
 		v.drawText(1, height-1, width, height+10, "/p/ to exit | /ESC/ to quit")
 	} else {
+		slog.Info("Drawing normal view - about to iterate endpoints")
 		// step through all Network endpoints
 		for ni := range v.QNet.Network {
 			// read lock
@@ -398,7 +416,8 @@ func (v *View) drawHarmonyViewMulti() {
 
 			// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
 			if showEP {
-				v.showEndpoint(40, 1)
+				// v.showEndpoint(40, 1)
+				v.showEndpointWithState(40, 1, showEP, selectEP)
 			}
 
 			v.QNet.Network[ni].MU.RUnlock()
@@ -408,14 +427,18 @@ func (v *View) drawHarmonyViewMulti() {
 	}
 
 	v.drawText(width-12, height-1, width, height+10, "MONTEVERDI")
+
+	slog.Info("Finished drawHarmonyViewMulti")
 }
 
+// showMetric retrieves a state lock to read values
 // g = gutter, typically screenGutter
 // dx = start metric (was 62)
 // lx = start label (was 4)
 // by = y offset from the bottom (was 2)
+/*
 func (v *View) showMetric(by, g, dx, lx int) {
-	width, height := screenWidth, screenHeight
+	width, height := v.getScreenSize()
 	v.mu.Lock()
 	showMe := v.showMe
 	selectEP := v.selectEP
@@ -443,16 +466,57 @@ func (v *View) showMetric(by, g, dx, lx int) {
 		}
 	}
 }
+*/
 
+// showMetricWithState does not retrieve a state lock
+// and takes parameters for these values instead
+func (v *View) showMetricWithState(by, g, dx, lx int, showMe bool, selectEP int, selectMe string) {
+	width, height := v.getScreenSize()
+
+	if showMe {
+		for ni := range v.QNet.Network {
+			if ni == selectEP {
+				for di, dm := range v.QNet.Network[ni].Metric {
+					if dm == selectMe {
+						yTS := v.calcTimeseriesY(ni, di, g)
+						mdata := v.QNet.Network[ni].Mdata[dm]
+						data := fmt.Sprintf("%d", mdata)       // The raw data
+						label := fmt.Sprintf("... %s ...", dm) // The Metric
+
+						// Turn off drawing raw metrics by using dx=0
+						if dx != 0 {
+							v.drawText(dx, yTS, width, yTS, data)
+						}
+						v.drawText(lx, height-by, width, height-by, label)
+					}
+				}
+			}
+		}
+	}
+}
+
+// showEndpoint retrieves a state lock to read values
 // x = normal x
 // by = y offset from the bottom
+/*
 func (v *View) showEndpoint(x, by int) {
-	width, height := screenWidth, screenHeight
+	width, height := v.getScreenSize()
 	v.mu.Lock()
 	showEP := v.showEP
 	selectEP := v.selectEP
 	v.mu.Unlock()
 
+	if showEP {
+		epName := v.QNet.Network[selectEP].ID
+		v.drawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
+	}
+}
+*/
+
+// showEndpointWithState does not retrieve a state lock
+// and takes parameters for these values instead
+func (v *View) showEndpointWithState(x, by int, showEP bool, selectEP int) {
+	width, height := v.getScreenSize()
 	if showEP {
 		epName := v.QNet.Network[selectEP].ID
 		v.drawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
@@ -538,7 +602,8 @@ func (v *View) handleMouseClick(x, y int) {
 			// Check if click is on this timeseries line
 			// Timeseries spans x=1 to x=60
 			// Exit if a match is found
-			if y == yTS && x >= 1 && x <= 60 {
+			width, _ := v.getScreenSize()
+			if y == yTS && x >= 1 && x <= width-20 {
 				v.selectEP = ni
 				v.selectMe = dm
 				v.showEP = true
@@ -564,11 +629,22 @@ func (v *View) PollQNetAll() error {
 	return err
 }
 
+// Provide terminal size for drawing
+func (v *View) getScreenSize() (int, int) {
+	width, height := v.screen.Size()
+	return width, height
+}
+
 // Resize for terminal changes
 func (v *View) resizeScreen() {
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	v.screen.Sync()
+	v.updateScreen()
+}
+
+func (v *View) updateScreen() {
+	v.screen.Clear()
+	v.drawHarmonyViewMulti()
+	v.screen.Show()
 }
 
 // run runs a loop and updates periodically
@@ -616,13 +692,6 @@ func (v *View) statsMiddleware(next http.Handler) http.Handler {
 		// duration := time.Since(start).Seconds()
 		v.stats.RecWWW(strconv.Itoa(wrapped.status), r.Method)
 	})
-}
-
-func (v *View) updateScreen() {
-	v.screen.Clear()
-	// v.drawHarmonyView()
-	v.drawHarmonyViewMulti()
-	v.screen.Show()
 }
 
 // NewView creates the tcell screen that displays HarmonyView

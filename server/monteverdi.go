@@ -79,6 +79,7 @@ type Endpoints []*Endpoint
 // NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 	var endpoints Endpoints
+	tsdbWindow := FillEnvVarInt("MONTEVERDI_TUI_TSDB_VISUAL_WINDOW", 80)
 
 	// cf is a ConfigFile (JSON) of Endpoints
 	// in the format: ID, URL, MWithMax
@@ -96,11 +97,10 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		metsdb := make(map[string]*Timeseries)    // Timeseries tracking accents
 		ictseq := make(map[string]*IctusSequence) // Running change Sequence
 		pulses := &TemporalGrouper{
-			WindowSize: 60 * time.Second,
+			WindowSize: time.Duration(tsdbWindow) * time.Second,
 			Buffer:     make([]PulseEvent, 0),
 			Groups:     make([]*PulseTree, 0),
 		} // Group patterns in time
-		tsdbWindow := 60
 
 		// This locates the desired metrics from the on-disk config
 		j := 0
@@ -274,7 +274,8 @@ func (ep *Endpoint) GetPulseVizData(m string, fp *PulsePattern) []PulseVizPoint 
 	}
 
 	// Process pulses from completed groups
-	limiter := now.Add(-60 * time.Second)
+	tsdbWindow := FillEnvVarInt("MONTEVERDI_TUI_TSDB_VISUAL_WINDOW", 80)
+	limiter := now.Add(-time.Duration(tsdbWindow) * time.Second)
 	for _, group := range ep.Pulses.Groups {
 		if group.StartTime.After(limiter) && len(group.OGEvents) > 0 {
 			for _, pulse := range group.OGEvents {
@@ -318,9 +319,10 @@ func contains(slice []string, item string) bool {
 func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoint {
 	var points []PulseVizPoint
 
-	// Calculate timeline position (0-59, where 59 is most recent)
+	// Calculate timeline position
+	tsdbWindow := FillEnvVarInt("MONTEVERDI_TUI_TSDB_VISUAL_WINDOW", 80)
 	secAgo := int(now.Sub(pulse.StartTime).Seconds())
-	startPos := 59 - secAgo
+	startPos := (tsdbWindow - 1) - secAgo
 	durWidth := int(pulse.Duration.Seconds())
 
 	// Track if pulse extends beyond visible range
@@ -331,8 +333,8 @@ func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoi
 		startPos = 0
 	}
 	endPos := startPos + durWidth
-	if endPos >= 60 {
-		endPos = 59
+	if endPos >= tsdbWindow {
+		endPos = tsdbWindow - 1
 	}
 
 	// Generate points for each timeline position this pulse occupies

@@ -14,12 +14,10 @@ func TestNewAccent(t *testing.T) {
 		Timestamp time.Time
 		Intensity int
 		SourceID  string // identifies the output
-		DestLayer *Ms.Timeseries
 	}{
 		Timestamp: time.Now(),
 		Intensity: 1,
 		SourceID:  "sourceID",
-		DestLayer: &Ms.Timeseries{},
 	}
 
 	t.Run("Returns the correct number of fields", func(t *testing.T) {
