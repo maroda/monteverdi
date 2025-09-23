@@ -15,11 +15,20 @@ const (
 	webTimeout = 10 * time.Second
 )
 
-// SingleFetch returns the Response Code, raw byte stream body, and error
-func SingleFetch(url string) (int, []byte, error) {
-	client := &http.Client{Timeout: webTimeout}
+// Shared HTTP Client
+var httpClient = &http.Client{
+	Timeout: webTimeout,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 2,
+		IdleConnTimeout:     30 * time.Second,
+	},
+}
 
-	resp, err := client.Get(url)
+// SingleFetch returns the Response Code, raw byte stream body, and error
+// This uses a Shared HTTP Client to avoid stale connections that eat up OS FDs
+func SingleFetch(url string) (int, []byte, error) {
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		slog.Error("Fetch Error", slog.Any("Error", err))
 		return 0, nil, err

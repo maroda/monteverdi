@@ -48,13 +48,23 @@ func (v *View) websocketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (v *View) GetPulseDataD3() []PulseDataD3 {
-	var pulses []PulseDataD3
+	// Make sure we're not nil
+	if v.QNet == nil || v.QNet.Network == nil {
+		return []PulseDataD3{}
+	}
 
 	// Lock the QNet
 	v.QNet.MU.RLock()
 	defer v.QNet.MU.RUnlock()
 
+	var pulses []PulseDataD3
+
 	for _, endpoint := range v.QNet.Network {
+		// Check for nil endpoints first
+		if endpoint == nil {
+			continue
+		}
+
 		// Lock the Endpoint
 		endpoint.MU.RLock()
 
@@ -99,26 +109,6 @@ func CalcAngle(ps time.Time) float64 {
 	age := now.Sub(ps)
 	ring := CalcRing(ps)
 
-	slog.Info("DEBUG", slog.Any("age", age), slog.Any("ring", ring))
-
-	/*
-		// Use total age for continuous rotation, regardless of ring
-		totalSec := age.Seconds()
-		var rotationPeriod float64
-
-		switch ring {
-		case 0:
-			rotationPeriod = 60.0 // 1 minute
-		case 1:
-			rotationPeriod = 600.0 // 10 minutes
-		case 2:
-			rotationPeriod = 3600.0 // 1 hour
-		default:
-			return 0
-		}
-
-	*/
-
 	var windowDur time.Duration
 	var angleInWindow float64
 
@@ -141,9 +131,6 @@ func CalcAngle(ps time.Time) float64 {
 	// Convert to degrees (0-360)
 	// Start at 270° (12 o'clock) and rotate clockwise as age increases
 	angle := 270.0 + (angleInWindow * 360.0)
-
-	//angleInPeriod := math.Mod(totalSec, rotationPeriod) / rotationPeriod
-	// angle := 270.0 + (angleInPeriod * 360.0)
 
 	// Normalize to 0-360 range
 	result := math.Mod(angle, 360.0)

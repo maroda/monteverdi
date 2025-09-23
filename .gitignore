@@ -3,7 +3,9 @@
 
 # local files
 .env
+/monteverdi
 /monteverdi.log
+/monteverdi.err
 
 # ctags file
 tags
@@ -13,4 +15,3 @@ tags
 
 # goreleaser
 dist/
-/monteverdi

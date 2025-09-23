@@ -254,20 +254,30 @@ func (tg *TemporalGrouper) createGroup() *PulseTree {
 }
 
 func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
-	// Find the first pattern that is still inside the window
-	keepIndex := 0
+	// Find first pulse to KEEP (after limit)
+	keepIndex := len(tg.Buffer) // Default: remove all
 	for i, pulse := range tg.Buffer {
 		if pulse.StartTime.After(limit) {
 			keepIndex = i
 			break
 		}
-		keepIndex = len(tg.Buffer) // If no pulses are after limit, remove all
 	}
 
 	// Keep only pulses inside the window
 	if keepIndex < len(tg.Buffer) {
-		tg.Buffer = tg.Buffer[keepIndex:]
+		copy(tg.Buffer, tg.Buffer[keepIndex:])
+		tg.Buffer = tg.Buffer[:len(tg.Buffer)-keepIndex]
 	} else {
-		tg.Buffer = tg.Buffer[:0] // Clear the buffer
+		tg.Buffer = tg.Buffer[:0] // Clear all
 	}
+
+	// Clean groups
+	kept := 0
+	for _, group := range tg.Groups {
+		if group.StartTime.After(limit) {
+			tg.Groups[kept] = group
+			kept++
+		}
+	}
+	tg.Groups = tg.Groups[:kept]
 }

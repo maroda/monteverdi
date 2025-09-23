@@ -181,6 +181,7 @@ func TestCalcSpeed(t *testing.T) {
 func TestCalcIntensity(t *testing.T) {
 	now := time.Now()
 	ep := makeEndpoint(now.String(), "http://now")
+	//testMetric := "CPU1"
 
 	t.Run("Accent intensity is set", func(t *testing.T) {
 		got := Md.CalcIntensity(ep)
@@ -242,11 +243,6 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	}
 
 	nap := make(map[string]*Ms.Accent)
-	nap[c[1]] = &Ms.Accent{
-		Timestamp: time.Now().UnixNano(),
-		Intensity: 1,
-		SourceID:  c[1],
-	}
 
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{

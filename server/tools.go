@@ -21,9 +21,13 @@ func FillEnvVar(ev string) string {
 // For non-default and string ENV VARs, use FillEnvVar()
 func FillEnvVarInt(ev string, def int) int {
 	fetch := os.Getenv(ev)
+	if fetch == "" {
+		return def
+	}
+
 	value, err := strconv.Atoi(fetch)
 	if err != nil || value < 0 {
-		slog.Error("Invalid environment variable " + ev)
+		slog.Info("Invalid environment variable " + ev)
 		return def
 	}
 	return value

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -306,10 +308,8 @@ func (v *View) drawViewBorder(width, height int) {
 // x1 = starting X axis (from left), x2 = ending X axis (from left)
 // y1 = starting Y axis (from top), y2 = ending Y axis (from top)
 func (v *View) drawBar(x1, y1, x2, y2 int) {
-	// barStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
 	for row := y1; row < y2; row++ {
 		for col := x1; col < x2; col++ {
-			// color := tcell.NewRGBColor(int32(50+row), int32(50+col), int32(50+row))
 			color := tcell.NewRGBColor(int32(80+row), int32(80+col), int32(250+row))
 			barStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
 			v.screen.SetContent(col, row, '', nil, barStyle)
@@ -321,55 +321,42 @@ func (v *View) drawBar(x1, y1, x2, y2 int) {
 // Includes a toggle for view mode
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	// width, height := 80, 20
 	width, height := v.getScreenSize()
-	slog.Info("Starting drawHarmonyViewMulti")
 
-	// Draw basic elements
-	slog.Info("About to draw a border...")
-	v.drawViewBorder(width, height)
-	slog.Info("border DONE")
+	// Lock QNet first, then view state
+	v.QNet.MU.RLock()
+	defer v.QNet.MU.RUnlock()
 
 	// Obtain a lock and grab needed display data
-	slog.Info("About to lock v.mu")
 	v.mu.Lock()
-	slog.Info("v.mu lock retrieved")
-
 	showEP := v.showEP
 	showMe := v.showMe
 	showPulse := v.showPulse
 	selectEP := v.selectEP
 	selectMe := v.selectMe
-	slog.Info("About to unlock v.mu")
 	v.mu.Unlock()
-	slog.Info("v.mu unlocked")
+
+	// Draw basic elements
+	v.drawViewBorder(width, height)
 
 	// Support toggle to pulse view by wrapping in a boolean
-	slog.Info("About to check showPulse")
 	if showPulse {
-		slog.Info("Drawing pulse view")
 		v.drawPulseView()
 
 		// A MouseClick has happened on a graph
 		// - show the Endpoint ID at the bottom
 		// - show the metric name and value to the side
 		if showEP {
-			// v.showEndpoint(40, 1)
 			v.showEndpointWithState(40, 1, showEP, selectEP)
 		}
 		if showMe {
-			// v.showMetric(2, screenGutter, 0, 4)
 			v.showMetricWithState(2, screenGutter, 0, 4, showMe, selectEP, selectMe)
 		}
 
 		v.drawText(1, height-1, width, height+10, "/p/ to exit | /ESC/ to quit")
 	} else {
-		slog.Info("Drawing normal view - about to iterate endpoints")
 		// step through all Network endpoints
 		for ni := range v.QNet.Network {
-			// read lock
-			v.QNet.Network[ni].MU.RLock()
-
 			// step through metrics listed in View.display
 			for di, dm := range v.QNet.Network[ni].Metric {
 				// look up the key in this Network's Endpoint Metric data.
@@ -389,7 +376,6 @@ func (v *View) drawHarmonyViewMulti() {
 					s := newTime.Second()
 
 					// draw a rune across the top
-					// v.drawRune(s, di+1, int(ddm))
 					v.drawRune(s, 1, int(ddm))
 				}
 			}
@@ -416,57 +402,15 @@ func (v *View) drawHarmonyViewMulti() {
 
 			// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
 			if showEP {
-				// v.showEndpoint(40, 1)
 				v.showEndpointWithState(40, 1, showEP, selectEP)
 			}
-
-			v.QNet.Network[ni].MU.RUnlock()
 		}
 
 		v.drawText(1, height-1, width, height+10, "/p/ for pulses | /ESC/ to quit")
 	}
 
 	v.drawText(width-12, height-1, width, height+10, "MONTEVERDI")
-
-	slog.Info("Finished drawHarmonyViewMulti")
 }
-
-// showMetric retrieves a state lock to read values
-// g = gutter, typically screenGutter
-// dx = start metric (was 62)
-// lx = start label (was 4)
-// by = y offset from the bottom (was 2)
-/*
-func (v *View) showMetric(by, g, dx, lx int) {
-	width, height := v.getScreenSize()
-	v.mu.Lock()
-	showMe := v.showMe
-	selectEP := v.selectEP
-	selectMe := v.selectMe
-	v.mu.Unlock()
-
-	if showMe {
-		for ni := range v.QNet.Network {
-			if ni == selectEP {
-				for di, dm := range v.QNet.Network[ni].Metric {
-					if dm == selectMe {
-						yTS := v.calcTimeseriesY(ni, di, g)
-						mdata := v.QNet.Network[ni].Mdata[dm]
-						data := fmt.Sprintf("%d", mdata)       // The raw data
-						label := fmt.Sprintf("... %s ...", dm) // The Metric
-
-						// Turn off drawing raw metrics by using dx=0
-						if dx != 0 {
-							v.drawText(dx, yTS, width, yTS, data)
-						}
-						v.drawText(lx, height-by, width, height-by, label)
-					}
-				}
-			}
-		}
-	}
-}
-*/
 
 // showMetricWithState does not retrieve a state lock
 // and takes parameters for these values instead
@@ -494,24 +438,6 @@ func (v *View) showMetricWithState(by, g, dx, lx int, showMe bool, selectEP int,
 		}
 	}
 }
-
-// showEndpoint retrieves a state lock to read values
-// x = normal x
-// by = y offset from the bottom
-/*
-func (v *View) showEndpoint(x, by int) {
-	width, height := v.getScreenSize()
-	v.mu.Lock()
-	showEP := v.showEP
-	selectEP := v.selectEP
-	v.mu.Unlock()
-
-	if showEP {
-		epName := v.QNet.Network[selectEP].ID
-		v.drawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
-	}
-}
-*/
 
 // showEndpointWithState does not retrieve a state lock
 // and takes parameters for these values instead
@@ -548,11 +474,6 @@ func (v *View) handleKeyBoardEvent() {
 			if ev.Rune() == 'p' {
 				v.mu.Lock()
 				v.showPulse = !v.showPulse
-				/*
-					if !v.showPulse {
-						v.pulseFilter = nil // reset filter when exiting pulse view
-					}
-				*/
 				v.mu.Unlock()
 			}
 
@@ -586,6 +507,11 @@ func (v *View) handleKeyBoardEvent() {
 }
 
 func (v *View) handleMouseClick(x, y int) {
+	// Lock QNet to safely read Network endpoint data
+	v.QNet.MU.RLock()
+	defer v.QNet.MU.RUnlock()
+
+	// Lock display for updates
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -653,6 +579,68 @@ func (v *View) updateScreen() {
 // which is then read by drawHarmonyViewMulti
 // TODO: parameterize run loop time
 func (v *View) run() {
+	// Panic recovery and logging
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Panic in run loop", slog.Any("panic", r))
+			slog.Error("Recovered from panic", slog.String("stack", string(debug.Stack())))
+			debug.PrintStack()
+		}
+	}()
+
+	// Main application loop
+	slog.Info("Starting HarmonyView")
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	// Memory usage reporter
+	memTicker := time.NewTicker(5 * time.Second)
+	defer memTicker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Catch a timeout
+			if err := v.PollQNetAll(); err != nil {
+				slog.Error("Failed to PollQNetAll", slog.Any("Error", err))
+				return
+			}
+			v.updateScreen()
+		case <-memTicker.C:
+			v.logMemoryUsage()
+		}
+	}
+}
+
+func (v *View) logMemoryUsage() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	// Count data structure sizes
+	totalEvents := 0
+	totalPulses := 0
+
+	for _, ep := range v.QNet.Network {
+		for _, seq := range ep.Sequence {
+			if seq != nil {
+				totalEvents += len(seq.Events)
+			}
+		}
+		if ep.Pulses != nil {
+			totalPulses += len(ep.Pulses.Buffer)
+			totalPulses += len(ep.Pulses.Groups)
+		}
+	}
+
+	slog.Info("Memory Usage",
+		slog.Uint64("alloc_mb", m.Alloc/1024/1024),
+		slog.Uint64("heap_mb", m.HeapAlloc/1024/1024),
+		slog.Int("total_events", totalEvents),
+		slog.Int("total_pulses", totalPulses))
+}
+
+/*
+func (v *View) run() {
 	slog.Info("Starting HarmonyView")
 	for {
 		time.Sleep(1 * time.Second)
@@ -663,6 +651,7 @@ func (v *View) run() {
 		v.updateScreen()
 	}
 }
+*/
 
 type responseWriter struct {
 	http.ResponseWriter
@@ -743,7 +732,6 @@ func NewView(q *Ms.QNet) (*View, error) {
 // This also starts up the /metrics endpoint that is populated by prometheus.
 func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 	// with the new config c, we can make other stuff
-	// var eps *Ms.Endpoints
 	eps, err := Ms.NewEndpointsFromConfig(c)
 	if eps == nil || err != nil {
 		slog.Error("Failed to init endpoints", slog.Any("Error", err))
