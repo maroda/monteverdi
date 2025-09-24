@@ -182,71 +182,183 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 	})
 }
 
-func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
-	grouper := &Ms.TemporalGrouper{
-		WindowSize: 60 * time.Second,
-		Buffer:     make([]Ms.PulseEvent, 0),
-		Groups:     make([]*Ms.PulseTree, 0),
-	}
+func TestTemporalGrouper_RecursiveDetection(t *testing.T) {
+	now := time.Now()
+	testMetric := "CPU1"
 
-	// Don't need a fake QNet here, just a representation of an IctusSequence
-	ictusSeq := &Ms.IctusSequence{
-		Metric: "CPU1",
-		Events: []Ms.Ictus{
-			{Timestamp: time.Now(), IsAccent: false, Value: 45},
-			{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
-			{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
-			{Timestamp: time.Now().Add(15 * time.Second), IsAccent: true, Value: 90},
-		},
-	}
+	t.Run("Detects Amphibrach from Iamb→Trochee→Iamb sequence", func(t *testing.T) {
+		tg := &Ms.TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]Ms.PulseEvent, 0),
+			Groups:     make([]*Ms.PulseTree, 0),
+		}
 
-	// Collect the pulses from the ictus sequence
-	return ictusSeq.DetectPulses(), grouper
-}
+		// Create the sequence that should trigger Amphibrach
+		iamb1 := Ms.PulseEvent{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now,
+			Duration:  5 * time.Second,
+			Metric:    []string{testMetric},
+		}
 
-func TestTemporalGrouper_AddPulse(t *testing.T) {
-	pulses, grouper := makePulsesWithGrouper()
+		trochee := Ms.PulseEvent{
+			Dimension: 1,
+			Pattern:   Ms.Trochee,
+			StartTime: now.Add(6 * time.Second),
+			Duration:  4 * time.Second,
+			Metric:    []string{testMetric},
+		}
 
-	t.Run("Adds correct number of pulses to a group", func(t *testing.T) {
-		for _, pulse := range pulses {
-			grouper.AddPulse(pulse)
+		iamb2 := Ms.PulseEvent{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(11 * time.Second),
+			Duration:  3 * time.Second,
+			Metric:    []string{testMetric},
+		}
 
-			// Print which pattern was detected
-			switch pulse.Pattern {
-			case Ms.Iamb:
-				fmt.Printf("Detected Iamb at %v, duration: %v\n", pulse.StartTime, pulse.Duration)
-			case Ms.Trochee:
-				fmt.Printf("Detected Trochee at %v, duration: %v\n", pulse.StartTime, pulse.Duration)
+		// Add the D1 pulses
+		tg.AddPulse(iamb1)
+		tg.AddPulse(trochee)
+		tg.AddPulse(iamb2)
+
+		// Check that we have both D1 and D2 pulses in buffer
+		d1count := 0
+		d2count := 0
+		var amphibrachFound bool
+
+		for _, pulse := range tg.Buffer {
+			if pulse.Dimension == 1 {
+				d1count++
+			} else if pulse.Dimension == 2 {
+				d2count++
+				if pulse.Pattern == Ms.Amphibrach {
+					amphibrachFound = true
+				}
 			}
 		}
 
-		// First check that just one group was created
-		got := len(grouper.Groups)
-		want := 1
-		assertInt(t, got, want)
+		// Should have 3 D1 pulses + 1 D2 pulse
+		if d1count != 3 {
+			t.Errorf("Expected 3 D1 pulses, got: %v", d1count)
+		}
 
-		// Now check that there are three in the group
-		for i, group := range grouper.Groups {
-			count := len(group.Pulses)
-			if count != want*3 {
-				t.Errorf("Group %d: Expected %d pulses, got %d", i, want*3, count)
-			}
-			// fmt.Printf("Group %d: %d pulses over %v\n", i, len(group.Pulses), group.Duration)
+		if d2count != 1 {
+			t.Errorf("Expected 1 D2 pulse, got: %v", d2count)
+		}
+
+		if !amphibrachFound {
+			t.Errorf("Did not detect Amphibrach")
 		}
 	})
 
-	// Use the timing from the literal ictus sequence above
-	t.Run("Registers correct timing for pulses", func(t *testing.T) {
+	t.Run("Detects multiple Amphibrachs from extended Iamb→Trochee sequence", func(t *testing.T) {
+		tg := &Ms.TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]Ms.PulseEvent, 0),
+			Groups:     make([]*Ms.PulseTree, 0),
+		}
+
+		// Create a longer sequence: I-T-I-T-I-T-I
+		// This should create 3 Amphibrach patterns: (I-T-I), (T-I-T), (I-T-I)
+		pulses := []Ms.PulseEvent{
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(15 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(18 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+		}
+
+		// Add all the D1 pulses
 		for _, pulse := range pulses {
-			grouper.AddPulse(pulse)
-			expectedSec := int64(5)
-			actualSec := int64(pulse.Duration / time.Second)
-			if expectedSec != actualSec {
-				t.Errorf("Expected: %d, got: %d", expectedSec, actualSec)
+			tg.AddPulse(pulse)
+		}
+
+		// Count dimensions in buffer
+		d1Count := 0
+		d2Count := 0
+		amphibrachCount := 0
+
+		for _, pulse := range tg.Buffer {
+			if pulse.Dimension == 1 {
+				d1Count++
+			} else if pulse.Dimension == 2 {
+				d2Count++
+				if pulse.Pattern == Ms.Amphibrach {
+					amphibrachCount++
+				}
 			}
+		}
+
+		t.Logf("D1 pulses: %d, D2 pulses: %d, Amphibrachs: %d", d1Count, d2Count, amphibrachCount)
+
+		// Should have 7 D1 pulses + multiple D2 pulses
+		if d1Count != 7 {
+			t.Errorf("Expected 7 D1 pulses, got %d", d1Count)
+		}
+
+		if amphibrachCount < 3 {
+			t.Errorf("Expected at least 3 Amphibrach patterns, got %d", amphibrachCount)
+		}
+	})
+
+	t.Run("Creates separate groups for different dimensions", func(t *testing.T) {
+		tg := &Ms.TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]Ms.PulseEvent, 0),
+			Groups:     make([]*Ms.PulseTree, 0),
+		}
+
+		// Add enough pulses to create both D1 and D2 groups
+		pulses := []Ms.PulseEvent{
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+		}
+
+		for _, pulse := range pulses {
+			tg.AddPulse(pulse)
+		}
+
+		// Debug: Print what we actually have
+		t.Logf("Total buffer size: %d", len(tg.Buffer))
+		t.Logf("Total groups: %d", len(tg.Groups))
+
+		for i, group := range tg.Groups {
+			t.Logf("Group %d: Dimension=%d, Pulses=%d", i, group.Dimension, len(group.Pulses))
+		}
+
+		// Check that we have groups of both dimensions
+		d1Groups := 0
+		d2Groups := 0
+
+		for _, group := range tg.Groups {
+			if group.Dimension == 1 {
+				d1Groups++
+			} else if group.Dimension == 2 {
+				d2Groups++
+			}
+		}
+
+		t.Logf("D1 groups: %d, D2 groups: %d", d1Groups, d2Groups)
+
+		// Should have at least one group of each dimension
+		if d1Groups == 0 {
+			t.Errorf("Expected at least one D1 group")
+		}
+
+		if d2Groups == 0 {
+			t.Errorf("Expected at least one D2 group")
 		}
 	})
 }
+
+/// Helpers
 
 func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 	t.Run("Removes all pulses when none are after limit", func(t *testing.T) {
@@ -322,4 +434,26 @@ func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 			t.Errorf("Should have been true, got %v", buff2)
 		}
 	})
+}
+
+func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
+	grouper := &Ms.TemporalGrouper{
+		WindowSize: 60 * time.Second,
+		Buffer:     make([]Ms.PulseEvent, 0),
+		Groups:     make([]*Ms.PulseTree, 0),
+	}
+
+	// Don't need a fake QNet here, just a representation of an IctusSequence
+	ictusSeq := &Ms.IctusSequence{
+		Metric: "CPU1",
+		Events: []Ms.Ictus{
+			{Timestamp: time.Now(), IsAccent: false, Value: 45},
+			{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
+			{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
+			{Timestamp: time.Now().Add(15 * time.Second), IsAccent: true, Value: 90},
+		},
+	}
+
+	// Collect the pulses from the ictus sequence
+	return ictusSeq.DetectPulses(), grouper
 }

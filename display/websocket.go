@@ -99,6 +99,12 @@ func PulsePatternToString(pattern Ms.PulsePattern) string {
 		return "iamb"
 	case Ms.Trochee:
 		return "trochee"
+	case Ms.Amphibrach:
+		return "amphibrach"
+	case Ms.Anapest:
+		return "anapest"
+	case Ms.Dactyl:
+		return "dactyl"
 	default:
 		return "unknown"
 	}

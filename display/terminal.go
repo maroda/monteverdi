@@ -114,6 +114,15 @@ func (v *View) getPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell
 	case Ms.Trochee:
 		baseColor = tcell.ColorDarkOrange
 		symbol = '⚎'
+	case Ms.Amphibrach:
+		baseColor = tcell.ColorAquaMarine
+		symbol = '☵'
+	case Ms.Anapest:
+		baseColor = tcell.ColorAzure
+		symbol = '☳'
+	case Ms.Dactyl:
+		baseColor = tcell.ColorDodgerBlue
+		symbol = '☶'
 	}
 
 	// Shade based on accent state

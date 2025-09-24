@@ -371,26 +371,15 @@ func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPo
 // FindAccent is configured with the parameters applied to a single metric
 // for now, intensity is 1 for everything later on, intensity is used to
 // 'weight' metrics i.e. give them greater harmonic meaning.
-// Currently destination layer is not used
 //
 // i == Network index
 // p == Metric name
 func (q *QNet) FindAccent(m string, i int) *Accent {
-	// DEBUG ::: fmt.Printf("FindAccent: starting for metric %s, endpoint %d\n", m, i)
-
-	// Lock endpoint for writing - not needed here now, the caller PollMulti() is locking
-	// q.Network[i].MU.Lock()
-	// defer q.Network[i].MU.Unlock()
-
-	// DEBUG ::: fmt.Printf("FindAccent: acquired lock\n")
-
 	// The metric data
 	md := q.Network[i].Mdata[m]
-	// DEBUG ::: fmt.Printf("FindAccent: md = %d\n", md)
 
 	// The metric max
 	mx := q.Network[i].Maxval[m]
-	// DEBUG ::: fmt.Printf("FindAccent: mx = %d\n", mx)
 
 	// init values
 	intensity := 1
@@ -399,7 +388,6 @@ func (q *QNet) FindAccent(m string, i int) *Accent {
 
 	// if the accent exists, fill in a bunch of metadata
 	if md >= mx {
-		// DEBUG ::: fmt.Printf("FindAccent: creating accent\n")
 		q.Network[i].Accent = make(map[string]*Accent)
 		q.Network[i].Accent[m] = NewAccent(intensity, m)
 		a = q.Network[i].Accent[m]
@@ -481,21 +469,10 @@ func (q *QNet) PollMulti() error {
 		// nv.Metric is the list of configured metrics we want to use
 		for _, mv := range nv.Metric {
 			// pollSource is the full list of metrics from above
-
-			/* DEBUG
-			for k, v := range pollSource {
-				fmt.Printf("pollSource key: '%s', value: '%s'\n", k, v)
-			}
-			for _, mv := range nv.Metric {
-				fmt.Printf("Looking for metric: '%s'\n", mv)
-			}
-			*/
-
 			for k, v := range pollSource {
 				if k == mv {
 					// we've found the key, now grab its metric from the poll
 					// convert the metric to int64 on assignment
-
 					if floatVal, err := strconv.ParseFloat(v, 64); err != nil {
 						slog.Error("invalid syntax in metric", slog.Any("Error", err))
 						return err

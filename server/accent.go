@@ -1,6 +1,29 @@
 package monteverdi
 
+/*
+
+This file is loosely arranged in the order of data operations from granular to macro.
+They look a little like this:
+
+An Accent is a measurement above a threshold.
+An Ictus is a change where a threshold is crossed or exited.
+A Group is at least three events formed from an IctusSequence.
+A Pulse is defined across a Group.
+A Pulse Pattern is a specific literary pattern: Iamb, Trochee, Amphibrach, etc.
+A Pulse Event is an instance of a Pulse Pattern.
+The PulseTree contains a hierarchy of detected Pulse Patterns.
+A Dimension is a layer of the PulseTree hierarchy.
+An IctusSequence is in Dimension 1.
+A PulseSequence is in Dimension 2.
+A Consort is in D2: at least three pulses from a PulseSequence , i.e. a group of Groups.
+There are no Consort Patterns, they are all Pulse Patterns.
+Pulse Events are produced by both Groups and Consorts.
+The TemporalGrouper is the heart of the algorithm that groups things together.
+
+*/
+
 import (
+	"log/slog"
 	"time"
 )
 
@@ -9,7 +32,6 @@ type Accent struct {
 	Timestamp int64  // Unix timestamp TODO: this should be time.Time
 	Intensity int    // raw, unweighted accent strength
 	SourceID  string // identifies the source
-	// DestLayer *Timeseries // identifies the output
 }
 
 // Timeseries is a generic fixed TimeSeries DB
@@ -26,12 +48,6 @@ func NewAccent(i int, s string) *Accent {
 		Timestamp: time.Now().UnixNano(),
 		Intensity: i,
 		SourceID:  s,
-		/*
-			DestLayer: &Timeseries{
-				Runes:   make([]rune, 60),
-				MaxSize: 60,
-			},
-		*/
 	}
 }
 
@@ -76,9 +92,13 @@ type PulsePattern int
 const (
 	Iamb PulsePattern = iota
 	Trochee
+	Amphibrach
+	Anapest
+	Dactyl
 )
 
 type PulseEvent struct {
+	Dimension    int
 	Pattern      PulsePattern
 	StartTime    time.Time
 	Duration     time.Duration
@@ -133,6 +153,7 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 			patternEnd := curr.Timestamp.Add(time.Duration(float64(accentDur) * config.IambEndPeriod))
 
 			pulses = append(pulses, PulseEvent{
+				Dimension: 1,
 				Pattern:   Iamb,
 				StartTime: patternStart,
 				Duration:  patternEnd.Sub(patternStart),
@@ -149,6 +170,7 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 			patternEnd := curr.Timestamp.Add(time.Duration(float64(nonAccentDur) * config.TrocheeEndPeriod))
 
 			pulses = append(pulses, PulseEvent{
+				Dimension: 1,
 				Pattern:   Trochee,
 				StartTime: patternStart,
 				Duration:  patternEnd.Sub(patternStart),
@@ -176,6 +198,7 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 		// Detect Iamb: non-accent → accent
 		if !curr.IsAccent && next.IsAccent {
 			pulses = append(pulses, PulseEvent{
+				Dimension: 1,
 				Pattern:   Iamb,
 				StartTime: curr.Timestamp,
 				Duration:  next.Timestamp.Sub(curr.Timestamp),
@@ -186,6 +209,7 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 		// Detect Trochee: accent → non-accent
 		if curr.IsAccent && !next.IsAccent {
 			pulses = append(pulses, PulseEvent{
+				Dimension: 1,
 				Pattern:   Trochee,
 				StartTime: curr.Timestamp,
 				Duration:  next.Timestamp.Sub(curr.Timestamp),
@@ -197,7 +221,7 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 }
 
 type PulseTree struct {
-	Dimension int            // 0=individual Iamb / Trochee, 1=phrases, 2=periods
+	Dimension int
 	Pulses    []PulsePattern // The constituent pulses
 	OGEvents  []PulseEvent   // Preserve source event data
 	StartTime time.Time
@@ -216,15 +240,84 @@ type PulseVizPoint struct {
 	Extends   bool // pattern extends beyond display
 }
 
-type TemporalGrouper struct {
-	WindowSize time.Duration
-	Buffer     []PulseEvent
-	Groups     []*PulseTree
+type PulseSequence struct {
+	Metric    string
+	Events    []PulseEvent
+	StartTime time.Time
+	EndTime   time.Time
 }
 
+// DetectConsortPulses takes the pulses in a PulseSequence
+// and creates higher-dimension pulses from lower-dimension ones
+func (ps *PulseSequence) DetectConsortPulses() []PulseEvent {
+	var consort []PulseEvent
+
+	// Need at least 3 pulses to detect patterns
+	if len(ps.Events) < 3 {
+		return consort
+	}
+
+	for i := 0; i < len(ps.Events)-2; i++ {
+		first := ps.Events[i]
+		second := ps.Events[i+1]
+		third := ps.Events[i+2]
+
+		// Detect Amphibrach: Iamb → Trochee → Iamb
+		// (non-accent→accent) → (accent→non-accent) → (non-accent→accent)
+		if first.Pattern == Iamb && second.Pattern == Trochee && third.Pattern == Iamb {
+			consort = append(consort, PulseEvent{
+				Dimension: 2,
+				Pattern:   Amphibrach,
+				StartTime: first.StartTime,
+				Duration:  third.StartTime.Add(third.Duration).Sub(first.StartTime),
+				Metric:    first.Metric,
+			})
+		}
+
+		// Detect Anapest: Iamb → Iamb → Trochee
+
+		// Detect Dactyl: Trochee → Iamb → Iamb
+	}
+
+	slog.Debug("NEW CONSORT PATTERN", slog.Any("consort", consort))
+
+	return consort
+}
+
+type TemporalGrouper struct {
+	WindowSize    time.Duration
+	Buffer        []PulseEvent
+	Groups        []*PulseTree
+	PulseSequence *PulseSequence
+}
+
+// AddPulse requires a minimum of three events to create a group
+// This group will be analyzed for patterns
 func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 	// Add to current buffer
 	tg.Buffer = append(tg.Buffer, pulse)
+
+	// Init a PulseSequence if needed
+	if tg.PulseSequence == nil {
+		tg.PulseSequence = &PulseSequence{
+			Events: []PulseEvent{},
+		}
+	}
+
+	// Only add D1 pulses to the sequence for D2 pattern detection
+	if pulse.Dimension == 1 {
+		tg.PulseSequence.Events = append(tg.PulseSequence.Events, pulse)
+		tg.PulseSequence.EndTime = pulse.StartTime
+
+		// Detect D2 patterns and recurse them back
+		if len(tg.PulseSequence.Events) >= 3 {
+			consorts := tg.PulseSequence.DetectConsortPulses()
+			for _, consort := range consorts {
+				// Recursive call - D2 pulses go back into AddPulse
+				tg.AddPulse(consort)
+			}
+		}
+	}
 
 	// Remove pulses outside the window
 	limiter := time.Now().Add(-tg.WindowSize)
@@ -232,27 +325,51 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 
 	// Check if buffer has minimum pulses to form a group
 	if len(tg.Buffer) >= 3 {
-		group := tg.createGroup()
-		tg.Groups = append(tg.Groups, group)
+		// group := tg.createGroup()
+		// tg.Groups = append(tg.Groups, group)
+		tg.createGroupsByDimension()
 	}
 }
 
-func (tg *TemporalGrouper) createGroup() *PulseTree {
-	pulses := make([]PulsePattern, len(tg.Buffer))
-	for i, p := range tg.Buffer {
-		pulses[i] = p.Pattern
+func (tg *TemporalGrouper) createGroupsByDimension() {
+	// Group pulses by dimension
+	dimensionMap := make(map[int][]PulseEvent)
+	for _, pulse := range tg.Buffer {
+		dimensionMap[pulse.Dimension] = append(dimensionMap[pulse.Dimension], pulse)
+	}
+
+	// Create a group for each dimension that has enough pulses
+	for dimension, pulses := range dimensionMap {
+		if len(pulses) >= 3 {
+			group := tg.createGroupForPulses(pulses, dimension)
+			if group != nil {
+				tg.Groups = append(tg.Groups, group)
+			}
+		}
+	}
+}
+
+func (tg *TemporalGrouper) createGroupForPulses(pulses []PulseEvent, dimension int) *PulseTree {
+	if len(pulses) == 0 {
+		return nil
+	}
+
+	patterns := make([]PulsePattern, len(pulses))
+	for i, p := range pulses {
+		patterns[i] = p.Pattern
 	}
 
 	return &PulseTree{
-		Dimension: 1, // Phrase level, could be dynamic?
-		Pulses:    pulses,
-		StartTime: tg.Buffer[0].StartTime,
-		Duration:  tg.Buffer[len(tg.Buffer)-1].StartTime.Sub(tg.Buffer[0].StartTime),
-		Frequency: 1, // Track this over time...
+		Dimension: dimension,
+		Pulses:    patterns,
+		StartTime: pulses[0].StartTime,
+		Duration:  pulses[len(pulses)-1].StartTime.Sub(pulses[0].StartTime),
+		Frequency: 1,
 		Children:  nil,
 	}
 }
 
+// TrimBuffer keeps the TG clean and allows for better memory management
 func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
 	// Find first pulse to KEEP (after limit)
 	keepIndex := len(tg.Buffer) // Default: remove all
@@ -280,4 +397,21 @@ func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
 		}
 	}
 	tg.Groups = tg.Groups[:kept]
+
+	// Clean up PulseSequence
+	if tg.PulseSequence != nil {
+		keepIndex = len(tg.PulseSequence.Events)
+		for i, pulse := range tg.PulseSequence.Events {
+			if pulse.StartTime.After(limit) {
+				keepIndex = i
+				break
+			}
+		}
+
+		if keepIndex < len(tg.PulseSequence.Events) {
+			tg.PulseSequence.Events = tg.PulseSequence.Events[keepIndex:]
+		} else {
+			tg.PulseSequence.Events = tg.PulseSequence.Events[:0]
+		}
+	}
 }

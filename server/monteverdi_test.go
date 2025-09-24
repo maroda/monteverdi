@@ -665,6 +665,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 	})
 }
 
+// These tests assume the default char width of 80
 func TestPulseToPoints_Clamping(t *testing.T) {
 	ep := &Ms.Endpoint{}
 	now := time.Now()
@@ -673,7 +674,7 @@ func TestPulseToPoints_Clamping(t *testing.T) {
 		// Pulse that started before visible window
 		pulse := Ms.PulseEvent{
 			Pattern:   Ms.Iamb,
-			StartTime: now.Add(-70 * time.Second), // Before 60-second window
+			StartTime: now.Add(-90 * time.Second), // Before 60-second window
 			Duration:  10 * time.Second,
 		}
 
@@ -686,7 +687,7 @@ func TestPulseToPoints_Clamping(t *testing.T) {
 		}
 	})
 
-	t.Run("Clamps end position to 59", func(t *testing.T) {
+	t.Run("Clamps end position to default with 79", func(t *testing.T) {
 		// Long duration pulse that would extend beyond visible range
 		pulse := Ms.PulseEvent{
 			Pattern:   Ms.Iamb,
@@ -696,9 +697,9 @@ func TestPulseToPoints_Clamping(t *testing.T) {
 
 		points := ep.PulseToPoints(pulse, now)
 		for _, point := range points {
-			if point.Position <= 59 {
+			if point.Position <= 79 {
 			} else {
-				t.Errorf("Point position should be 59 or smaller")
+				t.Errorf("Point position should be 79 or smaller")
 			}
 		}
 	})
