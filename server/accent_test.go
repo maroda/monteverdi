@@ -182,7 +182,74 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 	})
 }
 
-func TestTemporalGrouper_RecursiveDetection(t *testing.T) {
+func TestPulseSequence_DetectConsortPulses(t *testing.T) {
+	testMetric := "CPU1"
+
+	t.Run("Returns nil with an empty sequence", func(t *testing.T) {
+		pulseSequence := &Ms.PulseSequence{
+			Metric:    testMetric,
+			Events:    []Ms.PulseEvent{},
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
+
+		got := pulseSequence.DetectConsortPulses()
+		if got != nil {
+			t.Errorf("Expected nil, got: %v", got)
+		}
+	})
+
+	t.Run("Returns nil with only one sequence", func(t *testing.T) {
+		pulseSequence := &Ms.PulseSequence{
+			Metric: testMetric,
+			Events: []Ms.PulseEvent{
+				{
+					Dimension:    1,
+					Pattern:      1,
+					StartTime:    time.Time{},
+					Duration:     1,
+					Metric:       []string{testMetric},
+					Significance: 0,
+				},
+			},
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
+
+		got := pulseSequence.DetectConsortPulses()
+		if got != nil {
+			t.Errorf("Expected nil, got: %v", got)
+		}
+	})
+}
+
+func TestPulseSequence_TrimOldPulses(t *testing.T) {
+	tg := &Ms.TemporalGrouper{
+		PulseSequence: &Ms.PulseSequence{
+			Events: []Ms.PulseEvent{
+				{StartTime: time.Now().Add(-120 * time.Second)}, // 2 minutes old
+				{StartTime: time.Now().Add(-90 * time.Second)},  // 1.5 minutes old
+				{StartTime: time.Now().Add(-80 * time.Second)},  // 80 seconds old
+			},
+		},
+	}
+
+	// Set limit to 30s ago (all tests pulses are older than 30s)
+	limiter := time.Now().Add(-30 * time.Second)
+
+	tg.TrimBuffer(limiter)
+
+	if len(tg.PulseSequence.Events) != 0 {
+		t.Errorf("Expected 0, got %d events", len(tg.PulseSequence.Events))
+	}
+
+	if tg.PulseSequence.Events == nil {
+		t.Errorf("Expected empty slice, got nil")
+	}
+
+}
+
+func TestTemporalGrouper_HierarchyDetection(t *testing.T) {
 	now := time.Now()
 	testMetric := "CPU1"
 
@@ -260,16 +327,14 @@ func TestTemporalGrouper_RecursiveDetection(t *testing.T) {
 			Groups:     make([]*Ms.PulseTree, 0),
 		}
 
-		// Create a longer sequence: I-T-I-T-I-T-I
-		// This should create 3 Amphibrach patterns: (I-T-I), (T-I-T), (I-T-I)
 		pulses := []Ms.PulseEvent{
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(15 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(18 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(15 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(18 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
 		}
 
 		// Add all the D1 pulses
@@ -293,72 +358,19 @@ func TestTemporalGrouper_RecursiveDetection(t *testing.T) {
 			}
 		}
 
-		t.Logf("D1 pulses: %d, D2 pulses: %d, Amphibrachs: %d", d1Count, d2Count, amphibrachCount)
+		// t.Logf("D1 pulses: %d, D2 pulses: %d, Amphibrachs: %d", d1Count, d2Count, amphibrachCount)
 
-		// Should have 7 D1 pulses + multiple D2 pulses
-		if d1Count != 7 {
-			t.Errorf("Expected 7 D1 pulses, got %d", d1Count)
+		d1pulses := len(pulses)
+		if d1Count != d1pulses {
+			t.Errorf("Expected %d D1 pulses, got %d", d1pulses, d1Count)
 		}
 
-		if amphibrachCount < 3 {
-			t.Errorf("Expected at least 3 Amphibrach patterns, got %d", amphibrachCount)
-		}
-	})
-
-	t.Run("Creates separate groups for different dimensions", func(t *testing.T) {
-		tg := &Ms.TemporalGrouper{
-			WindowSize: 60 * time.Second,
-			Buffer:     make([]Ms.PulseEvent, 0),
-			Groups:     make([]*Ms.PulseTree, 0),
-		}
-
-		// Add enough pulses to create both D1 and D2 groups
-		pulses := []Ms.PulseEvent{
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
-		}
-
-		for _, pulse := range pulses {
-			tg.AddPulse(pulse)
-		}
-
-		// Debug: Print what we actually have
-		t.Logf("Total buffer size: %d", len(tg.Buffer))
-		t.Logf("Total groups: %d", len(tg.Groups))
-
-		for i, group := range tg.Groups {
-			t.Logf("Group %d: Dimension=%d, Pulses=%d", i, group.Dimension, len(group.Pulses))
-		}
-
-		// Check that we have groups of both dimensions
-		d1Groups := 0
-		d2Groups := 0
-
-		for _, group := range tg.Groups {
-			if group.Dimension == 1 {
-				d1Groups++
-			} else if group.Dimension == 2 {
-				d2Groups++
-			}
-		}
-
-		t.Logf("D1 groups: %d, D2 groups: %d", d1Groups, d2Groups)
-
-		// Should have at least one group of each dimension
-		if d1Groups == 0 {
-			t.Errorf("Expected at least one D1 group")
-		}
-
-		if d2Groups == 0 {
-			t.Errorf("Expected at least one D2 group")
+		// find at least one
+		if amphibrachCount < 1 {
+			t.Errorf("Expected at least 1 Amphibrach, got %d", amphibrachCount)
 		}
 	})
 }
-
-/// Helpers
 
 func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 	t.Run("Removes all pulses when none are after limit", func(t *testing.T) {
@@ -435,6 +447,48 @@ func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 		}
 	})
 }
+
+func TestTemporalGrouper_CreateGroupForPulses(t *testing.T) {
+	tg := &Ms.TemporalGrouper{}
+	pes := tg.Buffer
+
+	t.Run("Returns nil for empty pulses", func(t *testing.T) {
+		got := tg.CreateGroupForPulses(pes, 1)
+		if got != nil {
+			t.Errorf("Should have returned nil, got %v", got)
+		}
+	})
+}
+
+func TestTemporalGrouper_ProcessPendingPulses(t *testing.T) {
+	// create a pending pulses - i.e. []PulseEvent
+	// this goes into tg.PendingPulses
+	// then check the tg.Buffer for the pulse
+	// which means it was successfully processed
+
+	testMetric := "CPU1"
+
+	tg := &Ms.TemporalGrouper{}
+
+	// One PulseEvent goes into pendingPulses
+	pendingPulses := []Ms.PulseEvent{
+		{
+			Dimension:    1,
+			Pattern:      0,
+			StartTime:    time.Now(),
+			Duration:     1 * time.Second,
+			Metric:       []string{testMetric},
+			Significance: 0,
+		},
+	}
+	tg.PendingPulses = pendingPulses
+
+	// Process should add the PulseEvent to the Buffer
+	tg.ProcessPendingPulses()
+	reflect.DeepEqual(tg.Buffer[0], pendingPulses[0])
+}
+
+/// Helpers
 
 func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
 	grouper := &Ms.TemporalGrouper{

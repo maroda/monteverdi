@@ -315,7 +315,7 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 			consorts := tg.PulseSequence.DetectConsortPulses()
 			for _, consort := range consorts {
 				tg.PendingPulses = append(tg.PendingPulses, consort)
-				slog.Debug("Adding consort ", consort)
+				slog.Debug("Adding consort")
 			}
 		}
 
@@ -326,7 +326,7 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		pending := tg.PendingPulses[0]
 		tg.PendingPulses = tg.PendingPulses[1:]
 		tg.Buffer = append(tg.Buffer, pending)
-		slog.Debug("Processed pending pulse", pending)
+		slog.Debug("Processed pending pulse")
 	}
 
 	// Remove pulses outside the window
@@ -341,8 +341,9 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 	}
 }
 
-func (tg *TemporalGrouper) processPendingPulses() {
+func (tg *TemporalGrouper) ProcessPendingPulses() {
 	for len(tg.PendingPulses) > 0 {
+		// This is the equivalent of an erlang head|tail match
 		pending := tg.PendingPulses[0]
 		tg.PendingPulses = tg.PendingPulses[1:]
 
@@ -361,7 +362,7 @@ func (tg *TemporalGrouper) createGroupsByDimension() {
 	// Create a group for each dimension that has enough pulses
 	for dimension, pulses := range dimensionMap {
 		if len(pulses) >= 3 {
-			group := tg.createGroupForPulses(pulses, dimension)
+			group := tg.CreateGroupForPulses(pulses, dimension)
 			if group != nil {
 				tg.Groups = append(tg.Groups, group)
 			}
@@ -369,7 +370,7 @@ func (tg *TemporalGrouper) createGroupsByDimension() {
 	}
 }
 
-func (tg *TemporalGrouper) createGroupForPulses(pulses []PulseEvent, dimension int) *PulseTree {
+func (tg *TemporalGrouper) CreateGroupForPulses(pulses []PulseEvent, dimension int) *PulseTree {
 	if len(pulses) == 0 {
 		return nil
 	}

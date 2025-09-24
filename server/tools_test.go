@@ -31,6 +31,21 @@ func TestFillEnvVarInt(t *testing.T) {
 		got := Ms.FillEnvVarInt(ev, evDefault)
 		assertInt(t, got, want)
 	})
+
+	t.Run("Returns set default when OS variable is invalid", func(t *testing.T) {
+		ev2 := "LIMITER"
+		ev2default := 123
+		want := ev2default
+
+		// Set an OS version of the Env Var to an invalid value
+		ev2set := -1
+		err := os.Setenv(ev2, strconv.Itoa(ev2set))
+		assertError(t, err, nil)
+
+		// This will also trigger a log entry like: "Invalid environment variable"
+		got := Ms.FillEnvVarInt(ev2, ev2default)
+		assertInt(t, got, want)
+	})
 }
 
 func TestFillEnvVar(t *testing.T) {

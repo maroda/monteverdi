@@ -1,12 +1,14 @@
 package monteverdi_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -63,39 +65,13 @@ func TestSingleFetch(t *testing.T) {
 		assertError(t, err, nil)
 	})
 
-	// This is a finicky test, sometimes it works and sometimes it doesn't
-	t.Run("Returns Timeout Error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(5 + webTimeout)
-			w.Write([]byte("timeout"))
-		}))
-		defer server.Close()
+	/* No tests for the extremely robust io.ReadAll, it is very difficult to break. */
+}
 
-		_, _, err := Ms.SingleFetch(server.URL)
-		assertGotError(t, err)
-		if err != nil {
-			assertStringContains(t, err.Error(), "Timeout")
-		}
-	})
-
-	/* io.ReadAll is extremely robust, it is very difficult to get it to break
-
-	t.Run("Returns Body Read Error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
-			w.Write([]byte("body"))
-			hj, ok := w.(http.Hijacker)
-			if !ok {
-				conn, _, _ := hj.Hijack()
-				conn.Close()
-			}
-		}))
-		defer server.Close()
-
-		_, _, err := Ms.SingleFetch(server.URL)
-		assertGotError(t, err)
-	})
-	*/
+func TestSingleFetchWithClient_Timeout(t *testing.T) {
+	c := &mockTimeoutClient{}
+	_, _, err := Ms.SingleFetchWithClient("http://test", c)
+	assertGotError(t, err)
 }
 
 // TestMetricKV should read KV values from a URL endpoint
@@ -203,6 +179,30 @@ network_packets=2.5E+6
 	})
 }
 
+func TestParseMetricKV_ScannerError(t *testing.T) {
+	failingReader := &FailingReader{
+		data:      []byte("CPU1=100\nCPU2=200\n"),
+		failAfter: 5,
+	}
+
+	_, err := Ms.ParseMetricKV(failingReader, "=")
+	assertGotError(t, err)
+}
+
+/// Helpers
+
+type mockTimeoutClient struct{}
+
+func (mc *mockTimeoutClient) Get(u string) (*http.Response, error) {
+	response := &url.Error{
+		Op:  "Get",
+		URL: u,
+		Err: context.DeadlineExceeded,
+	}
+
+	return nil, response
+}
+
 type FailingReader struct {
 	data      []byte
 	position  int
@@ -227,16 +227,6 @@ func (fr *FailingReader) Read(p []byte) (n int, err error) {
 	copy(p, fr.data[fr.position:fr.position+toCopy])
 	fr.position += toCopy
 	return toCopy, nil
-}
-
-func TestParseMetricKV_ScannerError(t *testing.T) {
-	failingReader := &FailingReader{
-		data:      []byte("CPU1=100\nCPU2=200\n"),
-		failAfter: 5,
-	}
-
-	_, err := Ms.ParseMetricKV(failingReader, "=")
-	assertGotError(t, err)
 }
 
 // Mock responder for external API calls with configurable body content

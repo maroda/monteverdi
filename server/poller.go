@@ -15,8 +15,12 @@ const (
 	webTimeout = 10 * time.Second
 )
 
+type HTTPClient interface {
+	Get(string) (*http.Response, error)
+}
+
 // Shared HTTP Client
-var httpClient = &http.Client{
+var sharedHTTPClient = &http.Client{
 	Timeout: webTimeout,
 	Transport: &http.Transport{
 		MaxIdleConns:        10,
@@ -25,10 +29,10 @@ var httpClient = &http.Client{
 	},
 }
 
-// SingleFetch returns the Response Code, raw byte stream body, and error
-// This uses a Shared HTTP Client to avoid stale connections that eat up OS FDs
-func SingleFetch(url string) (int, []byte, error) {
-	resp, err := httpClient.Get(url)
+// SingleFetchWithClient handles the messy business of the HTTP connection
+// and is testable with dependency injection, called by SingleFetch
+func SingleFetchWithClient(url string, c HTTPClient) (int, []byte, error) {
+	resp, err := c.Get(url)
 	if err != nil {
 		slog.Error("Fetch Error", slog.Any("Error", err))
 		return 0, nil, err
@@ -49,6 +53,14 @@ func SingleFetch(url string) (int, []byte, error) {
 	}()
 
 	return resp.StatusCode, body, err
+}
+
+// SingleFetch returns the Response Code, raw byte stream body, and error
+// This uses a Shared HTTP Client:
+// - to reuse existing endpoint connections
+// - to avoid stale connections that eat up OS FDs
+func SingleFetch(url string) (int, []byte, error) {
+	return SingleFetchWithClient(url, sharedHTTPClient)
 }
 
 // MetricKV streams input from the endpoint body and populates
