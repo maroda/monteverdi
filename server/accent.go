@@ -310,8 +310,8 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		tg.PulseSequence.Events = append(tg.PulseSequence.Events, pulse)
 		tg.PulseSequence.EndTime = pulse.StartTime
 
-		// Detect D2 patterns
-		if len(tg.PulseSequence.Events) >= 3 {
+		// Detect D2 patterns only when there are exactly three pulses underneath
+		if len(tg.PulseSequence.Events) == 3 {
 			consorts := tg.PulseSequence.DetectConsortPulses()
 			for _, consort := range consorts {
 				tg.PendingPulses = append(tg.PendingPulses, consort)
