@@ -289,6 +289,7 @@ type TemporalGrouper struct {
 	Buffer        []PulseEvent
 	Groups        []*PulseTree
 	PulseSequence *PulseSequence
+	PendingPulses []PulseEvent
 }
 
 // AddPulse requires a minimum of three events to create a group
@@ -309,14 +310,23 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		tg.PulseSequence.Events = append(tg.PulseSequence.Events, pulse)
 		tg.PulseSequence.EndTime = pulse.StartTime
 
-		// Detect D2 patterns and recurse them back
+		// Detect D2 patterns
 		if len(tg.PulseSequence.Events) >= 3 {
 			consorts := tg.PulseSequence.DetectConsortPulses()
 			for _, consort := range consorts {
-				// Recursive call - D2 pulses go back into AddPulse
-				tg.AddPulse(consort)
+				tg.PendingPulses = append(tg.PendingPulses, consort)
+				slog.Debug("Adding consort ", consort)
 			}
 		}
+
+	}
+
+	// Process any queued D2 pulses
+	for len(tg.PendingPulses) > 0 {
+		pending := tg.PendingPulses[0]
+		tg.PendingPulses = tg.PendingPulses[1:]
+		tg.Buffer = append(tg.Buffer, pending)
+		slog.Debug("Processed pending pulse", pending)
 	}
 
 	// Remove pulses outside the window
@@ -328,6 +338,16 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		// group := tg.createGroup()
 		// tg.Groups = append(tg.Groups, group)
 		tg.createGroupsByDimension()
+	}
+}
+
+func (tg *TemporalGrouper) processPendingPulses() {
+	for len(tg.PendingPulses) > 0 {
+		pending := tg.PendingPulses[0]
+		tg.PendingPulses = tg.PendingPulses[1:]
+
+		// Add directly to buffer without triggering more detection
+		tg.Buffer = append(tg.Buffer, pending)
 	}
 }
 
