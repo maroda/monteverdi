@@ -651,6 +651,28 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		}
 	})
 
+	t.Run("Amphibrach calculation", func(t *testing.T) {
+		ep := &Ms.Endpoint{}
+		pulse := Ms.PulseEvent{Pattern: Ms.Amphibrach}
+		startPos, firstPt, secondPt, endPos := 10, 20, 30, 40
+
+		firstThird := ep.CalcAccentStateForPos(pulse, firstPt-1, startPos, endPos)
+		if firstThird {
+			t.Errorf("Expected NO Accent, got %v", firstThird)
+		}
+
+		secondThird := ep.CalcAccentStateForPos(pulse, (firstPt+secondPt)/2, startPos, endPos)
+		if !secondThird {
+			t.Errorf("Expected Accent, got %v", secondThird)
+		}
+
+		thirdThird := ep.CalcAccentStateForPos(pulse, secondPt+1, startPos, endPos)
+		if thirdThird {
+			t.Errorf("Expected NO Accent, got %v", thirdThird)
+		}
+
+	})
+
 	t.Run("Calculation returns false for no result", func(t *testing.T) {
 		ep := &Ms.Endpoint{}
 		pulse := Ms.PulseEvent{Pattern: 9}

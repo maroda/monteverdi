@@ -364,6 +364,11 @@ func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPo
 		// accent → non-accent: first half true, second half false
 		midPoint := startPos + ((endPos - startPos) / 2)
 		return pos < midPoint
+	case Amphibrach:
+		// non-accent → accent → non-accent: first third false, middle third true, last third false
+		firstThird := startPos + ((endPos - startPos) / 3)
+		secondThird := startPos + (2 * (endPos - startPos) / 3)
+		return pos >= firstThird && pos < secondThird
 	}
 	return false
 }

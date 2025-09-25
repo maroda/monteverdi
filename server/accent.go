@@ -265,21 +265,22 @@ func (ps *PulseSequence) DetectConsortPulses() []PulseEvent {
 		// Detect Amphibrach: Iamb → Trochee → Iamb
 		// (non-accent→accent) → (accent→non-accent) → (non-accent→accent)
 		if first.Pattern == Iamb && second.Pattern == Trochee && third.Pattern == Iamb {
-			consort = append(consort, PulseEvent{
+			newD2Pulse := PulseEvent{
 				Dimension: 2,
 				Pattern:   Amphibrach,
 				StartTime: first.StartTime,
 				Duration:  third.StartTime.Add(third.Duration).Sub(first.StartTime),
 				Metric:    first.Metric,
-			})
+			}
+			consort = append(consort, newD2Pulse)
+
+			slog.Info("NEW CONSORT PATTERN", slog.Any("event", newD2Pulse))
 		}
 
 		// Detect Anapest: Iamb → Iamb → Trochee
 
 		// Detect Dactyl: Trochee → Iamb → Iamb
 	}
-
-	slog.Debug("NEW CONSORT PATTERN", slog.Any("consort", consort))
 
 	return consort
 }
@@ -311,11 +312,18 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		tg.PulseSequence.EndTime = pulse.StartTime
 
 		// Detect D2 patterns only when there are exactly three pulses underneath
-		if len(tg.PulseSequence.Events) == 3 {
-			consorts := tg.PulseSequence.DetectConsortPulses()
-			for _, consort := range consorts {
-				tg.PendingPulses = append(tg.PendingPulses, consort)
+		if len(tg.PulseSequence.Events) >= 3 {
+			consortPulses := tg.PulseSequence.DetectConsortPulses()
+			for _, consortPulse := range consortPulses {
+				tg.PendingPulses = append(tg.PendingPulses, consortPulse)
 				slog.Debug("Adding consort")
+			}
+
+			// Sliding window: 3 D1 pulses,
+			// chop off the one just processed that is
+			// held in tg.PulseSequence.Events[0]
+			if len(tg.PulseSequence.Events) > 3 {
+				tg.PulseSequence.Events = tg.PulseSequence.Events[1:]
 			}
 		}
 

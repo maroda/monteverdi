@@ -160,11 +160,13 @@ func (v *View) drawPulseView() {
 			filterText = "Iamb Only"
 		case Ms.Trochee:
 			filterText = "Trochee Only"
+		case Ms.Amphibrach:
+			filterText = "Amphibrach Only"
 		}
 	}
 
 	v.drawText(1, 1, width-10, 2, fmt.Sprintf("PULSE VIEW - %s (triple ictus analysis)", filterText))
-	v.drawText(1, 2, width-10, 3, "i=Iamb | t=Trochee | x=All | ► stacked long pulses ◄ ")
+	v.drawText(1, 2, width-10, 3, "i=Iamb | t=Trochee | a=Amphibrach | x=All | ► stacked long pulses ◄ ")
 
 	// Draw pulse visualization for each endpoint/metric
 	for ni := range v.QNet.Network {
@@ -489,6 +491,11 @@ func (v *View) handleKeyBoardEvent() {
 			// Pattern filtering (only when in pulse view)
 			if v.showPulse {
 				switch ev.Rune() {
+				case 'a':
+					v.mu.Lock()
+					amphibrach := Ms.Amphibrach
+					v.pulseFilter = &amphibrach
+					v.mu.Unlock()
 				case 'i':
 					v.mu.Lock()
 					iamb := Ms.Iamb

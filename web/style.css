@@ -54,6 +54,12 @@ h1 {
     opacity: 0.8;
 }
 
+.pulse-amphibrach {
+    fill: #9c27b0;           /* Purple for amphibrach */
+    stroke: none;            /* No border */
+    opacity: 0.8;
+}
+
 /* Ring labels */
 .ring-label {
     fill: #666;
