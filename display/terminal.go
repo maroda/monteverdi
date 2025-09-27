@@ -648,26 +648,12 @@ func (v *View) logMemoryUsage() {
 		}
 	}
 
-	slog.Info("Memory Usage",
+	slog.Debug("Memory Usage",
 		slog.Uint64("alloc_mb", m.Alloc/1024/1024),
 		slog.Uint64("heap_mb", m.HeapAlloc/1024/1024),
 		slog.Int("total_events", totalEvents),
 		slog.Int("total_pulses", totalPulses))
 }
-
-/*
-func (v *View) run() {
-	slog.Info("Starting HarmonyView")
-	for {
-		time.Sleep(1 * time.Second)
-		if err := v.PollQNetAll(); err != nil {
-			slog.Error("Failed to poll QNet", slog.Any("Error", err))
-			return
-		}
-		v.updateScreen()
-	}
-}
-*/
 
 type responseWriter struct {
 	http.ResponseWriter

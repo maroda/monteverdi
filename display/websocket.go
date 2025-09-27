@@ -18,6 +18,7 @@ type PulseDataD3 struct {
 	Intensity float64 `json:"intensity"` // 0.0-1.0
 	Speed     float64 `json:"speed"`     // degrees per frame
 	Metric    string  `json:"metric"`    // Which system metric
+	Dimension int     `json:"dimension"` // Dimension for viz placement
 }
 
 var upgrader = websocket.Upgrader{
@@ -75,15 +76,35 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 				recent := seq.DetectPulses()
 				for _, pulse := range recent {
 					d3pulse := PulseDataD3{
-						Ring:  CalcRing(pulse.StartTime),  // Based on age
-						Angle: CalcAngle(pulse.StartTime), // Time-based position
-						Type:  PulsePatternToString(pulse.Pattern),
-						// Intensity: CalcIntensity(pulse.StartTime, endpoint),
+						Ring:      CalcRing(pulse.StartTime),  // Based on age
+						Angle:     CalcAngle(pulse.StartTime), // Time-based position
+						Type:      PulsePatternToString(pulse.Pattern),
 						Intensity: CalcIntensity(endpoint),
 						Speed:     v.CalcSpeedForPulse(pulse),
 						Metric:    metric,
+						Dimension: pulse.Dimension,
 					}
 					pulses = append(pulses, d3pulse)
+				}
+			}
+		}
+
+		// Process D2 pulses from TemporalGrouper
+		if endpoint.Pulses != nil {
+			for _, pulse := range endpoint.Pulses.Buffer {
+				if pulse.Dimension == 2 {
+					for _, metric := range pulse.Metric {
+						d3pulse := PulseDataD3{
+							Ring:      CalcRing(pulse.StartTime),
+							Angle:     CalcAngle(pulse.StartTime),
+							Type:      PulsePatternToString(pulse.Pattern),
+							Intensity: CalcIntensity(endpoint),
+							Speed:     v.CalcSpeedForPulse(pulse),
+							Metric:    metric,
+							Dimension: pulse.Dimension,
+						}
+						pulses = append(pulses, d3pulse)
+					}
 				}
 			}
 		}
@@ -115,39 +136,29 @@ func CalcAngle(ps time.Time) float64 {
 	age := now.Sub(ps)
 	ring := CalcRing(ps)
 
-	var windowDur time.Duration
 	var angleInWindow float64
 
 	switch ring {
 	case 0:
-		// Inner ring: 60s
+		// Inner ring: 60s - full circle
 		angleInWindow = age.Seconds() / 60.0
 	case 1:
-		// Middle ring: 10m
-		ageInRing := age.Seconds() - 60.0 // 60s subtracted from ring 0
-		angleInWindow = ageInRing / 540.0 // 9m remaining in ring 1
+		// Middle ring: 10m - full circle, but start from when it entered this ring
+		ageInRing := age.Minutes() - 1.0 // Subtract the 1 minute it spent in inner ring
+		angleInWindow = ageInRing / 9.0  // 9 minutes remaining in middle ring
 	case 2:
-		// Outer ring: 1h
-		ageInRing := age.Seconds() - 600.0 // 600s subtracted from ring 1
-		angleInWindow = ageInRing / 3000.0 // 50m remaining in ring 2
+		// Outer ring: 1h - full circle, starting from when it entered this ring
+		ageInRing := age.Minutes() - 10.0        // Subtract 10 minutes from previous rings
+		angleInWindow = (ageInRing / 60.0) / 1.0 // Convert to hours for the 1-hour rotation
 	default:
 		return 0
 	}
 
-	// Convert to degrees (0-360)
-	// Start at 270° (12 o'clock) and rotate clockwise as age increases
-	angle := 270.0 + (angleInWindow * 360.0)
+	// Start at 12 o'clock (270°) and rotate clockwise
+	angle := 270.0 - (angleInWindow * 360.0)
 
 	// Normalize to 0-360 range
-	result := math.Mod(angle, 360.0)
-
-	slog.Debug("DEBUG",
-		slog.Any("windowDur", windowDur),
-		slog.Any("angleInWindow", angleInWindow),
-		slog.Any("angle", angle),
-		slog.Any("result", result))
-
-	return result
+	return math.Mod(angle+360.0, 360.0)
 }
 
 // CalcIntensity returns an intensity float
@@ -178,12 +189,19 @@ func CalcRing(ps time.Time) int {
 	now := time.Now()
 	age := now.Sub(ps)
 
+	if age.Seconds() > 59 && age.Seconds() < 61 {
+		slog.Debug("RING_BOUNDARY_CHECK",
+			slog.Float64("age_seconds", age.Seconds()),
+			slog.Bool("exactly_60", age == 60*time.Second),
+			slog.Bool("less_equal_60", age <= 60*time.Second))
+	}
+
 	switch {
 	case age <= 60*time.Second:
 		return 0 // Inner ring - last 60s
 	case age <= 10*time.Minute:
 		return 1 // Middle ring - last 10m
-	case age <= 1*time.Hour:
+	case age <= 60*time.Minute:
 		return 2 // Outer ring - last hour
 	default:
 		// Pulse is too old, do not display

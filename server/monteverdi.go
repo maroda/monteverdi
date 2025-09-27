@@ -79,7 +79,12 @@ type Endpoints []*Endpoint
 // NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
 func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 	var endpoints Endpoints
+
+	// TUI TSDB display (80 chars wide)
 	tsdbWindow := FillEnvVarInt("MONTEVERDI_TUI_TSDB_VISUAL_WINDOW", 80)
+
+	// Pulse lifecycle window (1 hour for full ring progression)
+	pulseWindow := FillEnvVarInt("MONTEVERDI_PULSE_WINDOW_SECONDS", 3600)
 
 	// cf is a ConfigFile (JSON) of Endpoints
 	// in the format: ID, URL, MWithMax
@@ -97,7 +102,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		metsdb := make(map[string]*Timeseries)    // Timeseries tracking accents
 		ictseq := make(map[string]*IctusSequence) // Running change Sequence
 		pulses := &TemporalGrouper{
-			WindowSize: time.Duration(tsdbWindow) * time.Second,
+			WindowSize: time.Duration(pulseWindow) * time.Second, // This is a display config
 			Buffer:     make([]PulseEvent, 0),
 			Groups:     make([]*PulseTree, 0),
 		} // Group patterns in time
@@ -418,15 +423,39 @@ func (q *QNet) PulseDetect(m string, i int) {
 	// retrieve an updated sequence
 	seq := q.Network[i].Sequence[m]
 
+	// Trim sequence to prevent unbounded growth in seq.Events
+	const maxRecognitionEvents = 10
+	if seq != nil && len(seq.Events) > maxRecognitionEvents {
+		seq.Events = seq.Events[len(seq.Events)-maxRecognitionEvents:]
+		seq.lastProcessedEventCount = 0
+	}
+
 	// This isn't useful until there is at least one IctusPattern present
-	if seq != nil && len(seq.Events) >= 2 { // characters in one IctusPattern
+	// if seq != nil && len(seq.Events) >= 2 {
+	if seq != nil && len(seq.Events) >= 2 && len(seq.Events) > seq.lastProcessedEventCount {
+		// Only process new events, not the entire history
+		newEventCount := len(seq.Events) - seq.lastProcessedEventCount
+		startIdx := seq.lastProcessedEventCount
+		if startIdx == 0 && len(seq.Events) >= 3 {
+			// First run: process from the beginning but need at least 3 events
+			startIdx = 0
+		} else if newEventCount < 2 {
+			// Need at least 2 new events to form patterns
+			return
+		}
+
+		// Create sequence with only relevant events for pattern detection
+		// Include overlap of 1 for pattern continuity
+		overlapStart := max(0, startIdx-1)
+		relevantEvents := seq.Events[overlapStart:]
+
 		// Convert to IctusSequence format first
 		ictusSeq := &IctusSequence{
 			Metric: m,
-			Events: make([]Ictus, len(seq.Events)),
+			Events: make([]Ictus, len(relevantEvents)),
 		}
 
-		for j, e := range seq.Events {
+		for j, e := range relevantEvents {
 			ictusSeq.Events[j] = Ictus{
 				Timestamp: e.Timestamp,
 				IsAccent:  e.IsAccent,
@@ -435,18 +464,28 @@ func (q *QNet) PulseDetect(m string, i int) {
 			}
 		}
 
-		// Tuning period ratios is important for pulse detection
-		config := NewPulseConfig(0.5, 0.5, 0.5, 0.5)
-
 		// Detect new pulses and add to the temporal grouper
+		// Tuning period ratios in /config/ is important for pulse detection
+		config := NewPulseConfig(0.5, 0.5, 0.5, 0.5)
 		pulses := ictusSeq.DetectPulsesWithConfig(*config)
+
 		for _, pulse := range pulses {
 			// Add the pulse itself
 			q.Network[i].Pulses.AddPulse(pulse)
 
 			slog.Debug("ADD PULSE", slog.Any("pattern", pulse.Pattern), slog.String("metric", m), slog.String("duration", pulse.Duration.String()))
 		}
+
+		// Update processed count
+		seq.lastProcessedEventCount = len(seq.Events)
 	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // PollMulti reads all configured metrics from QNet and retrieves them.

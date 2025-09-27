@@ -192,7 +192,96 @@ func TestCalcIntensity(t *testing.T) {
 	})
 }
 
-// Helpers
+func TestAmphibrachFlowToD3(t *testing.T) {
+	// Create a QNet with controlled amphibrach data
+	qn := makeQNetWithAmphibrachs(t)
+	view := &Md.View{QNet: qn}
+
+	t.Run("Amphibrachs appear in D3 data", func(t *testing.T) {
+		pulses := view.GetPulseDataD3()
+
+		amphibrachCount := 0
+		for _, pulse := range pulses {
+			if pulse.Dimension == 2 && pulse.Type == "amphibrach" {
+				amphibrachCount++
+
+				// Should be in middle or outer ring
+				if pulse.Ring != 1 && pulse.Ring != 2 {
+					t.Errorf("Amphibrach in wrong ring: %d", pulse.Ring)
+				}
+			}
+		}
+
+		if amphibrachCount == 0 {
+			t.Error("No amphibrachs found in D3 data")
+		}
+	})
+
+	t.Run("Amphibrachs persist through multiple calls", func(t *testing.T) {
+		// Call GetPulseDataD3 multiple times, should get consistent results
+		first := view.GetPulseDataD3()
+		time.Sleep(100 * time.Millisecond)
+		second := view.GetPulseDataD3()
+
+		firstCount := countAmphibrachs(first)
+		secondCount := countAmphibrachs(second)
+
+		// Should have same or more amphibrachs (as they age)
+		if secondCount < firstCount {
+			t.Errorf("Amphibrachs disappeared: %d -> %d", firstCount, secondCount)
+		}
+	})
+}
+
+func TestCalcAngleForAmphibrach(t *testing.T) {
+	now := time.Now()
+
+	// Test amphibrach at different ages in middle ring
+	ages := []time.Duration{
+		61 * time.Second, // Just entered middle ring
+		3 * time.Minute,  // Should be at ~60° (1/6th rotation)
+		6 * time.Minute,  // Should be at ~180° (halfway)
+		9 * time.Minute,  // Should be at ~300° (5/6th rotation)
+	}
+
+	for _, age := range ages {
+		pulseTime := now.Add(-age)
+		angle := Md.CalcAngle(pulseTime)
+		t.Logf("Age: %v, Ring: %d, Angle: %.1f°",
+			age, Md.CalcRing(pulseTime), angle)
+	}
+}
+
+/// Helpers
+
+func makeQNetWithAmphibrachs(t *testing.T) *Ms.QNet {
+	// Create endpoint with known amphibrachs in TemporalGrouper
+	endpoint := makeEndpoint("TEST", "http://test")
+
+	// Add some D2 pulses directly to the buffer
+	now := time.Now()
+	amphibrach := Ms.PulseEvent{
+		Dimension: 2,
+		Pattern:   Ms.Amphibrach,
+		StartTime: now.Add(-2 * time.Minute), // 2 minutes old
+		Duration:  30 * time.Second,
+		Metric:    []string{"CPU1"},
+	}
+
+	endpoint.Pulses.Buffer = append(endpoint.Pulses.Buffer, amphibrach)
+
+	return &Ms.QNet{Network: Ms.Endpoints{endpoint}}
+}
+
+func countAmphibrachs(pulses []Md.PulseDataD3) int {
+	count := 0
+	for _, pulse := range pulses {
+		if pulse.Dimension == 2 && pulse.Type == "amphibrach" {
+			count++
+		}
+	}
+	return count
+}
 
 // Create an endpoint with a customizable ID and URL
 // It contains three metrics and a data value for each metric

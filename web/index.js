@@ -28,12 +28,21 @@ let pulseData = [];
 const ws = new WebSocket('ws://localhost:8090/ws')
 
 ws.onmessage = function(event) {
-    const newPulseData = JSON.parse(event.data);
+    const data = JSON.parse(event.data);
+    const amphibrachs = data.filter(d => d.dimension === 2);
+    console.log(`Amphibrachs received: ${amphibrachs.length}`, amphibrachs);
 
-    // Update pulse positions based on real data
-    updatePulsesFromBackend(newPulseData);
+    // Check for stuck angles
+    amphibrachs.forEach(a => {
+        if (a.angle > 300 && a.angle < 360) { // Around 1/6th rotation area
+            console.log("Stuck amphibrach:", a);
+        }
+    });
+
+    updatePulsesFromBackend(data);
 };
 
+/*
 function updatePulsesFromBackend(backendData) {
     // Remove old pulses
     svg.selectAll('.pulse').remove();
@@ -50,6 +59,39 @@ function updatePulsesFromBackend(backendData) {
         .attr('r', d => d.intensity * 2 + 3);
 }
 
+ */
+function updatePulsesFromBackend(backendData) {
+    // Remove old pulses
+    svg.selectAll('.pulse').remove();
+
+    // Filter based on dimension and ring
+    const filteredData = backendData.filter(d => {
+        const dimension = d.Dimension || d.dimension || 1;
+        const ring = d.Ring || d.ring || 0;
+
+        // D1 (iamb/trochee) only on inner ring (ring 0)
+        if (dimension === 1) {
+            return ring === 0;
+        }
+        // D2 (amphibrach) only on middle and outer rings (ring 1, 2)
+        if (dimension === 2) {
+            // return ring === 1 || ring === 2;
+            return ring >= 0;
+        }
+        return false; // Filter out unknown dimensions
+    });
+
+    // Add new pulses from filtered data
+    svg.selectAll('.pulse')
+        .data(filteredData)
+        .enter()
+        .append('circle')
+        .attr('class', d => `pulse pulse-${d.type}`)
+        .attr('cx', d => getPulsePosition(d.ring, d.angle).x)
+        .attr('cy', d => getPulsePosition(d.ring, d.angle).y)
+        .attr('r', d => d.intensity * 2 + 3);
+}
+
 // Draw the concentric circles (time rings)
 svg.selectAll(".time-ring")
     .data(timeRings)
@@ -63,6 +105,19 @@ svg.selectAll(".time-ring")
     .style("stroke", d => d.color)
     .style("stroke-width", d => d.strokeWidth);
 
+timeRings.forEach((ring, ringIndex) => {
+    const markers = [0, 90, 180, 270]; // 12, 3, 6, 9 o'clock
+    markers.forEach(markerAngle => {
+        const pos = getPulsePosition(ringIndex, markerAngle);
+        svg.append("circle")
+            .attr("cx", pos.x)
+            .attr("cy", pos.y)
+            .attr("r", 2)
+            .attr("class", "time-marker")
+            .style("fill", "#666");
+    });
+});
+
 // Add center dot
 svg.append("circle")
     .attr("cx", centerX)
@@ -71,9 +126,20 @@ svg.append("circle")
     .attr("class", "center-dot");
 
 // Function to calculate pulse position
+/*
 function getPulsePosition(ring, angle) {
     const radius = timeRings[ring].radius;
     const radians = angle * (Math.PI / 180);
+    return {
+        x: centerX + Math.cos(radians) * radius,
+        y: centerY + Math.sin(radians) * radius
+    };
+}
+
+ */
+function getPulsePosition(ring, angle) {
+    const radius = timeRings[ring].radius;
+    const radians = (angle - 90) * (Math.PI / 180); // Adjust for D3's coordinate system
     return {
         x: centerX + Math.cos(radians) * radius,
         y: centerY + Math.sin(radians) * radius

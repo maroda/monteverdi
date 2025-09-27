@@ -23,13 +23,15 @@ The TemporalGrouper is the heart of the algorithm that groups things together.
 */
 
 import (
+	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 )
 
 // The Accent is the building block of this tool.
 type Accent struct {
-	Timestamp int64  // Unix timestamp TODO: this should be time.Time
+	Timestamp int64  // Unix timestamp
 	Intensity int    // raw, unweighted accent strength
 	SourceID  string // identifies the source
 }
@@ -59,10 +61,11 @@ type Ictus struct {
 }
 
 type IctusSequence struct {
-	Metric    string
-	Events    []Ictus
-	StartTime time.Time
-	EndTime   time.Time
+	Metric                  string
+	Events                  []Ictus
+	StartTime               time.Time
+	EndTime                 time.Time
+	lastProcessedEventCount int
 }
 
 // These trigrams are read top-down, representing an accent/non-accent sequence
@@ -98,12 +101,26 @@ const (
 )
 
 type PulseEvent struct {
-	Dimension    int
-	Pattern      PulsePattern
-	StartTime    time.Time
-	Duration     time.Duration
-	Metric       []string
-	Significance float64
+	Dimension int
+	Pattern   PulsePattern
+	StartTime time.Time // This is a Primary Key
+	Duration  time.Duration
+	Metric    []string
+	Children  []time.Time // Primary Keys of children (D1 or greater)
+	Parent    time.Time   // Primary Keys of a parent (D2 or greater)
+}
+
+type PulseEvents []PulseEvent
+
+// FindChildren takes the StartTime of the Parent and returns its children
+func (pe *PulseEvents) FindChildren(parentT time.Time) PulseEvents {
+	var children PulseEvents
+	for _, pulse := range *pe {
+		if pulse.Parent.Equal(parentT) {
+			children = append(children, pulse)
+		}
+	}
+	return children
 }
 
 type PulseConfig struct {
@@ -129,10 +146,20 @@ func NewPulseConfig(is, ie, ts, te float64) *PulseConfig {
 // Iamb has no accent followed by an accent,
 // Trochee has an accent followed by no accent.
 func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent {
+	slog.Info("PULSE_DETECTION_INPUT",
+		slog.Int("ictus_events", len(is.Events)),
+		slog.String("metric", is.Metric))
+
 	var pulses []PulseEvent
 
 	// We need at least three events to process
 	if len(is.Events) < 3 {
+		return pulses
+	}
+
+	// Deduplication check
+	lastProcessedCount := len(is.Events) - 1
+	if lastProcessedCount == is.lastProcessedEventCount {
 		return pulses
 	}
 
@@ -143,6 +170,10 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 
 		// Iamb pattern: non-accent → accent transition
 		if !prev.IsAccent && curr.IsAccent {
+			slog.Info("IAMB_DETECTED",
+				slog.String("metric", is.Metric),
+				slog.String("transition", fmt.Sprintf("%v->%v", prev.IsAccent, curr.IsAccent)))
+
 			nonAccentDur := curr.Timestamp.Sub(prev.Timestamp)
 			accentDur := next.Timestamp.Sub(curr.Timestamp)
 
@@ -163,6 +194,10 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 
 		// Trochee pattern: accent → non-accent transition
 		if prev.IsAccent && !curr.IsAccent {
+			slog.Info("TROCHEE_DETECTED",
+				slog.String("metric", is.Metric),
+				slog.String("transition", fmt.Sprintf("%v->%v", prev.IsAccent, curr.IsAccent)))
+
 			accentDur := curr.Timestamp.Sub(prev.Timestamp)
 			nonAccentDur := next.Timestamp.Sub(curr.Timestamp)
 
@@ -178,6 +213,9 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 			})
 		}
 	}
+
+	// Track we've processed this sequence
+	is.lastProcessedEventCount = lastProcessedCount
 
 	return pulses
 }
@@ -249,8 +287,18 @@ type PulseSequence struct {
 
 // DetectConsortPulses takes the pulses in a PulseSequence
 // and creates higher-dimension pulses from lower-dimension ones
-func (ps *PulseSequence) DetectConsortPulses() []PulseEvent {
+func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []PulseEvent {
+	// In DetectConsortPulses, add this at the start:
+	slog.Debug("CONSORT_DETECTION_START",
+		slog.Int("events_count", len(ps.Events)),
+		slog.String("first_pattern", fmt.Sprintf("%v", ps.Events[0].Pattern)),
+		slog.String("second_pattern", fmt.Sprintf("%v", ps.Events[1].Pattern)),
+		slog.String("third_pattern", fmt.Sprintf("%v", ps.Events[2].Pattern)))
+
 	var consort []PulseEvent
+
+	// Track what we've already detected to prevent duplicates
+	detected := make(map[string]bool)
 
 	// Need at least 3 pulses to detect patterns
 	if len(ps.Events) < 3 {
@@ -265,16 +313,51 @@ func (ps *PulseSequence) DetectConsortPulses() []PulseEvent {
 		// Detect Amphibrach: Iamb → Trochee → Iamb
 		// (non-accent→accent) → (accent→non-accent) → (non-accent→accent)
 		if first.Pattern == Iamb && second.Pattern == Trochee && third.Pattern == Iamb {
+			key := fmt.Sprintf("%d_%d_%d",
+				first.StartTime.UnixNano(),
+				second.StartTime.UnixNano(),
+				third.StartTime.UnixNano())
+
+			slog.Debug("AMPHIBRACH_DETECTED",
+				slog.String("key", key),
+				slog.Bool("already_detected", detected[key]))
+
+			if detectedKeys[key] {
+				continue
+			}
+			detected[key] = true
+
+			slog.Debug("PULSE_TIMESTAMPS",
+				slog.String("first_time", first.StartTime.Format("15:04:05.000")),
+				slog.String("second_time", second.StartTime.Format("15:04:05.000")),
+				slog.String("third_time", third.StartTime.Format("15:04:05.000")),
+				slog.String("now", time.Now().Format("15:04:05.000")))
+
+			if first.StartTime.After(second.StartTime) || second.StartTime.After(third.StartTime) {
+				slog.Warn("OUT_OF_ORDER_PULSES",
+					slog.String("first", first.StartTime.Format("15:04:05.000")),
+					slog.String("second", second.StartTime.Format("15:04:05.000")),
+					slog.String("third", third.StartTime.Format("15:04:05.000")))
+			}
+
 			newD2Pulse := PulseEvent{
 				Dimension: 2,
 				Pattern:   Amphibrach,
 				StartTime: first.StartTime,
 				Duration:  third.StartTime.Add(third.Duration).Sub(first.StartTime),
 				Metric:    first.Metric,
+				Children:  []time.Time{first.StartTime, second.StartTime, third.StartTime},
 			}
+
+			// Update this pulse as the parent for its Children
+			first.Parent = newD2Pulse.StartTime
+			second.Parent = newD2Pulse.StartTime
+			third.Parent = newD2Pulse.StartTime
+
+			// Add the pulse to the consort
 			consort = append(consort, newD2Pulse)
 
-			slog.Info("NEW CONSORT PATTERN", slog.Any("event", newD2Pulse))
+			slog.Debug("NEW CONSORT PATTERN", slog.Any("event", newD2Pulse))
 		}
 
 		// Detect Anapest: Iamb → Iamb → Trochee
@@ -291,11 +374,21 @@ type TemporalGrouper struct {
 	Groups        []*PulseTree
 	PulseSequence *PulseSequence
 	PendingPulses []PulseEvent
+	DetectedKeys  map[string]bool
 }
 
 // AddPulse requires a minimum of three events to create a group
 // This group will be analyzed for patterns
 func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
+	// LOG: When amphibrach enters AddPulse
+	if pulse.Dimension == 2 {
+		slog.Debug("AMPHIBRACH_ADD_START",
+			slog.String("pattern", fmt.Sprintf("%v", pulse.Pattern)),
+			slog.String("start_time", pulse.StartTime.Format("15:04:05.000")),
+			slog.Float64("age_seconds", time.Since(pulse.StartTime).Seconds()),
+			slog.Int("buffer_size_before", len(tg.Buffer)))
+	}
+
 	// Add to current buffer
 	tg.Buffer = append(tg.Buffer, pulse)
 
@@ -311,22 +404,48 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		tg.PulseSequence.Events = append(tg.PulseSequence.Events, pulse)
 		tg.PulseSequence.EndTime = pulse.StartTime
 
-		// Detect D2 patterns only when there are exactly three pulses underneath
-		if len(tg.PulseSequence.Events) >= 3 {
-			consortPulses := tg.PulseSequence.DetectConsortPulses()
+		// Detect D2 patterns when there are exactly three pulses
+		if len(tg.PulseSequence.Events) == 3 {
+			// Get the last 3 events only
+			recentEvents := tg.PulseSequence.Events[len(tg.PulseSequence.Events)-3:]
+
+			// Sort by timestamp before detecting patterns!!!
+			sort.Slice(recentEvents, func(i, j int) bool {
+				return recentEvents[i].StartTime.Before(recentEvents[j].StartTime)
+			})
+
+			// Create temporary sequence with chronologically ordered triplet
+			tempSeq := &PulseSequence{
+				Metric: tg.PulseSequence.Metric,
+				Events: recentEvents,
+			}
+
+			slog.Info("PATTERN_DETECTION_RATE",
+				slog.String("pattern_sequence", fmt.Sprintf("%v->%v->%v",
+					recentEvents[0].Pattern, recentEvents[1].Pattern, recentEvents[2].Pattern)),
+				slog.Int("buffer_size", len(tg.Buffer)))
+
+			consortPulses := tempSeq.DetectConsortPulses(tg.DetectedKeys)
 			for _, consortPulse := range consortPulses {
 				tg.PendingPulses = append(tg.PendingPulses, consortPulse)
 				slog.Debug("Adding consort")
 			}
 
-			// Sliding window: 3 D1 pulses,
-			// chop off the one just processed that is
-			// held in tg.PulseSequence.Events[0]
-			if len(tg.PulseSequence.Events) > 3 {
-				tg.PulseSequence.Events = tg.PulseSequence.Events[1:]
+			d1Count, d2Count := 0, 0
+			for _, p := range tg.Buffer {
+				if p.Dimension == 1 {
+					d1Count++
+				} else {
+					d2Count++
+				}
 			}
-		}
+			slog.Info("DIMENSION_COUNTS", slog.Int("d1", d1Count), slog.Int("d2", d2Count))
 
+			// Sliding window: reset to empty after processing
+			slog.Debug("SEQUENCE_BEFORE_WINDOW", slog.Any("events", tg.PulseSequence.Events))
+			tg.PulseSequence.Events = []PulseEvent{} // Clear the sequence
+			slog.Debug("SEQUENCE_AFTER_WINDOW", slog.Any("events", tg.PulseSequence.Events))
+		}
 	}
 
 	// Process any queued D2 pulses
@@ -334,12 +453,56 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		pending := tg.PendingPulses[0]
 		tg.PendingPulses = tg.PendingPulses[1:]
 		tg.Buffer = append(tg.Buffer, pending)
-		slog.Debug("Processed pending pulse")
+
+		// LOG: When amphibrach is processed from pending
+		if pending.Dimension == 2 {
+			slog.Debug("AMPHIBRACH_PENDING_PROCESSED",
+				slog.Float64("age_seconds", time.Since(pending.StartTime).Seconds()))
+		}
+	}
+
+	// In the "LOG: Before trimming" section, replace with:
+	amphibrachCount := 0
+	oldAmphibrachs := 0
+	for _, p := range tg.Buffer {
+		if p.Dimension == 2 {
+			age := time.Since(p.StartTime).Seconds()
+			amphibrachCount++
+			if age > 60 {
+				oldAmphibrachs++
+			}
+			// Log specific problematic ages
+			if age > 40 && age < 50 {
+				slog.Debug("AMPHIBRACH_45SEC_RANGE",
+					slog.Float64("age_seconds", age),
+					slog.String("start_time", p.StartTime.Format("15:04:05.000")))
+			}
+		}
 	}
 
 	// Remove pulses outside the window
-	limiter := time.Now().Add(-tg.WindowSize)
+	// NB: /tg.WindowSize is a data retention and analysis window
+	// and the following is a memory management window
+	removalWindow := 60 * time.Second
+	limiter := time.Now().Add(-removalWindow)
+
+	slog.Debug("AMPHIBRACH_BEFORE_TRIM",
+		slog.Int("count", amphibrachCount),
+		slog.Int("old_count_60s+", oldAmphibrachs),
+		slog.Duration("window_size", removalWindow))
+
 	tg.TrimBuffer(limiter)
+
+	// LOG: After trimming
+	amphibrachCountAfter := 0
+	for _, p := range tg.Buffer {
+		if p.Dimension == 2 {
+			amphibrachCountAfter++
+		}
+	}
+	slog.Debug("AMPHIBRACH_AFTER_TRIM",
+		slog.Int("count_before", amphibrachCount),
+		slog.Int("count_after", amphibrachCountAfter))
 
 	// Check if buffer has minimum pulses to form a group
 	if len(tg.Buffer) >= 3 {
@@ -399,20 +562,30 @@ func (tg *TemporalGrouper) CreateGroupForPulses(pulses []PulseEvent, dimension i
 }
 
 // TrimBuffer keeps the TG clean and allows for better memory management
+// TODO: Amphibrach trimming is not working
 func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
+	initialCount := len(tg.Buffer)
+
 	// Find first pulse to KEEP (after limit)
 	keepIndex := len(tg.Buffer) // Default: remove all
+	// tg.Buffer is a []PulseEvent
 	for i, pulse := range tg.Buffer {
+		// the pulse.StartTime happens after the limit in the past, it's a keeper
 		if pulse.StartTime.After(limit) {
 			keepIndex = i
 			break
 		}
 	}
 
+	slog.Debug("TRIM_DEBUG",
+		slog.Int("initial_count", initialCount),
+		slog.Int("keep_index", keepIndex),
+		slog.Int("removing", keepIndex),
+		slog.String("limit", limit.Format("15:04:05.000")))
+
 	// Keep only pulses inside the window
 	if keepIndex < len(tg.Buffer) {
-		copy(tg.Buffer, tg.Buffer[keepIndex:])
-		tg.Buffer = tg.Buffer[:len(tg.Buffer)-keepIndex]
+		tg.Buffer = tg.Buffer[keepIndex:] // Keep everything past keepIndex
 	} else {
 		tg.Buffer = tg.Buffer[:0] // Clear all
 	}

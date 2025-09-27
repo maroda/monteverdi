@@ -389,7 +389,7 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 			m := ep.Metric[0]
 			for i := 0; i < ep.Layer[m].MaxSize; i++ {
 				ep.AddSecondWithCheck(m, true)
-				testrunes = append(testrunes, '▁')
+				testrunes = append(testrunes, '█')
 			}
 
 			got := ep.GetDisplay(ep.Metric[0])

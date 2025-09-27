@@ -204,12 +204,11 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 			Metric: testMetric,
 			Events: []Ms.PulseEvent{
 				{
-					Dimension:    1,
-					Pattern:      1,
-					StartTime:    time.Time{},
-					Duration:     1,
-					Metric:       []string{testMetric},
-					Significance: 0,
+					Dimension: 1,
+					Pattern:   1,
+					StartTime: time.Time{},
+					Duration:  1,
+					Metric:    []string{testMetric},
 				},
 			},
 			StartTime: time.Time{},
@@ -473,12 +472,11 @@ func TestTemporalGrouper_ProcessPendingPulses(t *testing.T) {
 	// One PulseEvent goes into pendingPulses
 	pendingPulses := []Ms.PulseEvent{
 		{
-			Dimension:    1,
-			Pattern:      0,
-			StartTime:    time.Now(),
-			Duration:     1 * time.Second,
-			Metric:       []string{testMetric},
-			Significance: 0,
+			Dimension: 1,
+			Pattern:   0,
+			StartTime: time.Now(),
+			Duration:  1 * time.Second,
+			Metric:    []string{testMetric},
 		},
 	}
 	tg.PendingPulses = pendingPulses
@@ -486,6 +484,90 @@ func TestTemporalGrouper_ProcessPendingPulses(t *testing.T) {
 	// Process should add the PulseEvent to the Buffer
 	tg.ProcessPendingPulses()
 	reflect.DeepEqual(tg.Buffer[0], pendingPulses[0])
+}
+
+func TestPulseEvents_FindChildren(t *testing.T) {
+	now := time.Now()
+
+	// Create parent amphibrach
+	parentTime := now.Add(-10 * time.Second)
+
+	// Create test data structure
+	pulses := Ms.PulseEvents{
+		// D1 children that belong to the parent
+		{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-15 * time.Second),
+			Parent:    parentTime, // Points to parent
+		},
+		{
+			Dimension: 1,
+			Pattern:   Ms.Trochee,
+			StartTime: now.Add(-12 * time.Second),
+			Parent:    parentTime, // Points to parent
+		},
+		{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-8 * time.Second),
+			Parent:    parentTime, // Points to parent
+		},
+		// D2 parent amphibrach
+		{
+			Dimension: 2,
+			Pattern:   Ms.Amphibrach,
+			StartTime: parentTime,
+			Parent:    time.Time{}, // Zero value = no parent
+		},
+		// Unrelated D1 pulse (different parent)
+		{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-5 * time.Second),
+			Parent:    now, // Different parent
+		},
+	}
+
+	t.Run("Returns correct children", func(t *testing.T) {
+		children := pulses.FindChildren(parentTime)
+
+		want := 3
+		got := len(children)
+		assertInt(t, got, want)
+	})
+
+	t.Run("Returns empty for non-existent parent", func(t *testing.T) {
+		nonExistentParent := now.Add(-100 * time.Second)
+		children := pulses.FindChildren(nonExistentParent)
+
+		want := 0
+		got := len(children)
+		assertInt(t, got, want)
+	})
+}
+
+func TestAmphibrachTrimming(t *testing.T) {
+	now := time.Now()
+	tg := &Ms.TemporalGrouper{
+		WindowSize: 60 * time.Second,
+		Buffer: []Ms.PulseEvent{
+			{
+				Dimension: 2,
+				Pattern:   Ms.Amphibrach,
+				StartTime: now.Add(-45 * time.Second), // 45 seconds old
+				Metric:    []string{"CPU1"},
+			},
+		},
+	}
+
+	// This should NOT remove the 45-second-old amphibrach
+	limit := now.Add(-60 * time.Second)
+	tg.TrimBuffer(limit)
+
+	if len(tg.Buffer) == 0 {
+		t.Error("45-second-old amphibrach was incorrectly trimmed")
+	}
 }
 
 /// Helpers
