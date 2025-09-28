@@ -1,8 +1,8 @@
 // index.js - Simple D3.js example with circles
 
-// Set up dimensions
-const width = 800;
-const height = 800;
+// Set up dimensions: this is the gray #chart area
+const width = 500;
+const height = 500;
 
 // Create the SVG element
 const svg = d3.select("#chart")
@@ -43,6 +43,18 @@ ws.onmessage = function(event) {
     updatePulsesFromBackend(data);
 };
 
+// Add this after the WebSocket setup
+fetch('/api/version')
+    .then(r => r.json())
+    .then(data => {
+        d3.select('h1').append('span')
+            .style('font-size', '0.5em')
+            .style('color', '#888')
+            .style('margin-left', '10px')
+            .text(`${data.version}`);
+    })
+    .catch(err => console.log('Version fetch failed:', err));
+
 function updatePulsesFromBackend(backendData) {
     // Filter data
     const filteredData = backendData.filter(d => {
@@ -51,16 +63,9 @@ function updatePulsesFromBackend(backendData) {
         return (dimension === 1 && ring === 0) || (dimension === 2 && ring >= 1);
     });
 
-    // console.log('Filtered data count:', filteredData.length);
-
-    //if (filteredData.length > 0) {
-        // console.log('First item structure:', filteredData[0]);
-    //}
-
     // Simple data join with good keys
     const pulses = svg.selectAll('.pulse')
-        //.data(filteredData, d => `${d.metric}-${d.startTime || Date.now()}`);
-        .data(filteredData, d => `${d.metric}-${d.startTime}-${d.dimension}`)
+        .data(filteredData, d => `${d.metric}-${d.startTime}-${d.dimension}`);
 
     // Remove dots that are no longer in data
     pulses.exit().remove();
@@ -71,7 +76,7 @@ function updatePulsesFromBackend(backendData) {
         .attr('class', d => `pulse pulse-${d.type}`)
         .attr('cx', d => getPulsePosition(d.ring, d.angle, d.metric).x)
         .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y)
-        .attr('r', d => (d.intensity || 0.5) * 2 + 3);
+        .attr('r', d => (d.intensity || 0.5) * 3 + 1);
 
     // Update positions for existing dots
     pulses
@@ -90,7 +95,7 @@ function updateRingStructure() {
 
     timeRings = [];
     const baseRadius = 60;
-    const ringSpacing = 15;
+    const ringSpacing = 12;
 
     // Ring 0 (inner) - one sub-ring per metric
     metrics.forEach((metric, index) => {
@@ -138,10 +143,9 @@ function redrawRings() {
     // Remove existing rings
     svg.selectAll('.time-ring').remove();
     svg.selectAll('.ring-label').remove();
+    svg.selectAll('.hover-label').remove();
 
-    // console.log('Drawing', timeRings.length, 'rings');
-
-    // Draw new rings
+    // Draw new rings with hover
     svg.selectAll('.time-ring')
         .data(timeRings)
         .enter()
@@ -151,8 +155,37 @@ function redrawRings() {
         .attr('cy', centerY)
         .attr('r', d => d.radius)
         .style('fill', 'none')
-        .style('stroke', '#ddd')
-        .style('stroke-width', 1);
+        .style('stroke', '#555')
+        .style('stroke-width', 1)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            showHoverLabel(d.metric);
+            d3.select(this).style('stroke', '#888').style('stroke-width', 2);
+        })
+        .on('mouseout', function(event, d) {
+            hideHoverLabel();
+            d3.select(this).style('stroke', '#555').style('stroke-width', 1);
+        });
+}
+
+function showHoverLabel(metricName) {
+    // Remove existing label
+    svg.selectAll('.hover-label').remove();
+
+    // Add new label at bottom center
+    svg.append('text')
+        .attr('class', 'hover-label')
+        .attr('x', centerX)
+        .attr('y', height - 20)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '14px')
+        .style('fill', '#fff')
+        .style('background', '#333')
+        .text(metricName);
+}
+
+function hideHoverLabel() {
+    svg.selectAll('.hover-label').remove();
 }
 
 // Add center dot immediately
@@ -161,6 +194,6 @@ svg.append("circle")
     .attr("cy", centerY)
     .attr("r", 4)
     .attr("class", "center-dot")
-    .style("fill", "#333");
+    .style("fill", "#ccc");
 
 console.log('JavaScript loaded, waiting for WebSocket data...');

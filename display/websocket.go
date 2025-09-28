@@ -1,6 +1,7 @@
 package monteverdi
 
 import (
+	"encoding/json"
 	"log/slog"
 	"math"
 	"net/http"
@@ -252,6 +253,7 @@ func (v *View) setupMux() *mux.Router {
 
 	r.Handle("/metrics", v.stats.Handler())
 	r.HandleFunc("/ws", v.websocketHandler)
+	r.HandleFunc("/api/version", v.versionHandler) // Add this line
 
 	// Static files for D3 frontend
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
@@ -260,4 +262,11 @@ func (v *View) setupMux() *mux.Router {
 	api.Use(v.statsMiddleware)
 
 	return r
+}
+
+var Version = "dev"
+
+func (v *View) versionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"version": Version})
 }

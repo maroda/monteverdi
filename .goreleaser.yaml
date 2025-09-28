@@ -14,6 +14,8 @@ builds:
       - linux
       - windows
       - darwin
+    ldflags:
+      - -X github.com/maroda/monteverdi/display.Version={{.Version}}
 
 archives:
   - formats: [tar.gz]

@@ -403,7 +403,7 @@ func (v *View) drawHarmonyViewMulti() {
 								mdata := v.QNet.Network[ni].Mdata[dm]
 								label := fmt.Sprintf("... %s ...", dm) // The Metric
 								data := fmt.Sprintf("%d", mdata)       // The raw data
-								v.drawText(62, yTS, width, yTS, data)
+								v.drawText(2, yTS, width, yTS, data)
 								v.drawText(4, height-2, width, height-2, label)
 							}
 						}
