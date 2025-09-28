@@ -3,42 +3,41 @@
 // Set up dimensions
 const width = 800;
 const height = 800;
-const margin = { top: 20, right: 20, bottom: 20, left: 20 };
 
 // Create the SVG element
 const svg = d3.select("#chart")
     .attr("width", width)
     .attr("height", height);
 
-// Radar setup - concentric circles for different time scales
+// Radar setup
 const centerX = width / 2;
 const centerY = height / 2;
 
-// Define our concentric circles (time scales)
-const timeRings = [
-    { radius: 120, label: "Last 60 seconds", strokeWidth: 2, color: "#ddd" },
-    { radius: 180, label: "Last 10 minutes", strokeWidth: 1.5, color: "#bbb" },
-    { radius: 240, label: "Last hour", strokeWidth: 1, color: "#999" }
-];
-
-// Pulse data
-let pulseData = [];
+// Display rings
+let timeRings = [];
+let knownMetrics = new Set();
+let initialized = false;
 
 // WebSocket connection
 const ws = new WebSocket('ws://localhost:8090/ws')
 
 ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
+    console.log('Received data, length:', data.length);
 
-    // Log raw data before any processing
-    const amphibrachs = data.filter(d => d.type === 'amphibrach');
-    if (amphibrachs.length > 0) {
-        console.log('Raw amphibrach data from WebSocket:', amphibrachs.map(a => ({
-            ring: a.ring,
-            Ring: a.Ring,  // Check both cases
-            angle: a.angle,
-            type: a.type
-        })));
+    // Discover metrics dynamically
+    const oldSize = knownMetrics.size;
+    data.forEach(d => {
+        if (d.metric) {
+            knownMetrics.add(d.metric);
+        }
+    });
+
+    // Only rebuild rings if we found new metrics
+    if (knownMetrics.size > oldSize || !initialized) {
+        // console.log('Rebuilding rings, metrics:', Array.from(knownMetrics));
+        updateRingStructure();
+        initialized = true;
     }
 
     updatePulsesFromBackend(data);
@@ -47,94 +46,121 @@ ws.onmessage = function(event) {
 function updatePulsesFromBackend(backendData) {
     // Filter data
     const filteredData = backendData.filter(d => {
-        const dimension = d.Dimension || d.dimension || 1;
-        const ring = d.Ring || d.ring || 0;
-        return (dimension === 1 && ring === 0) || (dimension === 2 && ring >= 0);
+        const dimension = d.dimension || 1;
+        const ring = d.ring || 0;
+        return (dimension === 1 && ring === 0) || (dimension === 2 && ring >= 1);
     });
+
+    // console.log('Filtered data count:', filteredData.length);
+
+    //if (filteredData.length > 0) {
+        // console.log('First item structure:', filteredData[0]);
+    //}
 
     // Simple data join with good keys
     const pulses = svg.selectAll('.pulse')
-        // .data(filteredData, d => `${d.metric}-${d.type}-${d.ring}`);
-        .data(filteredData, d => `${d.metric}-${d.startTime}`)
+        //.data(filteredData, d => `${d.metric}-${d.startTime || Date.now()}`);
+        .data(filteredData, d => `${d.metric}-${d.startTime}-${d.dimension}`)
 
     // Remove dots that are no longer in data
     pulses.exit().remove();
-
-    console.log('Filtered data count:', filteredData.length);
-    console.log('Sample filtered data:', filteredData.slice(0, 3));
 
     // Add new dots
     pulses.enter()
         .append('circle')
         .attr('class', d => `pulse pulse-${d.type}`)
-        .attr('cx', d => getPulsePosition(d.ring, d.angle).x)
-        .attr('cy', d => getPulsePosition(d.ring, d.angle).y)
-        .attr('r', d => d.intensity * 2 + 3);
+        .attr('cx', d => getPulsePosition(d.ring, d.angle, d.metric).x)
+        .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y)
+        .attr('r', d => (d.intensity || 0.5) * 2 + 3);
 
     // Update positions for existing dots
     pulses
-        .attr('cx', d => getPulsePosition(d.ring, d.angle).x)
-        .attr('cy', d => getPulsePosition(d.ring, d.angle).y);
+        .attr('cx', d => getPulsePosition(d.ring, d.angle, d.metric).x)
+        .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y);
 }
 
-// Draw the concentric circles (time rings)
-svg.selectAll(".time-ring")
-    .data(timeRings)
-    .enter()
-    .append("circle")
-    .attr("class", "time-ring")
-    .attr("cx", centerX)
-    .attr("cy", centerY)
-    .attr("r", d => d.radius)
-    .style("fill", "none")
-    .style("stroke", d => d.color)
-    .style("stroke-width", d => d.strokeWidth);
+function updateRingStructure() {
+    const metrics = Array.from(knownMetrics).sort();
+    // console.log('Building rings for metrics:', metrics);
 
-timeRings.forEach((ring, ringIndex) => {
-    const markers = [0, 90, 180, 270]; // 12, 3, 6, 9 o'clock
-    markers.forEach(markerAngle => {
-        const pos = getPulsePosition(ringIndex, markerAngle);
-        svg.append("circle")
-            .attr("cx", pos.x)
-            .attr("cy", pos.y)
-            .attr("r", 2)
-            .attr("class", "time-marker")
-            .style("fill", "#666");
+    if (metrics.length === 0) {
+        // console.log('No metrics found, skipping ring creation');
+        return;
+    }
+
+    timeRings = [];
+    const baseRadius = 60;
+    const ringSpacing = 15;
+
+    // Ring 0 (inner) - one sub-ring per metric
+    metrics.forEach((metric, index) => {
+        timeRings.push({
+            radius: baseRadius + (index * ringSpacing),
+            label: `${metric.substring(0, 20)}... (60s)`,
+            ring: 0,
+            metric: metric,
+            metricIndex: index
+        });
     });
-});
 
-// Add center dot
-svg.append("circle")
-    .attr("cx", centerX)
-    .attr("cy", centerY)
-    .attr("r", 4)
-    .attr("class", "center-dot");
+    // Ring 1 (middle) - one sub-ring per metric
+    metrics.forEach((metric, index) => {
+        timeRings.push({
+            radius: baseRadius + (metrics.length * ringSpacing) + 20 + (index * ringSpacing),
+            label: `${metric.substring(0, 20)}... (10m)`,
+            ring: 1,
+            metric: metric,
+            metricIndex: index
+        });
+    });
 
-function getPulsePosition(ring, angle) {
-    const radius = timeRings[ring].radius;
-    const radians = (angle - 90) * (Math.PI / 180); // Adjust for D3's coordinate system
+    redrawRings();
+    // console.log(`Created ${timeRings.length} rings`);
+}
+
+function getPulsePosition(ring, angle, metric) {
+    const ringData = timeRings.find(r => r.ring === ring && r.metric === metric);
+
+    if (!ringData) {
+        // console.log(`No ring found for ring:${ring}, metric:${metric}`);
+        return { x: centerX, y: centerY }; // Fallback to center
+    }
+
+    const radius = ringData.radius;
+    const radians = (angle - 90) * (Math.PI / 180);
     return {
         x: centerX + Math.cos(radians) * radius,
         y: centerY + Math.sin(radians) * radius
     };
 }
 
-// Draw pulses
-const pulses = svg.selectAll(".pulse")
-    .data(pulseData)
-    .enter()
-    .append("circle")
-    .attr("class", d => `pulse pulse-${d.type}`)
-    .attr("cx", d => getPulsePosition(d.ring, d.angle).x)
-    .attr("cy", d => getPulsePosition(d.ring, d.angle).y)
-    .attr("r", d => d.intensity * 8 + 3); // Size based on intensity
+function redrawRings() {
+    // Remove existing rings
+    svg.selectAll('.time-ring').remove();
+    svg.selectAll('.ring-label').remove();
 
-// Add ring labels
-svg.selectAll(".ring-label")
-    .data(timeRings)
-    .enter()
-    .append("text")
-    .attr("class", "ring-label")
-    .attr("x", centerX + 10)
-    .attr("y", d => centerY - d.radius - 10)
-    .text(d => d.label);
+    // console.log('Drawing', timeRings.length, 'rings');
+
+    // Draw new rings
+    svg.selectAll('.time-ring')
+        .data(timeRings)
+        .enter()
+        .append('circle')
+        .attr('class', 'time-ring')
+        .attr('cx', centerX)
+        .attr('cy', centerY)
+        .attr('r', d => d.radius)
+        .style('fill', 'none')
+        .style('stroke', '#ddd')
+        .style('stroke-width', 1);
+}
+
+// Add center dot immediately
+svg.append("circle")
+    .attr("cx", centerX)
+    .attr("cy", centerY)
+    .attr("r", 4)
+    .attr("class", "center-dot")
+    .style("fill", "#333");
+
+console.log('JavaScript loaded, waiting for WebSocket data...');

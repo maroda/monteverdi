@@ -12,14 +12,14 @@ import (
 )
 
 type PulseDataD3 struct {
-	Ring      int     `json:"ring"`       // 0=60sec, 1=10min, 2=1hr
-	Angle     float64 `json:"angle"`      // 0-360 degrees
-	Type      string  `json:"type"`       // PulsePattern Types
-	Intensity float64 `json:"intensity"`  // 0.0-1.0
-	Speed     float64 `json:"speed"`      // degrees per frame
-	Metric    string  `json:"metric"`     // Which system metric
-	Dimension int     `json:"dimension"`  // Dimension for viz placement
-	StartTime int64   `json:"start_time"` // StartTime key for the pulse
+	Ring      int     `json:"ring"`      // 0=60sec, 1=10min, 2=1hr
+	Angle     float64 `json:"angle"`     // 0-360 degrees
+	Type      string  `json:"type"`      // PulsePattern Types
+	Intensity float64 `json:"intensity"` // 0.0-1.0
+	Speed     float64 `json:"speed"`     // degrees per frame
+	Metric    string  `json:"metric"`    // Which system metric
+	Dimension int     `json:"dimension"` // Dimension for viz placement
+	StartTime int64   `json:"startTime"` // StartTime key for the pulse
 }
 
 var upgrader = websocket.Upgrader{
@@ -70,15 +70,13 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 		// Lock the Endpoint
 		endpoint.MU.RLock()
 
-		// Process endpoint data
-		for metric, seq := range endpoint.Sequence {
-			if seq != nil && len(seq.Events) > 0 {
-				// Convert IctusSequence to D3 format
-				recent := seq.DetectPulses()
-				for _, pulse := range recent {
+		// Process pulses from TemporalGrouper
+		if endpoint.Pulses != nil {
+			for _, pulse := range endpoint.Pulses.Buffer {
+				for _, metric := range pulse.Metric {
 					d3pulse := PulseDataD3{
-						Ring:      CalcRing(pulse.StartTime),  // Based on age
-						Angle:     CalcAngle(pulse.StartTime), // Time-based position
+						Ring:      CalcRing(pulse.StartTime),
+						Angle:     CalcAngle(pulse.StartTime),
 						Type:      PulsePatternToString(pulse.Pattern),
 						Intensity: CalcIntensity(endpoint),
 						Speed:     v.CalcSpeedForPulse(pulse),
@@ -86,43 +84,20 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 						Dimension: pulse.Dimension,
 						StartTime: pulse.StartTime.UnixNano(),
 					}
-					pulses = append(pulses, d3pulse)
-				}
-			}
-		}
 
-		// Process D2 pulses from TemporalGrouper
-		if endpoint.Pulses != nil {
-			for _, pulse := range endpoint.Pulses.Buffer {
-				if pulse.Dimension == 2 {
-					for _, metric := range pulse.Metric {
-						d3pulse := PulseDataD3{
-							Ring:      CalcRing(pulse.StartTime),
-							Angle:     CalcAngle(pulse.StartTime),
-							Type:      PulsePatternToString(pulse.Pattern),
-							Intensity: CalcIntensity(endpoint),
-							Speed:     v.CalcSpeedForPulse(pulse),
-							Metric:    metric,
-							Dimension: pulse.Dimension,
-						}
-						pulses = append(pulses, d3pulse)
-					}
+					pulses = append(pulses, d3pulse)
+
+					// Debug: Log what we're actually sending
+					slog.Debug("SENDING_PULSE_DATA",
+						slog.Int("dimension", d3pulse.Dimension),
+						slog.Float64("intensity", d3pulse.Intensity),
+						slog.String("metric", d3pulse.Metric))
+
 				}
 			}
 		}
 
 		endpoint.MU.RUnlock()
-	}
-
-	for _, pulse := range pulses {
-		// Debug amphibrachs specifically
-		if pulse.Type == "amphibrach" {
-			slog.Debug("SENDING_AMPHIBRACH_TO_D3",
-				slog.Int("ring", pulse.Ring),
-				slog.Float64("angle", pulse.Angle),
-				slog.String("metric", pulse.Metric),
-				slog.Int("dimension", pulse.Dimension))
-		}
 	}
 
 	return pulses
@@ -178,46 +153,6 @@ func CalcAngle(ps time.Time) float64 {
 
 	return angle
 }
-
-/*
-func CalcAngle(ps time.Time) float64 {
-	now := time.Now()
-	age := now.Sub(ps)
-	ring := CalcRing(ps)
-
-	// Debug amphibrachs specifically
-	if ring == 1 && age.Minutes() > 2 && age.Minutes() < 4 {
-		slog.Info("AMPHIBRACH_ANGLE_DEBUG",
-			slog.Float64("age_minutes", age.Minutes()),
-			slog.Int("ring", ring),
-			slog.Float64("age_in_ring", age.Minutes()-1.0))
-	}
-
-	var angleInWindow float64
-
-	switch ring {
-	case 0:
-		// Inner ring: 60s - full circle
-		angleInWindow = age.Seconds() / 60.0
-	case 1:
-		// Middle ring: 10m - full circle, but start from when it entered this ring
-		ageInRing := age.Minutes() - 1.0 // Subtract the 1 minute it spent in inner ring
-		angleInWindow = ageInRing / 9.0  // 9 minutes remaining in middle ring
-	case 2:
-		// Outer ring: 1h - full circle, starting from when it entered this ring
-		ageInRing := age.Minutes() - 10.0        // Subtract 10 minutes from previous rings
-		angleInWindow = (ageInRing / 60.0) / 1.0 // Convert to hours for the 1-hour rotation
-	default:
-		return 0
-	}
-
-	// Start at 12 o'clock (270°) and rotate clockwise
-	angle := 270.0 - (angleInWindow * 360.0)
-
-	// Normalize to 0-360 range
-	return math.Mod(angle+360.0, 360.0)
-}
-*/
 
 // CalcIntensity returns an intensity float
 // ps = pulse start

@@ -185,6 +185,49 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 	testMetric := "CPU1"
 
+	t.Run("Returns empty slice with an empty sequence", func(t *testing.T) {
+		pulseSequence := &Ms.PulseSequence{
+			Metric:    testMetric,
+			Events:    []Ms.PulseEvent{},
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
+
+		detectedKeys := make(map[string]bool)
+		got := pulseSequence.DetectConsortPulses(detectedKeys)
+		if len(got) != 0 {
+			t.Errorf("Expected empty slice, got: %v", got)
+		}
+	})
+
+	t.Run("Returns empty slice with only one sequence", func(t *testing.T) {
+		pulseSequence := &Ms.PulseSequence{
+			Metric: testMetric,
+			Events: []Ms.PulseEvent{
+				{
+					Dimension: 1,
+					Pattern:   1,
+					StartTime: time.Time{},
+					Duration:  1,
+					Metric:    []string{testMetric},
+				},
+			},
+			StartTime: time.Time{},
+			EndTime:   time.Time{},
+		}
+
+		detectedKeys := make(map[string]bool)
+		got := pulseSequence.DetectConsortPulses(detectedKeys)
+		if len(got) != 0 {
+			t.Errorf("Expected empty slice, got: %v", got)
+		}
+	})
+}
+
+/*
+func TestPulseSequence_DetectConsortPulses(t *testing.T) {
+	testMetric := "CPU1"
+
 	t.Run("Returns nil with an empty sequence", func(t *testing.T) {
 		pulseSequence := &Ms.PulseSequence{
 			Metric:    testMetric,
@@ -193,7 +236,8 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 			EndTime:   time.Time{},
 		}
 
-		got := pulseSequence.DetectConsortPulses()
+		detectedKeys := make(map[string]bool)
+		got := pulseSequence.DetectConsortPulses(detectedKeys)
 		if got != nil {
 			t.Errorf("Expected nil, got: %v", got)
 		}
@@ -215,12 +259,14 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 			EndTime:   time.Time{},
 		}
 
-		got := pulseSequence.DetectConsortPulses()
+		detectedKeys := make(map[string]bool)
+		got := pulseSequence.DetectConsortPulses(detectedKeys)
 		if got != nil {
 			t.Errorf("Expected nil, got: %v", got)
 		}
 	})
 }
+*/
 
 func TestPulseSequence_TrimOldPulses(t *testing.T) {
 	tg := &Ms.TemporalGrouper{

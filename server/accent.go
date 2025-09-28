@@ -288,7 +288,11 @@ type PulseSequence struct {
 // DetectConsortPulses takes the pulses in a PulseSequence
 // and creates higher-dimension pulses from lower-dimension ones
 func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []PulseEvent {
-	// In DetectConsortPulses, add this at the start:
+	// Need at least 3 pulses to detect patterns
+	if ps == nil || ps.Events == nil || len(ps.Events) < 3 {
+		return []PulseEvent{}
+	}
+
 	slog.Debug("CONSORT_DETECTION_START",
 		slog.Int("events_count", len(ps.Events)),
 		slog.String("first_pattern", fmt.Sprintf("%v", ps.Events[0].Pattern)),
@@ -299,11 +303,6 @@ func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Pul
 
 	// Track what we've already detected to prevent duplicates
 	detected := make(map[string]bool)
-
-	// Need at least 3 pulses to detect patterns
-	if len(ps.Events) < 3 {
-		return consort
-	}
 
 	for i := 0; i < len(ps.Events)-2; i++ {
 		first := ps.Events[i]
