@@ -146,7 +146,7 @@ func NewPulseConfig(is, ie, ts, te float64) *PulseConfig {
 // Iamb has no accent followed by an accent,
 // Trochee has an accent followed by no accent.
 func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent {
-	slog.Info("PULSE_DETECTION_INPUT",
+	slog.Debug("PULSE_DETECTION_INPUT",
 		slog.Int("ictus_events", len(is.Events)),
 		slog.String("metric", is.Metric))
 
@@ -170,7 +170,7 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 
 		// Iamb pattern: non-accent → accent transition
 		if !prev.IsAccent && curr.IsAccent {
-			slog.Info("IAMB_DETECTED",
+			slog.Debug("IAMB_DETECTED",
 				slog.String("metric", is.Metric),
 				slog.String("transition", fmt.Sprintf("%v->%v", prev.IsAccent, curr.IsAccent)))
 
@@ -194,7 +194,7 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 
 		// Trochee pattern: accent → non-accent transition
 		if prev.IsAccent && !curr.IsAccent {
-			slog.Info("TROCHEE_DETECTED",
+			slog.Debug("TROCHEE_DETECTED",
 				slog.String("metric", is.Metric),
 				slog.String("transition", fmt.Sprintf("%v->%v", prev.IsAccent, curr.IsAccent)))
 
@@ -420,7 +420,7 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 				Events: recentEvents,
 			}
 
-			slog.Info("PATTERN_DETECTION_RATE",
+			slog.Debug("PATTERN_DETECTION_RATE",
 				slog.String("pattern_sequence", fmt.Sprintf("%v->%v->%v",
 					recentEvents[0].Pattern, recentEvents[1].Pattern, recentEvents[2].Pattern)),
 				slog.Int("buffer_size", len(tg.Buffer)))
@@ -439,7 +439,7 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 					d2Count++
 				}
 			}
-			slog.Info("DIMENSION_COUNTS", slog.Int("d1", d1Count), slog.Int("d2", d2Count))
+			slog.Debug("DIMENSION_COUNTS", slog.Int("d1", d1Count), slog.Int("d2", d2Count))
 
 			// Sliding window: reset to empty after processing
 			slog.Debug("SEQUENCE_BEFORE_WINDOW", slog.Any("events", tg.PulseSequence.Events))
@@ -483,7 +483,8 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 	// Remove pulses outside the window
 	// NB: /tg.WindowSize is a data retention and analysis window
 	// and the following is a memory management window
-	removalWindow := 60 * time.Second
+	// This number directly affects how long pulses can be displayed
+	removalWindow := 600 * time.Second
 	limiter := time.Now().Add(-removalWindow)
 
 	slog.Debug("AMPHIBRACH_BEFORE_TRIM",

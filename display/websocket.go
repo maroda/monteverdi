@@ -12,13 +12,14 @@ import (
 )
 
 type PulseDataD3 struct {
-	Ring      int     `json:"ring"`      // 0=60sec, 1=10min, 2=1hr
-	Angle     float64 `json:"angle"`     // 0-360 degrees
-	Type      string  `json:"type"`      // "iamb" or "trochee"
-	Intensity float64 `json:"intensity"` // 0.0-1.0
-	Speed     float64 `json:"speed"`     // degrees per frame
-	Metric    string  `json:"metric"`    // Which system metric
-	Dimension int     `json:"dimension"` // Dimension for viz placement
+	Ring      int     `json:"ring"`       // 0=60sec, 1=10min, 2=1hr
+	Angle     float64 `json:"angle"`      // 0-360 degrees
+	Type      string  `json:"type"`       // PulsePattern Types
+	Intensity float64 `json:"intensity"`  // 0.0-1.0
+	Speed     float64 `json:"speed"`      // degrees per frame
+	Metric    string  `json:"metric"`     // Which system metric
+	Dimension int     `json:"dimension"`  // Dimension for viz placement
+	StartTime int64   `json:"start_time"` // StartTime key for the pulse
 }
 
 var upgrader = websocket.Upgrader{
@@ -83,6 +84,7 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 						Speed:     v.CalcSpeedForPulse(pulse),
 						Metric:    metric,
 						Dimension: pulse.Dimension,
+						StartTime: pulse.StartTime.UnixNano(),
 					}
 					pulses = append(pulses, d3pulse)
 				}
@@ -111,6 +113,18 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 
 		endpoint.MU.RUnlock()
 	}
+
+	for _, pulse := range pulses {
+		// Debug amphibrachs specifically
+		if pulse.Type == "amphibrach" {
+			slog.Debug("SENDING_AMPHIBRACH_TO_D3",
+				slog.Int("ring", pulse.Ring),
+				slog.Float64("angle", pulse.Angle),
+				slog.String("metric", pulse.Metric),
+				slog.Int("dimension", pulse.Dimension))
+		}
+	}
+
 	return pulses
 }
 
@@ -140,6 +154,49 @@ func CalcAngle(ps time.Time) float64 {
 
 	switch ring {
 	case 0:
+		angleInWindow = age.Seconds() / 60.0
+	case 1:
+		ageInRing := age.Minutes() - 1.0
+		angleInWindow = ageInRing / 9.0
+	case 2:
+		ageInRing := age.Minutes() - 10.0
+		angleInWindow = (ageInRing / 60.0) / 1.0
+	default:
+		return 0
+	}
+
+	// Start at 12 o'clock (270°) and rotate clockwise
+	angle := 270.0 - (angleInWindow * 360.0)
+
+	// Fix the wrapping - ensure result is always 0-360
+	for angle < 0 {
+		angle += 360.0
+	}
+	for angle >= 360 {
+		angle -= 360.0
+	}
+
+	return angle
+}
+
+/*
+func CalcAngle(ps time.Time) float64 {
+	now := time.Now()
+	age := now.Sub(ps)
+	ring := CalcRing(ps)
+
+	// Debug amphibrachs specifically
+	if ring == 1 && age.Minutes() > 2 && age.Minutes() < 4 {
+		slog.Info("AMPHIBRACH_ANGLE_DEBUG",
+			slog.Float64("age_minutes", age.Minutes()),
+			slog.Int("ring", ring),
+			slog.Float64("age_in_ring", age.Minutes()-1.0))
+	}
+
+	var angleInWindow float64
+
+	switch ring {
+	case 0:
 		// Inner ring: 60s - full circle
 		angleInWindow = age.Seconds() / 60.0
 	case 1:
@@ -160,6 +217,7 @@ func CalcAngle(ps time.Time) float64 {
 	// Normalize to 0-360 range
 	return math.Mod(angle+360.0, 360.0)
 }
+*/
 
 // CalcIntensity returns an intensity float
 // ps = pulse start
@@ -188,6 +246,7 @@ func CalcIntensity(ep *Ms.Endpoint) float64 {
 func CalcRing(ps time.Time) int {
 	now := time.Now()
 	age := now.Sub(ps)
+	aSec := age.Seconds()
 
 	if age.Seconds() > 59 && age.Seconds() < 61 {
 		slog.Debug("RING_BOUNDARY_CHECK",
@@ -196,15 +255,16 @@ func CalcRing(ps time.Time) int {
 			slog.Bool("less_equal_60", age <= 60*time.Second))
 	}
 
+	// This needs to be one-less than the end for each,
+	// so that pulses aren't put back in the wrong ring
 	switch {
-	case age <= 60*time.Second:
-		return 0 // Inner ring - last 60s
-	case age <= 10*time.Minute:
-		return 1 // Middle ring - last 10m
-	case age <= 60*time.Minute:
-		return 2 // Outer ring - last hour
+	case aSec < 60.0:
+		return 0
+	case aSec < 600.0:
+		return 1
+	case aSec < 3600.0:
+		return 2
 	default:
-		// Pulse is too old, do not display
 		return -1
 	}
 }
@@ -242,9 +302,9 @@ func CalcSpeed(ps time.Time, config SpeedConfig) float64 {
 func (v *View) CalcSpeedForPulse(pe Ms.PulseEvent) float64 {
 	// Default configuration - completely configurable
 	config := SpeedConfig{
-		InnerBase:  2.0,
-		MiddleBase: 1.0,
-		OuterBase:  0.5,
+		InnerBase:  0.3,   // Ring 0: 0.3°/50ms = 6°/s = 60s/rotation
+		MiddleBase: 0.03,  // Ring 1: 0.03°/50ms = 0.6°/s = 600s/rotation
+		OuterBase:  0.005, // Ring 2: 0.005°/50ms = 0.1°/s = 3600s/rotation
 		GlobalBase: 1.0,
 	}
 
