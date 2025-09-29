@@ -7,9 +7,22 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <div id="container">
     <h1>Monteverdi</h1>
-    <svg id="chart"></svg>
+    <div style="position: relative; width: 500px; margin: 0 auto;">
+        <!-- Background SVG with Monteverdi portrait -->
+        <img src="monteverdi-with-mask.webp" width="500" height="500"
+             style="position: absolute;
+             opacity: 0.15;
+             filter: blur(1px);
+             object-fit: cover;
+             object-position: top;
+             pointer-events: none;">
+
+        <!-- Main chart (overlays on top) -->
+        <svg id="chart"></svg>
+    </div>
 </div>
 
 <div id="controls" style="
