@@ -17,6 +17,8 @@ const centerY = height / 2;
 let timeRings = [];
 let knownMetrics = new Set();
 let initialized = false;
+let pulseLengthMultiplier = 0.4;
+let ringSpacing = 12;
 
 // WebSocket connection
 const ws = new WebSocket('ws://localhost:8090/ws')
@@ -43,7 +45,6 @@ ws.onmessage = function(event) {
     updatePulsesFromBackend(data);
 };
 
-// Add this after the WebSocket setup
 fetch('/api/version')
     .then(r => r.json())
     .then(data => {
@@ -55,12 +56,42 @@ fetch('/api/version')
     })
     .catch(err => console.log('Version fetch failed:', err));
 
+document.getElementById('lengthSlider').addEventListener('input', function(event) {
+    pulseLengthMultiplier = parseFloat(event.target.value);
+    document.getElementById('lengthValue').textContent = pulseLengthMultiplier;
+
+    // Redraw with current data
+    if (lastReceivedData.length > 0) {
+        updatePulsesFromBackend(lastReceivedData);
+    }
+});
+
+document.getElementById('spacingSlider').addEventListener('input', function(event) {
+    ringSpacing = parseInt(event.target.value);
+    document.getElementById('spacingValue').textContent = ringSpacing;
+
+    // Rebuild rings with new spacing
+    updateRingStructure();
+
+    // Redraw pulses with current data
+    if (lastReceivedData.length > 0) {
+        updatePulsesFromBackend(lastReceivedData);
+    }
+});
+
 function updatePulsesFromBackend(backendData) {
+    // Debug amphibrach data
+    const amphibrachs = backendData.filter(d => d.type === 'amphibrach');
+    if (amphibrachs.length > 0) {
+        console.log('Amphibrach data:', amphibrachs[0]);
+        console.log('Ring:', amphibrachs[0].ring, 'Angle:', amphibrachs[0].angle);
+    }
+
     // Filter data
     const filteredData = backendData.filter(d => {
         const dimension = d.dimension || 1;
         const ring = d.ring || 0;
-        return (dimension === 1 && ring === 0) || (dimension === 2 && ring >= 1);
+        return (dimension === 1 && ring === 0) || (dimension === 2 && ring === 1);
     });
 
     // Simple data join with good keys
@@ -72,18 +103,51 @@ function updatePulsesFromBackend(backendData) {
 
     // Add new dots
     pulses.enter()
-        .append('circle')
+        .append('ellipse')
         .attr('class', d => `pulse pulse-${d.type}`)
         .attr('cx', d => getPulsePosition(d.ring, d.angle, d.metric).x)
         .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y)
-        /* .attr('r', d => (d.intensity || 0.5) * 3 + 1); */
-        .attr('r', d => Math.pow(d.intensity || 0.5, 0.7) * 3 + 1)
+        .attr('rx', d => calculatePulseLength(d)) // horizontal radius (length)
+        .attr('ry', d => Math.pow(d.intensity || 0.5, 0.7) * 3 + 1) // vertical radius (height)
+        .attr('transform', d => {
+            const pos = getPulsePosition(d.ring, d.angle, d.metric);
+            return `rotate(${d.angle} ${pos.x} ${pos.y})`;
+        })
         .style('opacity', d => 0.2 + (d.intensity || 0.5) * 0.4);
 
     // Update positions for existing dots
     pulses
         .attr('cx', d => getPulsePosition(d.ring, d.angle, d.metric).x)
-        .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y);
+        .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y)
+        .attr('transform', d => {
+            const pos = getPulsePosition(d.ring, d.angle, d.metric);
+            return `rotate(${d.angle} ${pos.x} ${pos.y})`;
+        });
+}
+
+function calculatePulseLength(d) {
+    if (!d.duration) return 4; // default small size
+
+    const durationSeconds = d.duration / 1000000000; // Convert from nanoseconds
+
+    // Get the ring data to find the radius
+    const ringData = timeRings.find(r => r.ring === d.ring && r.metric === d.metric);
+    if (!ringData) return 4;
+
+    const radius = ringData.radius;
+    const circumference = 2 * Math.PI * radius;
+
+    // Calculate what fraction of the ring this duration represents
+    const maxDuration = d.ring === 0 ? 60 : (d.ring === 1 ? 600 : 3600); // seconds for full ring
+    const durationFraction = Math.min(durationSeconds / maxDuration, 0.02); // Cap at 2% of ring
+    // const durationFraction = Math.min(durationSeconds / maxDuration, 0.2); // Cap at 20% of ring
+
+    // Convert to actual arc length on the ring
+    const arcLength = durationFraction * circumference;
+
+    // Scale down a bit so pulses don't touch (multiply by 0.8)
+    // return arcLength * 0.4;
+    return arcLength * pulseLengthMultiplier;
 }
 
 function updateRingStructure() {
@@ -97,7 +161,7 @@ function updateRingStructure() {
 
     timeRings = [];
     const baseRadius = 60;
-    const ringSpacing = 12;
+    // const ringSpacing = 20;
 
     // Ring 0 (inner) - one sub-ring per metric
     metrics.forEach((metric, index) => {
@@ -129,7 +193,7 @@ function getPulsePosition(ring, angle, metric) {
     const ringData = timeRings.find(r => r.ring === ring && r.metric === metric);
 
     if (!ringData) {
-        // console.log(`No ring found for ring:${ring}, metric:${metric}`);
+        console.log(`No ring found for ring:${ring}, metric:${metric}`);
         return { x: centerX, y: centerY }; // Fallback to center
     }
 
@@ -170,7 +234,12 @@ function redrawRings() {
         });
 }
 
+let hoverTimeout;
+
 function showHoverLabel(metricName) {
+    // Clear any existing timeout
+    clearTimeout(hoverTimeout);
+
     // Remove existing label
     svg.selectAll('.hover-label').remove();
 
@@ -182,12 +251,22 @@ function showHoverLabel(metricName) {
         .attr('text-anchor', 'middle')
         .style('font-size', '14px')
         .style('fill', '#fff')
-        .style('background', '#333')
-        .text(metricName);
+        .style('opacity', 0)  // Start invisible
+        .text(metricName)
+        .transition()
+        .duration(200)
+        .style('opacity', 1);  // Fade in
 }
 
 function hideHoverLabel() {
-    svg.selectAll('.hover-label').remove();
+    // svg.selectAll('.hover-label').remove();
+    hoverTimeout = setTimeout(() => {
+        svg.selectAll('.hover-label')
+            .transition()
+            .duration(500)  // Slower fade out
+            .style('opacity', 0)
+            .remove();
+    }, 1000);  // Wait before starting fade
 }
 
 // Add center dot immediately

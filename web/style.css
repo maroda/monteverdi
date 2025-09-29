@@ -93,3 +93,71 @@ h1 {
     font-weight: normal;
     pointer-events: none;
 }
+
+/* UI Elements */
+
+.hover-label {
+    font-family: 'Courier New', monospace !important;
+    font-size: 14px !important;
+    font-weight: lighter !important;
+    fill: #00e676 !important;  /* Bright green */
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8) !important;
+    pointer-events: none;  /* Prevent mouse interference */
+}
+
+label[for="lengthSlider"],
+label[for="spacingSlider"] {
+    font-weight: 800;
+    color: #e85ff8;
+    text-shadow: 1px 1px 2px rgba(30, 30, 30, 0.12);
+    font-size: 12px;
+}
+
+#lengthValue,
+#spacingValue {
+    background: rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #2196f3;
+    font-family: 'Courier New', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-weight: bold;
+    min-width: 30px;
+    display: inline-block;
+    text-align: center;
+}
+
+/* Remove default styling first */
+#lengthSlider, #spacingSlider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #1e1e1e;
+    outline: none;
+    border-radius: 2px;
+}
+
+/* Webkit browsers (Chrome, Safari) */
+#lengthSlider::-webkit-slider-thumb,
+#spacingSlider::-webkit-slider-thumb {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 50% !important;
+    background: #ff7f00 !important;
+    cursor: pointer !important;
+    border: 3px solid #2196f3 !important;
+    box-shadow: 0 2px 4px rgb(232, 95, 248) !important;
+}
+
+/* Firefox */
+#lengthSlider::-moz-range-thumb,
+#spacingSlider::-moz-range-thumb {
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 50% !important;
+    background: #ff7f00 !important;
+    cursor: pointer !important;
+    border: 3px solid #2196f3 !important;
+    box-shadow: 0 2px 4px rgb(232, 95, 248) !important;
+}

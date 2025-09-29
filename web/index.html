@@ -12,6 +12,31 @@
     <svg id="chart"></svg>
 </div>
 
+<div id="controls" style="
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #5fa73b;
+    background: rgba(95,167,59,0.5);
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    backdrop-filter: blur(5px);
+">
+    <label for="lengthSlider">Pulse Length: </label>
+    <input type="range" id="lengthSlider" min="0.1" max="2.0" step="0.1" value="0.4" style="margin: 0 8px;">
+    <span id="lengthValue">0.4</span>
+
+    <!-- span style="margin: 0 15px;">|</span-->
+    <br>
+
+    <label for="spacingSlider">Ring Spacing: </label>
+    <input type="range" id="spacingSlider" min="8" max="30" step="2" value="12" style="margin: 0 8px;">
+    <span id="spacingValue">12</span>
+</div>
+
 <!-- Load D3.js from CDN -->
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="index.js"></script>

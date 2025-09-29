@@ -21,6 +21,7 @@ type PulseDataD3 struct {
 	Metric    string  `json:"metric"`    // Which system metric
 	Dimension int     `json:"dimension"` // Dimension for viz placement
 	StartTime int64   `json:"startTime"` // StartTime key for the pulse
+	Duration  int64   `json:"duration"`  // Pulse Duration
 }
 
 var upgrader = websocket.Upgrader{
@@ -84,6 +85,7 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 						Metric:    metric,
 						Dimension: pulse.Dimension,
 						StartTime: pulse.StartTime.UnixNano(),
+						Duration:  pulse.Duration.Nanoseconds(),
 					}
 
 					pulses = append(pulses, d3pulse)
