@@ -76,7 +76,9 @@ function updatePulsesFromBackend(backendData) {
         .attr('class', d => `pulse pulse-${d.type}`)
         .attr('cx', d => getPulsePosition(d.ring, d.angle, d.metric).x)
         .attr('cy', d => getPulsePosition(d.ring, d.angle, d.metric).y)
-        .attr('r', d => (d.intensity || 0.5) * 3 + 1);
+        /* .attr('r', d => (d.intensity || 0.5) * 3 + 1); */
+        .attr('r', d => Math.pow(d.intensity || 0.5, 0.7) * 3 + 1)
+        .style('opacity', d => 0.2 + (d.intensity || 0.5) * 0.4);
 
     // Update positions for existing dots
     pulses

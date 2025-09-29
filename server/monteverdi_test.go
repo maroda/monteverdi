@@ -384,12 +384,14 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 	}
 
 	t.Run("Retrieves the correct runes for fake data accents", func(t *testing.T) {
-		var testrunes []rune
 		for _, ep := range *eps {
 			m := ep.Metric[0]
+			expectedRune := ep.ValToRuneWithCheckMax(ep.Mdata[m], ep.Maxval[m], true)
+
+			var testrunes []rune
 			for i := 0; i < ep.Layer[m].MaxSize; i++ {
 				ep.AddSecondWithCheck(m, true)
-				testrunes = append(testrunes, '▁')
+				testrunes = append(testrunes, expectedRune)
 			}
 
 			got := ep.GetDisplay(ep.Metric[0])
@@ -687,8 +689,8 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 	})
 }
 
-// These tests assume the default char width of 80
 func TestPulseToPoints_Clamping(t *testing.T) {
+	// These tests assume the default char width of 80
 	ep := &Ms.Endpoint{}
 	now := time.Now()
 
@@ -922,6 +924,64 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 				initialBufferSize, finalBufferSize)
 		}
 	})
+}
+
+func TestMax(t *testing.T) {
+	a1 := 420
+	a2 := 42
+
+	got := Ms.Max(a1, a2)
+	assertInt(t, got, a1)
+
+	get := Ms.Max(a2, a1)
+	assertInt(t, get, a1)
+}
+
+func TestQNet_PulseDetect_SequenceTrimming(t *testing.T) {
+	qn := makeQNet(1)
+	testMetric := "CPU1"
+
+	// Create a sequence with more than maxRecognitionEvents (10)
+	events := make([]Ms.Ictus, 15) // More than the 10 limit
+	for i := 0; i < 15; i++ {
+		events[i] = Ms.Ictus{
+			Timestamp: time.Now().Add(time.Duration(i) * time.Second),
+			IsAccent:  i%2 == 0, // Alternate accent/non-accent
+			Value:     int64(50 + i),
+		}
+	}
+
+	qn.Network[0].Sequence[testMetric] = &Ms.IctusSequence{
+		Metric:                  testMetric,
+		Events:                  events,
+		LastProcessedEventCount: 5, // Set to non-zero to verify reset
+	}
+
+	initialLength := len(qn.Network[0].Sequence[testMetric].Events)
+	initialProcessedCount := qn.Network[0].Sequence[testMetric].LastProcessedEventCount
+
+	// This should trigger the trimming
+	qn.PulseDetect(testMetric, 0)
+
+	// Verify trimming occurred
+	finalLength := len(qn.Network[0].Sequence[testMetric].Events)
+	finalProcessedCount := qn.Network[0].Sequence[testMetric].LastProcessedEventCount
+
+	if initialLength != 15 {
+		t.Errorf("Expected initial length 15, got %d", initialLength)
+	}
+
+	if finalLength != 10 {
+		t.Errorf("Expected trimmed length 10, got %d", finalLength)
+	}
+
+	if finalProcessedCount != 10 {
+		t.Errorf("Expected LastProcessedEventCount at 10, got %d", finalProcessedCount)
+	}
+
+	if initialProcessedCount == 0 {
+		t.Errorf("Test setup issue: initialProcessedCount should have been non-zero")
+	}
 }
 
 // Helpers //

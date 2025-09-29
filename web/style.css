@@ -19,7 +19,7 @@ body {
 
 h1 {
     text-align: center;
-    color: #f0f0f0;
+    color: #5fa73b;
     margin-bottom: 30px;
 }
 
@@ -34,7 +34,8 @@ h1 {
 /* Time ring styles */
 .time-ring {
     stroke: #555;
-    opacity: 0.8;
+    opacity: 0.6;
+    stroke-width: 1;
 }
 
 /* Center dot */
@@ -57,7 +58,7 @@ h1 {
 }
 
 .pulse-amphibrach {
-    fill: #944fa5;           /* Purple for amphibrach */
+    fill: #e85ff8;           /* Purple for amphibrach */
     stroke: none;            /* No border */
     opacity: 0.8;
 }

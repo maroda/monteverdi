@@ -126,6 +126,7 @@ func TestIctusSequence_DetectPulsesWithConfig(t *testing.T) {
 	})
 }
 
+/*
 func TestIctusSequence_DetectPulses(t *testing.T) {
 	qn := makeQNet(2)
 
@@ -181,6 +182,7 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 		}
 	})
 }
+*/
 
 func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 	testMetric := "CPU1"
@@ -616,6 +618,120 @@ func TestAmphibrachTrimming(t *testing.T) {
 	}
 }
 
+func TestIctusSequence_DetectPulsesWithConfig_DeduplicationCheck(t *testing.T) {
+	config := Ms.NewPulseConfig(0.0, 1.0, 0.0, 1.0)
+
+	t.Run("Returns empty when already processed", func(t *testing.T) {
+		ictusSeq := &Ms.IctusSequence{
+			Metric: "CPU1",
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now(), IsAccent: false, Value: 45},
+				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
+				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
+				{Timestamp: time.Now().Add(15 * time.Second), IsAccent: true, Value: 90},
+			},
+			LastProcessedEventCount: 3, // Set to len(Events) - 1
+		}
+
+		// This should trigger the deduplication check and return empty
+		pulses := ictusSeq.DetectPulsesWithConfig(*config)
+
+		if len(pulses) != 0 {
+			t.Errorf("Expected 0 pulses due to deduplication, got %d", len(pulses))
+		}
+
+		// Verify the count wasn't changed
+		if ictusSeq.LastProcessedEventCount != 3 {
+			t.Errorf("Expected LastProcessedEventCount to remain 3, got %d", ictusSeq.LastProcessedEventCount)
+		}
+	})
+
+	t.Run("Processes when not already processed", func(t *testing.T) {
+		ictusSeq := &Ms.IctusSequence{
+			Metric: "CPU1",
+			Events: []Ms.Ictus{
+				{Timestamp: time.Now(), IsAccent: false, Value: 45},
+				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
+				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
+				{Timestamp: time.Now().Add(15 * time.Second), IsAccent: true, Value: 90},
+			},
+			LastProcessedEventCount: 2, // Set to less than len(Events) - 1
+		}
+
+		// This should NOT trigger deduplication and should process
+		pulses := ictusSeq.DetectPulsesWithConfig(*config)
+
+		if len(pulses) == 0 {
+			t.Errorf("Expected pulses to be detected, got 0")
+		}
+	})
+}
+
+func TestPulseSequence_DetectConsortPulses_DetectedKeysCheck(t *testing.T) {
+	testMetric := "CPU1"
+	now := time.Now()
+
+	// Create pulse events that form an Amphibrach pattern
+	first := Ms.PulseEvent{
+		Dimension: 1,
+		Pattern:   Ms.Iamb,
+		StartTime: now,
+		Metric:    []string{testMetric},
+	}
+	second := Ms.PulseEvent{
+		Dimension: 1,
+		Pattern:   Ms.Trochee,
+		StartTime: now.Add(5 * time.Second),
+		Metric:    []string{testMetric},
+	}
+	third := Ms.PulseEvent{
+		Dimension: 1,
+		Pattern:   Ms.Iamb,
+		StartTime: now.Add(10 * time.Second),
+		Metric:    []string{testMetric},
+	}
+
+	pulseSequence := &Ms.PulseSequence{
+		Metric: testMetric,
+		Events: []Ms.PulseEvent{first, second, third},
+	}
+
+	// Create the key that would be generated for this pattern
+	expectedKey := fmt.Sprintf("%d_%d_%d",
+		first.StartTime.UnixNano(),
+		second.StartTime.UnixNano(),
+		third.StartTime.UnixNano())
+
+	t.Run("Skips when key already detected", func(t *testing.T) {
+		// Pre-populate detectedKeys with the expected key
+		detectedKeys := map[string]bool{
+			expectedKey: true,
+		}
+
+		consorts := pulseSequence.DetectConsortPulses(detectedKeys)
+
+		if len(consorts) != 0 {
+			t.Errorf("Expected 0 consorts when key already detected, got %d", len(consorts))
+		}
+	})
+
+	t.Run("Processes when key not detected", func(t *testing.T) {
+		// Empty detectedKeys - key not yet detected
+		detectedKeys := make(map[string]bool)
+
+		consorts := pulseSequence.DetectConsortPulses(detectedKeys)
+
+		if len(consorts) != 1 {
+			t.Errorf("Expected 1 consort when key not detected, got %d", len(consorts))
+		}
+
+		// Verify it's an Amphibrach
+		if len(consorts) > 0 && consorts[0].Pattern != Ms.Amphibrach {
+			t.Errorf("Expected Amphibrach pattern, got %v", consorts[0].Pattern)
+		}
+	})
+}
+
 /// Helpers
 
 func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
@@ -637,5 +753,6 @@ func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
 	}
 
 	// Collect the pulses from the ictus sequence
-	return ictusSeq.DetectPulses(), grouper
+	config := Ms.NewPulseConfig(0.5, 0.5, 0.5, 0.5)
+	return ictusSeq.DetectPulsesWithConfig(*config), grouper
 }

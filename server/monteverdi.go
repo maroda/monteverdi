@@ -427,15 +427,15 @@ func (q *QNet) PulseDetect(m string, i int) {
 	const maxRecognitionEvents = 10
 	if seq != nil && len(seq.Events) > maxRecognitionEvents {
 		seq.Events = seq.Events[len(seq.Events)-maxRecognitionEvents:]
-		seq.lastProcessedEventCount = 0
+		seq.LastProcessedEventCount = 0
 	}
 
 	// This isn't useful until there is at least one IctusPattern present
 	// if seq != nil && len(seq.Events) >= 2 {
-	if seq != nil && len(seq.Events) >= 2 && len(seq.Events) > seq.lastProcessedEventCount {
+	if seq != nil && len(seq.Events) >= 2 && len(seq.Events) > seq.LastProcessedEventCount {
 		// Only process new events, not the entire history
-		newEventCount := len(seq.Events) - seq.lastProcessedEventCount
-		startIdx := seq.lastProcessedEventCount
+		newEventCount := len(seq.Events) - seq.LastProcessedEventCount
+		startIdx := seq.LastProcessedEventCount
 		if startIdx == 0 && len(seq.Events) >= 3 {
 			// First run: process from the beginning but need at least 3 events
 			startIdx = 0
@@ -446,7 +446,7 @@ func (q *QNet) PulseDetect(m string, i int) {
 
 		// Create sequence with only relevant events for pattern detection
 		// Include overlap of 1 for pattern continuity
-		overlapStart := max(0, startIdx-1)
+		overlapStart := Max(0, startIdx-1)
 		relevantEvents := seq.Events[overlapStart:]
 
 		// Convert to IctusSequence format first
@@ -477,11 +477,11 @@ func (q *QNet) PulseDetect(m string, i int) {
 		}
 
 		// Update processed count
-		seq.lastProcessedEventCount = len(seq.Events)
+		seq.LastProcessedEventCount = len(seq.Events)
 	}
 }
 
-func max(a, b int) int {
+func Max(a, b int) int {
 	if a > b {
 		return a
 	}

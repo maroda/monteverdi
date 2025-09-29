@@ -65,7 +65,7 @@ type IctusSequence struct {
 	Events                  []Ictus
 	StartTime               time.Time
 	EndTime                 time.Time
-	lastProcessedEventCount int
+	LastProcessedEventCount int
 }
 
 // These trigrams are read top-down, representing an accent/non-accent sequence
@@ -159,7 +159,7 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 
 	// Deduplication check
 	lastProcessedCount := len(is.Events) - 1
-	if lastProcessedCount == is.lastProcessedEventCount {
+	if lastProcessedCount == is.LastProcessedEventCount {
 		return pulses
 	}
 
@@ -215,7 +215,7 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 	}
 
 	// Track we've processed this sequence
-	is.lastProcessedEventCount = lastProcessedCount
+	is.LastProcessedEventCount = lastProcessedCount
 
 	return pulses
 }
@@ -224,6 +224,8 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 // recognizes two patterns that make up a pulse:
 // Iamb has no accent followed by an accent,
 // Trochee has an accent followed by no accent.
+
+/*
 // TODO: this version of the algorithm is broken
 func (is *IctusSequence) DetectPulses() []PulseEvent {
 	var pulses []PulseEvent
@@ -257,6 +259,7 @@ func (is *IctusSequence) DetectPulses() []PulseEvent {
 	}
 	return pulses
 }
+*/
 
 type PulseTree struct {
 	Dimension int
@@ -332,13 +335,6 @@ func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Pul
 				slog.String("third_time", third.StartTime.Format("15:04:05.000")),
 				slog.String("now", time.Now().Format("15:04:05.000")))
 
-			if first.StartTime.After(second.StartTime) || second.StartTime.After(third.StartTime) {
-				slog.Warn("OUT_OF_ORDER_PULSES",
-					slog.String("first", first.StartTime.Format("15:04:05.000")),
-					slog.String("second", second.StartTime.Format("15:04:05.000")),
-					slog.String("third", third.StartTime.Format("15:04:05.000")))
-			}
-
 			newD2Pulse := PulseEvent{
 				Dimension: 2,
 				Pattern:   Amphibrach,
@@ -379,15 +375,6 @@ type TemporalGrouper struct {
 // AddPulse requires a minimum of three events to create a group
 // This group will be analyzed for patterns
 func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
-	// LOG: When amphibrach enters AddPulse
-	if pulse.Dimension == 2 {
-		slog.Debug("AMPHIBRACH_ADD_START",
-			slog.String("pattern", fmt.Sprintf("%v", pulse.Pattern)),
-			slog.String("start_time", pulse.StartTime.Format("15:04:05.000")),
-			slog.Float64("age_seconds", time.Since(pulse.StartTime).Seconds()),
-			slog.Int("buffer_size_before", len(tg.Buffer)))
-	}
-
 	// Add to current buffer
 	tg.Buffer = append(tg.Buffer, pulse)
 
@@ -460,36 +447,12 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 		}
 	}
 
-	// In the "LOG: Before trimming" section, replace with:
-	amphibrachCount := 0
-	oldAmphibrachs := 0
-	for _, p := range tg.Buffer {
-		if p.Dimension == 2 {
-			age := time.Since(p.StartTime).Seconds()
-			amphibrachCount++
-			if age > 60 {
-				oldAmphibrachs++
-			}
-			// Log specific problematic ages
-			if age > 40 && age < 50 {
-				slog.Debug("AMPHIBRACH_45SEC_RANGE",
-					slog.Float64("age_seconds", age),
-					slog.String("start_time", p.StartTime.Format("15:04:05.000")))
-			}
-		}
-	}
-
 	// Remove pulses outside the window
 	// NB: /tg.WindowSize is a data retention and analysis window
 	// and the following is a memory management window
 	// This number directly affects how long pulses can be displayed
 	removalWindow := 600 * time.Second
 	limiter := time.Now().Add(-removalWindow)
-
-	slog.Debug("AMPHIBRACH_BEFORE_TRIM",
-		slog.Int("count", amphibrachCount),
-		slog.Int("old_count_60s+", oldAmphibrachs),
-		slog.Duration("window_size", removalWindow))
 
 	tg.TrimBuffer(limiter)
 
@@ -500,9 +463,6 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 			amphibrachCountAfter++
 		}
 	}
-	slog.Debug("AMPHIBRACH_AFTER_TRIM",
-		slog.Int("count_before", amphibrachCount),
-		slog.Int("count_after", amphibrachCountAfter))
 
 	// Check if buffer has minimum pulses to form a group
 	if len(tg.Buffer) >= 3 {
