@@ -23,6 +23,12 @@ h1 {
     margin-bottom: 30px;
 }
 
+hr {
+    border: none;
+    border-top: 1px solid #555;
+    margin: 10px 0;
+}
+
 #chart {
     border: 1px solid #555;
     border-radius: 4px;
@@ -40,8 +46,9 @@ h1 {
 
 /* Center dot */
 .center-dot {
-    fill: #fff;
+    fill: #1e1e1e;
     stroke: none;
+    opacity: 0.0;
 }
 
 /* Pulse styles - smaller circles without borders */
@@ -105,6 +112,9 @@ h1 {
     pointer-events: none;  /* Prevent mouse interference */
 }
 
+label[for="ring0Scale"],
+label[for="ring1Scale"],
+label[for="thresholdInput"],
 label[for="lengthSlider"],
 label[for="spacingSlider"] {
     font-weight: 800;
@@ -115,10 +125,11 @@ label[for="spacingSlider"] {
 
 #lengthValue,
 #spacingValue {
-    background: rgba(255,255,255,0.1);
+    background: rgb(45, 45, 45);
     padding: 2px 6px;
     border-radius: 4px;
-    color: #2196f3;
+    color: #00fce7;
+    border: 1px solid #555;
     font-family: 'Courier New', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     font-weight: bold;
     min-width: 30px;
@@ -160,4 +171,61 @@ label[for="spacingSlider"] {
     cursor: pointer !important;
     border: 3px solid #2196f3 !important;
     box-shadow: 0 2px 4px rgb(232, 95, 248) !important;
+}
+
+/* Threshold control styling */
+
+.threshold-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.threshold-control button {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 2px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+
+.threshold-control button:hover {
+    background-color: #4a4a4a;
+    border-color: #777;
+}
+
+.threshold-control button:active {
+    background-color: #2a2a2a;
+}
+
+.threshold-control input[type="number"] {
+    background-color: #2d2d2d;
+    color: #00fce7;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 4px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.threshold-control input[type="number"]:focus {
+    outline: none;
+    border-color: #888;
+    background-color: #3a3a3a;
+}
+
+/* Hide number input spinner arrows */
+.threshold-control input[type="number"]::-webkit-inner-spin-button,
+.threshold-control input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.threshold-control input[type="number"] {
+    -moz-appearance: textfield; /* Firefox */
 }

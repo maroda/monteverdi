@@ -22,6 +22,7 @@ type PulseDataD3 struct {
 	Dimension int     `json:"dimension"` // Dimension for viz placement
 	StartTime int64   `json:"startTime"` // StartTime key for the pulse
 	Duration  int64   `json:"duration"`  // Pulse Duration
+	Endpoint  string  `json:"endpoint"`  // Endpoint ID
 }
 
 var upgrader = websocket.Upgrader{
@@ -51,6 +52,7 @@ func (v *View) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetPulseDataD3 prepares the websocket data payload
 func (v *View) GetPulseDataD3() []PulseDataD3 {
 	// Make sure we're not nil
 	if v.QNet == nil || v.QNet.Network == nil {
@@ -86,6 +88,7 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 						Dimension: pulse.Dimension,
 						StartTime: pulse.StartTime.UnixNano(),
 						Duration:  pulse.Duration.Nanoseconds(),
+						Endpoint:  endpoint.ID,
 					}
 
 					pulses = append(pulses, d3pulse)
@@ -106,6 +109,7 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 	return pulses
 }
 
+// PulsePatternToString returns a string form of the constant.
 func PulsePatternToString(pattern Ms.PulsePattern) string {
 	switch pattern {
 	case Ms.Iamb:
@@ -123,6 +127,7 @@ func PulsePatternToString(pattern Ms.PulsePattern) string {
 	}
 }
 
+// CalcAngle returns the pulse's place along the ring.
 func CalcAngle(ps time.Time) float64 {
 	now := time.Now()
 	age := now.Sub(ps)
@@ -181,6 +186,7 @@ func CalcIntensity(ep *Ms.Endpoint) float64 {
 	return 0.5
 }
 
+// CalcRing returns which ring the pulse belongs based on age
 func CalcRing(ps time.Time) int {
 	now := time.Now()
 	age := now.Sub(ps)
@@ -237,6 +243,7 @@ func CalcSpeed(ps time.Time, config SpeedConfig) float64 {
 	return baseSpeed * config.GlobalBase
 }
 
+// CalcSpeedForPulse is a wrapper for CalcSpeed to provide a configuration
 func (v *View) CalcSpeedForPulse(pe Ms.PulseEvent) float64 {
 	// Default configuration - completely configurable
 	config := SpeedConfig{

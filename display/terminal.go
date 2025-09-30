@@ -46,8 +46,12 @@ type View struct {
 
 // Figure out where to draw the next Timeseries entry on the graph
 func (v *View) calcTimeseriesY(endpointIndex, metricIndex, gutter int) int {
-	metricCount := len(v.QNet.Network[endpointIndex].Metric)
-	return gutter + (endpointIndex * metricCount) + metricIndex
+	// Calculate cumulative offset from all previous endpoints
+	offset := 0
+	for i := 0; i < endpointIndex; i++ {
+		offset += len(v.QNet.Network[i].Metric)
+	}
+	return gutter + offset + metricIndex
 }
 
 ////////// PULSE VIS
@@ -146,8 +150,14 @@ func (v *View) renderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
 }
 
 func (v *View) drawPulseView() {
-	width, _ := v.getScreenSize()
+	width, height := v.getScreenSize()
 	timelineW := width - 2 // room for border drawing
+
+	// Clear screen completely first
+	v.screen.Clear()
+
+	// Redraw borders
+	v.drawViewBorder(width, height)
 
 	// Clear or dim the background first
 	v.drawPulseBackground()

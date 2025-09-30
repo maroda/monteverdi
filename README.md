@@ -12,10 +12,30 @@ Traditional monitoring observes individual component metric in isolation. Montev
 
 ## What it can do now
 
-- **Pulse View is now working!** Pattern recognition can be seen floating by if you hit 'p'.
-- Streams data from multiple endpoints to draw histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
+Streams data from multiple endpoints to draw histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
+
+- The included `config.json` checks Monteverdi's local prometheus metrics only. This means you can try it without needing to have to set up a KV endpoint.
+- The included `example_config.json` shows three endpoints, including the local, but also Netdata and something else I have running locally.
+- Logging is found in `monteverdi.log`.
+
+If you run `monteverdi` in the same directory as the shipped `config.json` you should get some metrics. You may need to fiddle with the max values in the config to trigger accents correctly.
+
+### Web UI
+
+There is now a D3 web UI at <http://localhost:8090> with several visualization features. This "radar view" shows pattern recognition only, no raw data.
+
+Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected.
+
+### Terminal UI
+
+- This is the default view of Monteverdi when it is run in a TTY, parallel with the Web UI.
+- Pattern recognition can be seen in the TUI if you hit 'p' for "pulse view".
 - Draws the accent values in the display as they happen.
 - Graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually). Pulse view shows only the metric name.
+
+### API
+
+In addition to the prometheus `/metrics` endpoint, there is now a `/version` endpoint for programmatically displaying the version in the Web UI.
 
 ### v0.3 demo
 
@@ -23,9 +43,9 @@ Traditional monitoring observes individual component metric in isolation. Montev
 
 ## Feature Requests
 
+- Plugin architecture.
 - Rate support for counters. This will mean some additional config file entries.
 - Automatically reload config. Currently loads on first run.
-- Add a Layer of Hierarchy. Pulses of the pulses.
 - Metrics input. Can read an existing timeseries with KV and extract pulses.
 - Inference. How do we take a history of pulses and define expected behaviors?
 - Monitor. How do we "alert" on pulse diversion?
@@ -45,8 +65,7 @@ The fields are:
 - **delim**: The delimiter used to indicate "key" and "value"
 - **metrics**: Each is defined as: <metric_name>: <data_maxval>, where data_maxval is the "trigger" for this metric (think alert threshold)
 
-Here's an example from my laptop, running both Netdata and Monteverdi's prometheus endpoint simultaneously. I'm retrieving just three per endpoint as the app streams the data (where thousands of metrics appear):
-
+Here's an example from my laptop, running both Netdata and Monteverdi's prometheus endpoint simultaneously, as well as another app running in kubernetes:
 ```json
 [{
   "id": "NETDATA",
@@ -54,25 +73,47 @@ Here's an example from my laptop, running both Netdata and Monteverdi's promethe
   "delim": "=",
   "metrics": {
     "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
-    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 10,
+    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 20,
     "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 100
   }
 },
-  {
-    "id": "PROMETHEUS",
-    "url": "http://localhost:8080/metrics",
-    "delim": " ",
-    "metrics": {
-      "go_memstats_heap_released_bytes": 4000000,
-      "go_memstats_heap_inuse_bytes": 10000000,
-      "go_memstats_next_gc_bytes": 12000000
-    }
-  }]
+{
+  "id": "VERIFICAT",
+  "url": "http://verificat.rainbowq.com/metrics",
+  "delim": " ",
+  "metrics": {
+    "go_memstats_heap_alloc_bytes": 3000000,
+    "go_memstats_heap_inuse_bytes": 6000000,
+    "go_memstats_heap_objects": 10000
+  }
+},
+{
+  "id": "MONTEVERDI_INTERNAL",
+  "url": "http://localhost:8090/metrics",
+  "delim": " ",
+  "metrics": {
+    "go_memstats_heap_alloc_bytes": 10000000,
+    "go_memstats_heap_inuse_bytes": 12000000,
+    "go_goroutines": 18,
+    "go_gc_heap_objects_objects": 44000,
+    "process_resident_memory_bytes": 35000000,
+    "process_open_fds": 18
+  }
+}]
 ```
 
 With that in the same directory, run Monteverdi in the terminal you prefer. Currently its default size is 80x20. :)
 
+Browse to <http://localhost:8090> for the web interface.
+
+### Build Flags
+
+This is done automatically by Goreleaser but if you need to iterate in the terminal, use the following to compile the git tag into the Version:
+```shell
+go build -ldflags "-X github.com/maroda/monteverdi/display.Version=$(git describe --tags --always)"
+```
+
 ## Known bugs
 
-1. The JSON config is quite finnicky, it has not been extensively tested on more than two sources.
+1. The Pulse View in the TUI is drawing weird, covering more space in the terminal than its configuration is supposed to be allowing.
 
