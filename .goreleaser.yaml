@@ -22,8 +22,9 @@ dockers:
     extra_files:
       - config.json
     image_templates:
-      - "ghcr.io/maroda/monteverdi:{{ .Tag }}"
+      - "ghcr.io/maroda/monteverdi"
       - "ghcr.io/maroda/monteverdi:latest"
+      - "ghcr.io/maroda/monteverdi:{{ .Tag }}"
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
