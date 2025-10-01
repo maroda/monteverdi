@@ -17,6 +17,30 @@ builds:
     ldflags:
       - -X github.com/maroda/monteverdi/display.Version={{.Version}}
 
+dockers_v2:
+  - id: monteverdi
+    images:
+      - "ghcr.io/maroda/monteverdi:{{ .Tag }}"
+      - "ghcr.io/maroda/monteverdi:v{{ .Major }}"
+      - "ghcr.io/maroda/monteverdi:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/maroda/monteverdi:latest"
+    tags:
+      - "v{{ .Version }}"
+    extra_files:
+      - config.json
+    labels:
+          "org.opencontainers.image.description": "Monteverdi"
+          "org.opencontainers.image.created": "{{.Date}}"
+          "org.opencontainers.image.name": "{{.ProjectName}}"
+          "org.opencontainers.image.revision": "{{.FullCommit}}"
+          "org.opencontainers.image.version": "{{.Version}}"
+          "org.opencontainers.image.source": "{{.GitURL}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    flags:
+      - -X github.com/maroda/monteverdi/display.Version={{.Version}}
+
 archives:
   - formats: [tar.gz]
     # this name template makes the OS and Arch compatible with the results of `uname`.
