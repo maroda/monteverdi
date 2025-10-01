@@ -19,7 +19,9 @@ builds:
 
 dockers:
   - id: monteverdi
-  - image_templates:
+    extra_files:
+      - config.json
+    image_templates:
       - "ghcr.io/maroda/monteverdi:{{ .Tag }}"
       - "ghcr.io/maroda/monteverdi:latest"
     build_flag_templates:
