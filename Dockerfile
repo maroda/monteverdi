@@ -3,5 +3,5 @@ ARG TARGETPLATFORM
 LABEL app=monteverdi
 LABEL org.opencontainers.image.source=https://github.com/maroda/monteverdi
 ENTRYPOINT ["/monteverdi"]
-COPY $TARGETPLATFORM/config.json /
+COPY config.json /
 COPY $TARGETPLATFORM/monteverdi /
