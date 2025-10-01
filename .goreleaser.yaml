@@ -19,6 +19,7 @@ builds:
 
 dockers:
   - id: monteverdi
+    use: docker
     extra_files:
       - config.json
     image_templates:
