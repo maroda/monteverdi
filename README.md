@@ -22,29 +22,29 @@ If you run `monteverdi` in the same directory as the shipped `config.json` you s
 
 ### Web UI
 
-There is now a D3 web UI at <http://localhost:8090> with several visualization features. This "radar view" shows pattern recognition only, no raw data.
-
-Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected.
-
+- There is a D3 web UI at <http://localhost:8090> with several visualization features. This "radar view" shows pattern recognition only, no raw data.
+- Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected.
+- If no TTY is detected the logging is directed to STDOUT
+ 
 ### Terminal UI
 
 - This is the default view of Monteverdi when it is run in a TTY, parallel with the Web UI.
-- Pattern recognition can be seen in the TUI if you hit 'p' for "pulse view".
+- There is now a `-headless` runtime flag for no TTY (i.e. containers).
 - Draws the accent values in the display as they happen.
-- Graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually). Pulse view shows only the metric name.
+- Graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually).
+- Pattern recognition can be seen in the TUI if you hit 'p' for "pulse view" (but it is buggy, see known issues below).
+- Pulse view shows only the metric name.
 
 ### API
 
-In addition to the prometheus `/metrics` endpoint, there is now a `/version` endpoint for programmatically displaying the version in the Web UI.
-
-### v0.3 demo
-
-[![asciicast](https://asciinema.org/a/741649.svg)](https://asciinema.org/a/741649)
+- In addition to the prometheus `/metrics` endpoint, there is now a `/version` endpoint for programmatically displaying the version in the Web UI.
+- This API starts up regardless of a TUI or Web UI runtime
+- The app should no longer block if Endpoints are unreachable and log the error.
 
 ## Feature Requests
 
-- Plugin architecture.
-- Rate support for counters. This will mean some additional config file entries.
+- [Plugin Architecture](./PLUGINS.md) to support things like rates and non-KV.
+- Better support for Env Vars (config file, logging setup, headless, etc)
 - Automatically reload config. Currently loads on first run.
 - Metrics input. Can read an existing timeseries with KV and extract pulses.
 - Inference. How do we take a history of pulses and define expected behaviors?
@@ -52,57 +52,27 @@ In addition to the prometheus `/metrics` endpoint, there is now a `/version` end
 
 ## How to use
 
-Monteverdi reads any number of metrics from any number of endpoints. In the example below, I have two separate endpoints defined, each with three metrics I'm gathering.
+Monteverdi reads any number of metrics from any number of endpoints.
 
-You will need at least one endpoint that responds with a Key/Value format for metrics. Populate these into a `config.json` in the same directory as running Monteverdi.
+You will need at least one endpoint configured. It should respond with a Key/Value format for metrics (e.g. Netdata, Prometheus). Populate these into a `config.json` in the same directory as running Monteverdi.
 
-> This will work best when using 'gauge' type metrics, where you can define a threshold that an accent is triggered. Support is coming for converting counters to rates.
+> This will work best when using 'gauge' type metrics, where you define a threshold to trigger an accent. Plugin support is coming for converting counters to rates.
 
 The fields are:
 
-- **id**: The unique string ID of the endpoint where you're getting metrics.
-- **url**: The URL of that endpoint
-- **delim**: The delimiter used to indicate "key" and "value"
-- **metrics**: Each is defined as: <metric_name>: <data_maxval>, where data_maxval is the "trigger" for this metric (think alert threshold)
+- **id**: The unique string ID of the endpoint where you're getting metrics. Small is best, it is displayed in the UI.
+- **url**: The URL of that endpoint.
+- **delim**: The delimiter used to indicate "key" and "value".
+- **metrics**: Each is defined as: <metric_name>: <data_maxval>, where data_maxval is the "trigger" for this metric to record an accent.
 
-Here's an example from my laptop, running both Netdata and Monteverdi's prometheus endpoint simultaneously, as well as another app running in kubernetes:
-```json
-[{
-  "id": "NETDATA",
-  "url": "http://localhost:19999/api/v3/allmetrics",
-  "delim": "=",
-  "metrics": {
-    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
-    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 20,
-    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 100
-  }
-},
-{
-  "id": "VERIFICAT",
-  "url": "http://verificat.rainbowq.com/metrics",
-  "delim": " ",
-  "metrics": {
-    "go_memstats_heap_alloc_bytes": 3000000,
-    "go_memstats_heap_inuse_bytes": 6000000,
-    "go_memstats_heap_objects": 10000
-  }
-},
-{
-  "id": "MONTEVERDI_INTERNAL",
-  "url": "http://localhost:8090/metrics",
-  "delim": " ",
-  "metrics": {
-    "go_memstats_heap_alloc_bytes": 10000000,
-    "go_memstats_heap_inuse_bytes": 12000000,
-    "go_goroutines": 18,
-    "go_gc_heap_objects_objects": 44000,
-    "process_resident_memory_bytes": 35000000,
-    "process_open_fds": 18
-  }
-}]
+> See `example_config.json` for a complex example, or `config.json` to play around with Monteverdi's own Prometheus stats.
+
+With a valid `config.json` in the same directory, run Monteverdi in the terminal you prefer.
+
+Currently its default size is 80x20, but you can set it to wider in your environment with:
+```shell
+MONTEVERDI_TUI_TSDB_VISUAL_WINDOW=100
 ```
-
-With that in the same directory, run Monteverdi in the terminal you prefer. Currently its default size is 80x20. :)
 
 Browse to <http://localhost:8090> for the web interface.
 
@@ -111,6 +81,22 @@ Browse to <http://localhost:8090> for the web interface.
 This is done automatically by Goreleaser but if you need to iterate in the terminal, use the following to compile the git tag into the Version:
 ```shell
 go build -ldflags "-X github.com/maroda/monteverdi/display.Version=$(git describe --tags --always)"
+```
+
+## Docker
+
+This repo builds public container packages that you can use to try Monteverdi out for yourself. They can be run like this:
+```shell
+docker run -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
+```
+
+The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works.
+
+External (public) addresses won't have this problem.
+
+To use your own config, set up the JSON and pass it to the container:
+```shell
+docker run -p 8090:8090 -v ./myconfig.json:/app/config.json ghcr.io/maroda/monteverdi:latest
 ```
 
 ## Known bugs

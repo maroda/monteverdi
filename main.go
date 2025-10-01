@@ -13,20 +13,44 @@ import (
 // Set up default logging behavior
 // Validate user is not root
 func init() {
-	file, err := os.OpenFile("monteverdi.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Print("Failed to open log file")
-		os.Exit(1)
+	var logger *slog.Logger
+	var loglevel slog.Level
+
+	mode := Ms.FillEnvVar("MONTEVERDI_LOGLEVEL")
+	if mode == "debug" {
+		loglevel = slog.LevelDebug
+	} else {
+		loglevel = slog.LevelInfo
 	}
 
-	logger := slog.New(slog.NewJSONHandler(file, &slog.HandlerOptions{
-		Level:     slog.LevelInfo,
-		AddSource: true,
-	}))
+	// Check if STDOUT is a terminal first
+	fileInfo, _ := os.Stdout.Stat()
+	isTTY := (fileInfo.Mode() & os.ModeCharDevice) != 0
+
+	if isTTY {
+		// Terminal mode: log to file
+		file, err := os.OpenFile("monteverdi.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			log.Print("Failed to open log file")
+			os.Exit(1)
+		}
+
+		logger = slog.New(slog.NewJSONHandler(file, &slog.HandlerOptions{
+			Level:     loglevel,
+			AddSource: true,
+		}))
+	} else {
+		// Non-TTY, probably a container, so log to STDOUT
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     loglevel,
+			AddSource: false,
+		}))
+	}
+
 	slog.SetDefault(logger)
 
 	User := Ms.FillEnvVar("USER")
-	if User == "root" {
+	if User == "root" && isTTY {
 		slog.Error("User cannot be root")
 		os.Exit(1)
 	}

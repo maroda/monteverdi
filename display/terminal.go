@@ -567,18 +567,21 @@ func (v *View) handleMouseClick(x, y int) {
 }
 
 // PollQNetAll is for reading the multi metric config in Endpoint
+// The error return is currently set to /nil/
+// so that Poll misses are only logged, not fatal (and blocking)
 func (v *View) PollQNetAll() error {
 	start := time.Now()
 
 	err := v.QNet.PollMulti()
 	if err != nil {
+		// Only log the error, keep going otherwise
 		slog.Error("Failed to PollMulti", slog.Any("Error", err))
 	}
 
 	duration := time.Since(start).Seconds()
 	v.stats.RecPollTimer(duration)
 
-	return err
+	return nil
 }
 
 // Provide terminal size for drawing
