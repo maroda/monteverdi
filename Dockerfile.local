@@ -1,8 +1,15 @@
+FROM golang:1.25-alpine3.22 AS builder
+WORKDIR /app
+COPY go.mod .
+RUN go mod download
+COPY . .
+RUN go build -o monteverdi
+
 FROM alpine:latest
 LABEL app=monteverdi
 LABEL org.opencontainers.image.source=https://github.com/maroda/monteverdi
 WORKDIR /app
-COPY monteverdi .
+COPY --from=builder /app/monteverdi .
 COPY web ./web
 COPY config.json .
 EXPOSE 8090

@@ -2,15 +2,13 @@
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 
 version: 2
-project_name: monteverdi
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: monteverdi
-    env:
+  - env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -18,14 +16,16 @@ builds:
       - darwin
     goarch:
       - amd64
-      - arm
       - arm64
     ldflags:
       - -X github.com/maroda/monteverdi/display.Version={{.Version}}
+    # Exclude invalid combinations
+    ignore:
+      - goos: windows
+        goarch: arm64
 
 archives:
-  - formats: [tar.gz]
-    # this name template makes the OS and Arch compatible with the results of `uname`.
+  - format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -33,28 +33,59 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
     format_overrides:
       - goos: windows
-        formats: [zip]
-
-dockers_v2:
-  - images:
-      - "ghcr.io/maroda/{{ .ProjectName }}"
-    tags:
-      - "{{ .Version }}"
-      - "latest"
-    extra_files:
+        format: zip
+    files:
+      - web/**/*
       - config.json
-    labels:
-      "org.opencontainers.image.created": "{{.Date}}"
-      "org.opencontainers.image.name": "{{.ProjectName}}"
-      "org.opencontainers.image.revision": "{{.FullCommit}}"
-      "org.opencontainers.image.version": "{{.Version}}"
-      "org.opencontainers.image.source": "{{.GitURL}}"
-    platforms:
-      - linux/amd64
-      - linux/arm64
+      - README.md
+      - LICENSE
+
+# Docker images for GitHub Container Registry
+dockers:
+  - image_templates:
+      - "ghcr.io/maroda/monteverdi:{{ .Version }}-amd64"
+      - "ghcr.io/maroda/monteverdi:latest-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    extra_files:
+      - go.mod
+      - config.json
+      - web/
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/maroda/monteverdi"
+
+  - image_templates:
+      - "ghcr.io/maroda/monteverdi:{{ .Version }}-arm64"
+      - "ghcr.io/maroda/monteverdi:latest-arm64"
+    use: buildx
+    goarch: arm64
+    dockerfile: Dockerfile
+    extra_files:
+      - go.mod
+      - config.json
+      - web/
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/maroda/monteverdi"
+
+# Multi-arch manifest
+docker_manifests:
+  - name_template: "ghcr.io/maroda/monteverdi:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/maroda/monteverdi:{{ .Version }}-amd64"
+      - "ghcr.io/maroda/monteverdi:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/maroda/monteverdi:latest"
+    image_templates:
+      - "ghcr.io/maroda/monteverdi:latest-amd64"
+      - "ghcr.io/maroda/monteverdi:latest-arm64"
 
 changelog:
   sort: asc
@@ -64,8 +95,9 @@ changelog:
       - "^test:"
 
 release:
+  github:
+    owner: maroda
+    name: monteverdi
   footer: >-
-
     ---
-
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

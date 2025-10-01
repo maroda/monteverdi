@@ -783,3 +783,53 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 
 	return err
 }
+
+func StartWebNoTUI(c []Ms.ConfigFile) error {
+	// Init Endpoints
+	eps, err := Ms.NewEndpointsFromConfig(c)
+	if eps == nil || err != nil {
+		slog.Error("Failed to init endpoints", slog.Any("Error", err))
+		return err
+	}
+
+	qn := Ms.NewQNet(*eps)
+	if qn == nil {
+		slog.Error("Failed to init QNet")
+		return errors.New("failed to init QNet")
+	}
+
+	// Create View without tcell screen
+	stats := Mo.NewStatsInternal()
+	view := &View{
+		QNet:  qn,
+		stats: stats,
+	}
+
+	// Server for stats endpoint
+	view.server = &http.Server{
+		Addr:    ":8090",
+		Handler: view.setupMux(),
+	}
+
+	// Start polling loop
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if err := view.PollQNetAll(); err != nil {
+				slog.Error("Failed to PollQNetAll", slog.Any("Error", err))
+			}
+		}
+	}()
+
+	// Run stats endpoint (blocks)
+	addr := ":8090"
+	slog.Info("Starting Monteverdi web server...", slog.String("Port", addr))
+	if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("Could not start stats endpoint", slog.Any("Error", err))
+		return err
+	}
+
+	return nil
+}

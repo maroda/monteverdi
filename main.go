@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"log/slog"
 	"os"
@@ -36,6 +37,10 @@ func init() {
 func main() {
 	slog.Info("STARTING Monteverdi")
 
+	// check if headless for container use
+	headless := flag.Bool("headless", false, "Run with no Terminal UI for containers")
+	flag.Parse()
+
 	// config filename version
 	// TODO: make this an env var
 	localJSON := "config.json"
@@ -49,7 +54,13 @@ func main() {
 	}
 
 	// Start Monteverdi
-	err = Md.StartHarmonyViewWithConfig(config)
+	if *headless {
+		// Run web-only version (no TUI)
+		slog.Info("Using headless UI")
+		err = Md.StartWebNoTUI(config)
+	} else {
+		err = Md.StartHarmonyViewWithConfig(config)
+	}
 	if err != nil {
 		slog.Error("Error starting harmony view", slog.Any("Error", err))
 		panic("Error starting harmony view")
