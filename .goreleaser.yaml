@@ -12,7 +12,6 @@ builds:
   - id: monteverdi
     env:
       - CGO_ENABLED=0
-      - REPO_OWNER=maroda
     goos:
       - linux
       - windows
@@ -46,8 +45,8 @@ dockers:
     extra_files:
       - config.json
     image_templates:
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:{{ .Version }}-amd64"
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:latest-amd64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:latest-amd64"
     build_flag_templates:
       - "--pull"
       - "--platform=linux/amd64"
@@ -61,8 +60,8 @@ dockers:
     extra_files:
       - config.json
     image_templates:
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:{{ .Version }}-arm64"
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:latest-arm64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:{{ .Version }}-arm64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:latest-arm64"
     build_flag_templates:
       - "--pull"
       - "--platform=linux/arm64"
@@ -72,14 +71,14 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
 
 docker_manifests:
-  - name_template: "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:{{ .Version }}"
+  - name_template: "ghcr.io/maroda/{{ .ProjectName }}:{{ .Version }}"
     image_templates:
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:{{ .Version }}-amd64"
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:latest"
+      - "ghcr.io/maroda/{{ .ProjectName }}:{{ .Version }}-amd64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/maroda/{{ .ProjectName }}:latest"
     image_templates:
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:latest-amd64"
-      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}:latest-arm64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:latest-amd64"
+      - "ghcr.io/maroda/{{ .ProjectName }}:latest-arm64"
 
 checksum:
   name_template: "checksums.txt"
