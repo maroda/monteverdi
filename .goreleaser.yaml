@@ -24,8 +24,6 @@ dockers_v2:
       - "ghcr.io/maroda/monteverdi:v{{ .Major }}"
       - "ghcr.io/maroda/monteverdi:v{{ .Major }}.{{ .Minor }}"
       - "ghcr.io/maroda/monteverdi:latest"
-    tags:
-      - "v{{ .Version }}"
     extra_files:
       - config.json
     labels:
