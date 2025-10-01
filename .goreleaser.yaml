@@ -20,10 +20,10 @@ builds:
 dockers_v2:
   - id: monteverdi
     images:
-      - "ghcr.io/maroda/monteverdi:{{ .Tag }}"
-      - "ghcr.io/maroda/monteverdi:v{{ .Major }}"
-      - "ghcr.io/maroda/monteverdi:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/maroda/monteverdi:latest"
+      - "ghcr.io/maroda/monteverdi"
+    tags:
+      - "latest"
+      - "v{{ .Version }}"
     extra_files:
       - config.json
     labels:
