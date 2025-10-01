@@ -17,25 +17,17 @@ builds:
     ldflags:
       - -X github.com/maroda/monteverdi/display.Version={{.Version}}
 
-dockers_v2:
+dockers:
   - id: monteverdi
-    images:
-      - "ghcr.io/maroda/monteverdi"
-    tags:
-      - "latest"
-      - "v{{ .Version }}"
-    extra_files:
-      - config.json
-    labels:
-          "org.opencontainers.image.description": "Monteverdi"
-          "org.opencontainers.image.created": "{{.Date}}"
-          "org.opencontainers.image.name": "{{.ProjectName}}"
-          "org.opencontainers.image.revision": "{{.FullCommit}}"
-          "org.opencontainers.image.version": "{{.Version}}"
-          "org.opencontainers.image.source": "{{.GitURL}}"
-    platforms:
-      - linux/amd64
-      - linux/arm64
+  - image_templates:
+      - "ghcr.io/maroda/monteverdi:{{ .Tag }}"
+      - "ghcr.io/maroda/monteverdi:latest"
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
 
 archives:
   - formats: [tar.gz]
