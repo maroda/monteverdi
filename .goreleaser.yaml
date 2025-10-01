@@ -38,8 +38,6 @@ dockers_v2:
     platforms:
       - linux/amd64
       - linux/arm64
-    flags:
-      - -X github.com/maroda/monteverdi/display.Version={{.Version}}
 
 archives:
   - formats: [tar.gz]
