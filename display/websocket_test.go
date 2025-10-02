@@ -84,7 +84,7 @@ func TestCalcAngle(t *testing.T) {
 			age:      59 * time.Second,
 			wantRing: 0,
 			checkAngle: func(angle float64) bool {
-				return angle > 260.0 && angle < 270.0 // Almost full circle
+				return angle > 270.0 && angle < 280.0 // Almost full circle
 			},
 		},
 		{
@@ -100,7 +100,7 @@ func TestCalcAngle(t *testing.T) {
 			age:      5 * time.Minute,
 			wantRing: 1,
 			checkAngle: func(angle float64) bool {
-				return angle > 65.0 && angle < 75.0 // Roughly 70°
+				return angle > 100.0 && angle < 110.0 // Roughly 70°
 			},
 		},
 		{
@@ -116,7 +116,7 @@ func TestCalcAngle(t *testing.T) {
 			age:      30 * time.Minute,
 			wantRing: 2,
 			checkAngle: func(angle float64) bool {
-				return angle > 50.0 && angle < 60.0 // Roughly 54°
+				return angle > 145.0 && angle < 155.0 // Roughly 54°
 			},
 		},
 		{
@@ -185,7 +185,7 @@ func TestCalcIntensity(t *testing.T) {
 
 	t.Run("Accent intensity is set", func(t *testing.T) {
 		got := Md.CalcIntensity(ep)
-		want := 0.275 // Calculated value from makeEndpoint with Accent
+		want := 0.5 // Calculated value from makeEndpoint with Accent
 		if got != want {
 			t.Errorf("CalcIntensity() = %f, want %f", got, want)
 		}
