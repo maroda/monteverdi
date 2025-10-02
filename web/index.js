@@ -24,6 +24,8 @@ let r0expScale = false;
 let r1expScale = false;
 let highlightThreshold = 3;
 let currentHighlightedPulse = null;
+let activePulseTypes = new Set();
+let seenPulses = new Set();
 
 // WebSocket connection
 const ws = new WebSocket('ws://localhost:8090/ws')
@@ -128,6 +130,24 @@ document.getElementById('spacingSlider').addEventListener('input', function(even
     }
 });
 
+// Show intro tooltip on load, hide after delay
+window.addEventListener('DOMContentLoaded', function() {
+    const intro = document.getElementById('introTooltip');
+
+    if (intro) {
+        // Trigger fade-in immediately
+        setTimeout(() => intro.classList.add('visible'), 50);
+
+        // Start fade-out after 3 seconds
+        setTimeout(() => {
+            intro.classList.remove('visible');
+            intro.classList.add('hidden');
+            // Remove from DOM after fade completes
+            setTimeout(() => intro.remove(), 3000);
+        }, 3000);
+    }
+});
+
 function updatePulsesFromBackend(backendData) {
     // Debug amphibrach data
     const amphibrachs = backendData.filter(d => d.type === 'amphibrach');
@@ -142,6 +162,24 @@ function updatePulsesFromBackend(backendData) {
         const ring = d.ring || 0;
         return (dimension === 1 && ring === 0) || (dimension === 2 && ring === 1);
     });
+
+    // Track NEW pulses for blinking
+    activePulseTypes.clear();
+    filteredData.forEach(d => {
+        if (d.type) {
+            // Create unique key for this pulse
+            const pulseKey = `${d.metric}-${d.startTime}-${d.type}`;
+
+            // If we havent' seen this pulse, it's NEW, blink!
+            if (!seenPulses.has(pulseKey)) {
+                seenPulses.add(pulseKey);
+                activePulseTypes.add(d.type);
+            }
+        }
+    });
+
+    // Update pulse indicator lights
+    updatePulseIndicators();
 
     // Simple data join with good keys
     const pulses = svg.selectAll('.pulse')
@@ -180,6 +218,34 @@ function updatePulsesFromBackend(backendData) {
             const tAngle = transformAngle(d.angle, d.ring);
             return `rotate(${tAngle} ${pos.x} ${pos.y})`;
         });
+}
+
+function updatePulseIndicators() {
+    // console.log('Active pulse types:', Array.from(activePulseTypes)); // Debug line
+
+    const pulseMap = {
+        'iamb': 'iambPulse',
+        'trochee': 'trocheePulse',
+        'amphibrach': 'amphibrachPulse',
+        'anapest': 'anapestPulse',
+        'dactyl': 'dactylPulse'
+    };
+
+    // Flash indicators for active pulses
+    activePulseTypes.forEach(pulseType => {
+        const elementId = pulseMap[pulseType];
+        const element = document.getElementById(elementId);
+
+        if (element && !element.classList.contains('active')) {
+            // Add active class
+            element.classList.add('active');
+
+            // Remove after a short duration (ms)
+            setTimeout(() => {
+                element.classList.remove('active');
+            }, 200);
+        }
+    });
 }
 
 function highlightRelatedPulses(targetPulse) {

@@ -9,6 +9,11 @@
 <body>
 
 <div id="container">
+    <div id="introTooltip" class="intro-tooltip">
+        <strong>Welcome to Monteverdi</strong><br>
+        Hover over the pulse symbols below to learn about different harmonic patterns detected in your system.
+    </div>
+
     <h1>Monteverdi</h1>
     <div style="position: relative; width: 500px; margin: 0 auto;">
         <!-- Background SVG with Monteverdi portrait -->
@@ -39,39 +44,50 @@
     font-size: 14px;
     backdrop-filter: blur(5px);
 ">
-    <label for="lengthSlider">Pulse Length: </label>
+    <label for="lengthSlider" data-title="Fatten pulses for smoothing">Pulse Length: </label>
     <input type="range" id="lengthSlider" min="0.1" max="2.0" step="0.1" value="0.4" style="margin: 0 8px;">
     <span id="lengthValue">0.4</span>
 
     <span style="margin: 0 15px;"> </span>
 
-    <label for="ring0Scale">
+    <label for="ring0Scale" data-title="Display exp^2">
         <input type="checkbox" id="ring0Scale">
         Inner Ring Skew
     </label>
 
     <br>
 
-    <label for="spacingSlider">Ring Spacing: </label>
+    <label for="spacingSlider" data-title="Ring distances for gathering">Ring Spacing: </label>
     <input type="range" id="spacingSlider" min="8" max="30" step="2" value="12" style="margin: 0 8px;">
     <span id="spacingValue">12</span>
 
     <span style="margin: 0 15px;"> </span>
 
-    <label for="ring1Scale">
+    <label for="ring1Scale" data-title="Display exp^2">
         <input type="checkbox" id="ring1Scale">
         Outer Ring Skew
     </label>
 
     <hr>
 
-    <label for="thresholdInput">Selection Threshold: </label>
+    <label for="thresholdInput" data-title="Hover over pulses to group in this radian arc">Selection Threshold: </label>
         <span class="threshold-control">
         <input type="number" id="thresholdInput" value="3" min="3" max="60" step="3">
         °
         <button id="thresholdMinus">-</button>
         <button id="thresholdPlus">+</button>
     </span>
+
+    <span style="margin: 0 15px;"> </span>
+
+    <span class="pulse-control">
+        <label id="iambPulse" data-title="Iamb: Non-accent → Accent">⚍</label>
+        <label id="trocheePulse" data-title="Trochee: Accent → Non-accent">⚎</label>
+        <label id="amphibrachPulse" data-title="Amphibrach: Non-accent → Accent → Non-accent">☵</label>
+        <label id="anapestPulse" data-title="Anapest: Non-accent → Non-accent → Accent">☳</label>
+        <label id="dactylPulse" data-title="Dactyl: Accent → Non-accent → Non-accent">☶</label>
+    </span>
+
 </div>
 
 <!-- Load D3.js from CDN -->
