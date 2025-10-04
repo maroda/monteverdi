@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -62,16 +63,46 @@ func main() {
 	slog.Info("STARTING Monteverdi")
 
 	// check if headless for container use
-	headless := flag.Bool("headless", false, "Run with no Terminal UI for containers")
+	configfile := flag.String("config", "config.json", "Path to configuration JSON")
+	headless := flag.Bool("headless", false, "Container mode: no Terminal UI, logs sink to STDOUT")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Monteverdi - Seconda Practica Observability\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nEnvironment Variables:\n")
+		fmt.Fprintf(os.Stderr, "  MONTEVERDI_CONFIG_FILE\n")
+		fmt.Fprintf(os.Stderr, "        Path to configuration file (default: config.json)\n")
+		fmt.Fprintf(os.Stderr, "  MONTEVERDI_LOGLEVEL\n")
+		fmt.Fprintf(os.Stderr, "        Log level: debug or info (default: info)\n")
+		fmt.Fprintf(os.Stderr, "  MONTEVERDI_TUI_TSDB_VISUAL_WINDOW\n")
+		fmt.Fprintf(os.Stderr, "        TUI display width in characters (default: 80)\n")
+		fmt.Fprintf(os.Stderr, "  MONTEVERDI_PULSE_WINDOW_SECONDS\n")
+		fmt.Fprintf(os.Stderr, "        Pulse lifecycle window in seconds (default: 3600)\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  %s -config=/path/to/config.json\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -headless\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  MONTEVERDI_CONFIG_FILE=myconfig.json %s\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nRun with no options to start the terminal UI with webserver (port 8090).\n")
+		fmt.Fprintf(os.Stderr, "There is a short warmup before pulses will appear in the web UI.\n")
+		fmt.Fprintf(os.Stderr, "Logs sink to ./monteverdi.log unless in -headless mode.\n\n")
+	}
 	flag.Parse()
 
-	// config filename version
-	// TODO: make this an env var
-	localJSON := "config.json"
+	// Determine config path: flag > env var > default
+	configPath := *configfile
+	if configPath == "" {
+		configPath = Ms.FillEnvVar("MONTEVERDI_CONFIG_PATH")
+		if configPath == "ENOENT" {
+			configPath = "config.json"
+		}
+	}
+
+	slog.Info("Configuration", slog.String("path", configPath))
 
 	// Create config with filesystem
 	localfs := Ms.RealFS{}
-	config, err := Ms.LoadConfigFileNameWithFS(localJSON, localfs)
+	config, err := Ms.LoadConfigFileNameWithFS(configPath, localfs)
 	if err != nil {
 		slog.Error("Error loading config.json", slog.Any("Error", err))
 		panic("Error loading config.json")

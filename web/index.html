@@ -9,9 +9,9 @@
 <body>
 
 <div id="container">
-    <div id="introTooltip" class="intro-tooltip">
-        <strong>Welcome to Monteverdi</strong><br>
-        Hover over the pulse symbols below to learn about different harmonic patterns detected in your system.
+    <div id="introTooltip" class="intro-tooltip" style="text-align: center">
+        <strong>Seconda Practica<br>Observability</strong><br>
+        Hover over UI elements to get started.
     </div>
 
     <h1>Monteverdi</h1>
@@ -70,22 +70,38 @@
 
     <hr>
 
-    <label for="thresholdInput" data-title="Hover over pulses to group in this radian arc">Selection Threshold: </label>
-        <span class="threshold-control">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <label for="thresholdInput" data-title="Hover over pulses to group in this radian arc">Highlight Threshold: </label>
+            <span class="threshold-control">
         <input type="number" id="thresholdInput" value="3" min="3" max="60" step="3">
         °
         <button id="thresholdMinus">-</button>
         <button id="thresholdPlus">+</button>
-    </span>
+            </span>
+        </div>
+        <div>
+            <label for="showGrid" data-title="Show Grid">
+                <input type="checkbox" id="showGrid">
+                Grid Overlay
+            </label>
+        </div>
+        <div>
+            <label for="showRipple" data-title="Show dimension transitions (D1→D2)">
+                <input type="checkbox" id="showRipple">
+                Transitions
+            </label>
+        </div>
+        </div>
 
-    <span style="margin: 0 15px;"> </span>
+    <hr>
 
     <span class="pulse-control">
-        <label id="iambPulse" data-title="Iamb: Non-accent → Accent">⚍</label>
-        <label id="trocheePulse" data-title="Trochee: Accent → Non-accent">⚎</label>
-        <label id="amphibrachPulse" data-title="Amphibrach: Non-accent → Accent → Non-accent">☵</label>
-        <label id="anapestPulse" data-title="Anapest: Non-accent → Non-accent → Accent">☳</label>
-        <label id="dactylPulse" data-title="Dactyl: Accent → Non-accent → Non-accent">☶</label>
+        <label id="iambPulse" data-title="Iamb (D1): Non-accent → Accent">⚍</label>
+        <label id="trocheePulse" data-title="Trochee (D1): Accent → Non-accent">⚎</label>
+        <label id="amphibrachPulse" data-title="Amphibrach (D2): Non-accent → Accent → Non-accent">☵</label>
+        <label id="anapestPulse" data-title="Anapest (D2): Non-accent → Non-accent → Accent">☳</label>
+        <label id="dactylPulse" data-title="Dactyl (D2): Accent → Non-accent → Non-accent">☶</label>
     </span>
 
 </div>

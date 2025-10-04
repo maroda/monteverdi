@@ -14,18 +14,27 @@ const centerX = width / 2;
 const centerY = height / 2;
 
 // Initialize
+let currentTime = new Date();
 let timeRings = [];
 let knownMetrics = new Set();
 let initialized = false;
-let pulseLengthMultiplier = 0.4;
-let ringSpacing = 12;
+let pulseLengthMultiplier = 0.4; // Starting value in the UI
+let ringSpacing = 12; // Starting value in the UI
+let highlightThreshold = 3; // Starting value in the UI
+let r0expScale = false; // Starting value in the UI
+let r1expScale = false; // Starting value in the UI
+let showRipple = false; // Starting value in the UI
 let lastReceivedData = [];
-let r0expScale = false;
-let r1expScale = false;
-let highlightThreshold = 3;
 let currentHighlightedPulse = null;
 let activePulseTypes = new Set();
 let seenPulses = new Set();
+let hoverTimeout;
+
+// Update time every second
+setInterval(() => {
+    currentTime = new Date();
+    updateTimeDisplay();
+}, 1000);
 
 // WebSocket connection
 const ws = new WebSocket('ws://localhost:8090/ws')
@@ -53,6 +62,7 @@ ws.onmessage = function(event) {
     updatePulsesFromBackend(data);
 };
 
+// Retrieve Version for display
 fetch('/api/version')
     .then(r => r.json())
     .then(data => {
@@ -64,6 +74,8 @@ fetch('/api/version')
     })
     .catch(err => console.log('Version fetch failed:', err));
 
+// HTML Elements
+// Exponential Scale Checkboxes
 document.getElementById('ring0Scale').addEventListener('change', function(event) {
     r0expScale = event.target.checked;
     if (lastReceivedData.length > 0) {
@@ -78,6 +90,20 @@ document.getElementById('ring1Scale').addEventListener('change', function(event)
     }
 });
 
+// Show Grid Checkbox
+document.getElementById('showGrid').addEventListener('change', function(event) {
+    if (event.target.checked) {
+        drawRadialGrid();
+    } else {
+        eraseRadialGrid();
+    }
+})
+
+document.getElementById('showRipple').addEventListener('change', function(event) {
+    showRipple = event.target.checked;
+})
+
+// Select Threshold Value
 document.getElementById('thresholdMinus').addEventListener('click', function() {
     const input = document.getElementById('thresholdInput');
     highlightThreshold = Math.max(3, highlightThreshold - 3);
@@ -107,6 +133,7 @@ document.getElementById('thresholdInput').addEventListener('change', function(ev
     }
 });
 
+// Control Sliders
 document.getElementById('lengthSlider').addEventListener('input', function(event) {
     pulseLengthMultiplier = parseFloat(event.target.value);
     document.getElementById('lengthValue').textContent = pulseLengthMultiplier;
@@ -149,18 +176,23 @@ window.addEventListener('DOMContentLoaded', function() {
 });
 
 function updatePulsesFromBackend(backendData) {
-    // Debug amphibrach data
-    const amphibrachs = backendData.filter(d => d.type === 'amphibrach');
-    if (amphibrachs.length > 0) {
-        // console.log('Amphibrach data:', amphibrachs[0]);
-        // console.log('Ring:', amphibrachs[0].ring, 'Angle:', amphibrachs[0].angle);
-    }
-
     // Filter data
     const filteredData = backendData.filter(d => {
         const dimension = d.dimension || 1;
         const ring = d.ring || 0;
         return (dimension === 1 && ring === 0) || (dimension === 2 && ring === 1);
+    });
+
+    // Track new amphibrachs for animation
+    const newAmphibrachs = filteredData.filter(d =>
+        d.dimension === 2 &&
+        d.type === 'amphibrach' &&
+        !seenPulses.has(`${d.metric}-${d.startTime}-${d.type}`)
+    );
+
+    // Animate transitions for new amphibrachs
+    newAmphibrachs.forEach(d2Pulse => {
+        animateD1ToD2Transition(null, d2Pulse);
     });
 
     // Track NEW pulses for blinking
@@ -202,6 +234,8 @@ function updatePulsesFromBackend(backendData) {
             return `rotate(${tAngle} ${pos.x} ${pos.y})`;
         })
         .style('opacity', d => 0.2 + (d.intensity || 0.5) * 0.4)
+        .style('cursor', 'pointer')
+        .on('click', function(event, d) { showPulseMeta(d); })
         .on('mouseover', function(event, d) {
             highlightRelatedPulses(d);
         })
@@ -288,7 +322,6 @@ function clearHighlights() {
         .style('opacity', d => 0.2 + (d.intensity || 0.5) * 0.4)
         .style('stroke', 'none');
 }
-
 
 function calculatePulseLength(d) {
     if (!d.duration) return 4; // default small size
@@ -426,8 +459,6 @@ function transformAngle(angle, ring) {
     return newAngle;
 }
 
-let hoverTimeout;
-
 function showHoverLabel(metricName, endpointID) {
     // Clear any existing timeout
     clearTimeout(hoverTimeout);
@@ -475,12 +506,280 @@ function hideHoverLabel() {
     }, 1000);  // Wait before starting fade
 }
 
+function showPulseMeta(pulseData) {
+    // Remove existing metadata display
+    svg.selectAll('.pulse-metadata').remove();
+
+    // Format the metadata
+    const lines = [
+        `Type: ${pulseData.type}`,
+        `Metric: ${pulseData.metric}`,
+        `Ring: ${pulseData.ring} (D${pulseData.dimension})`,
+        `Intensity: ${(pulseData.intensity * 100).toFixed(0)}%`,
+        `Duration: ${(pulseData.duration / 1e9).toFixed(1)}s`,
+        `Endpoint: ${pulseData.endpoint}`
+    ];
+
+    // Create background box
+    const boxHeight = lines.length * 16 + 10;
+    svg.append('rect')
+        .attr('class', 'pulse-metadata')
+        .attr('x', 10)
+        .attr('y', 10)
+        .attr('width', 200)
+        .attr('height', boxHeight)
+        .style('fill', 'none')
+        .style('stroke', 'none')
+        .style('stroke-width', 1)
+        .style('rx', 4)
+        .style('opacity', 0)
+        .transition()
+        .duration(200)
+        .style('opacity', 0.2);
+
+    // Click-anywhere to dismiss
+    svg.on('click.metadata', function(event) {
+        // Only if clicking on background, not another pulse
+        if (event.target.tagName === 'svg') {
+            svg.selectAll('.pulse-metadata').remove();
+            svg.on('click.metadata', null); // Remove this listener
+        }
+    });
+
+    // Add text lines
+    lines.forEach((line, i) => {
+        svg.append('text')
+            .attr('class', 'pulse-metadata')
+            .attr('x', 20)
+            .attr('y', 30 + (i * 16))
+             //.attr('y', height - boxHeight + 20 + (i * 16))
+            .style('fill', '#00E676FF')
+            .style('font-size', '11px')
+            .style('font-family', 'monospace')
+            .style('pointer-events', 'none')
+            .text(line)
+            .style('opacity', 0)
+            .transition()
+            .duration(200)
+            .style('opacity', 0.4);
+    });
+
+    // Auto-dismiss after 5 seconds with fade
+    setTimeout(() => {
+        svg.selectAll('.pulse-metadata')
+            .transition()
+            .duration(500)  // 500ms fade out
+            .style('opacity', 0)
+            .remove();  // Remove after fade completes
+    }, 5000);
+}
+
+function eraseRadialGrid() {
+    // Remove existing
+    svg.selectAll('.radial-grid-line').remove();
+    svg.selectAll('.radial-grid-circle').remove();
+}
+
+function drawRadialGrid() {
+    // Reset for drawing
+    eraseRadialGrid();
+
+    // Clock spokes
+    const numLines = 12; // 12 lines = every 30°
+    const maxRadius = Math.min(width, height) / 2;
+
+    for (let i = 0; i < numLines; i++) {
+        const angle = (i * 360 / numLines - 90) * (Math.PI / 180);
+        const bleedRadius = Math.max(width, height);
+        const x2 = centerX + Math.cos(angle) * bleedRadius;
+        const y2 = centerY + Math.sin(angle) * bleedRadius;
+
+        svg.append('line')
+            .attr('class', 'radial-grid-line')
+            .attr('x1', centerX)
+            .attr('y1', centerY)
+            .attr('x2', x2)
+            .attr('y2', y2)
+            .style('stroke', '#00E676FF')
+            .style('stroke-width', 1)
+            .style('stroke-dasharray', '5,5')
+            .style('opacity', 0.3);
+    }
+
+    // Optional: Concentric circles at intervals
+    const numCircles = 4; // Grid granularity
+    const circleSpacing = maxRadius / numCircles;
+
+    for (let i = 0; i < numCircles; i++) {
+        svg.append('circle')
+            .attr('class', 'radial-grid-circle')
+            .attr('cx', centerX)
+            .attr('cy', centerY)
+            .attr('r', i * circleSpacing)
+            .style('fill', 'none')
+            .style('stroke', '#00E676FF')
+            .style('stroke-width', 1)
+            .style('stroke-dasharray', '1,3')
+            .style('opacity', 0.5);
+    }
+}
+
+function animateD1ToD2Transition(d1Pulse, d2Pulse) {
+    // Exit early if disabled
+    if (!showRipple) return;
+
+    const ring0Data = timeRings.find(r => r.ring === 0 && r.metric === d2Pulse.metric);
+    const ring1Data = timeRings.find(r => r.ring === 1 && r.metric === d2Pulse.metric);
+
+    if (!ring0Data || !ring1Data) return;
+
+    const pos = getPulsePosition(1, d2Pulse.angle, d2Pulse.metric);
+
+    // Create expanding ripple
+    svg.append('circle')
+        .attr('class', 'transition-ripple')
+        .attr('cx', pos.x)
+        .attr('cy', pos.y)
+        .attr('r', 5)
+        .style('fill', 'none')
+        .style('stroke', '#e85ff8')
+        .style('stroke-width', 2)
+        .style('opacity', 0.2)
+        .style('pointer-events', 'none')
+        .transition()
+        .duration(600)
+        .attr('r', 20)  // Expand outward
+        .style('opacity', 0)
+        .remove();
+}
+
+function showHelpDialog() {
+    // Remove existing help
+    svg.selectAll('.help-dialog').remove();
+
+    const helpText = [
+        'Monteverdi Help',
+        '',
+        'Accents are created when a metric hits its max value.',
+        'Pulses in the radar represent accent patterns in time.',
+        'Inner rings in Dimension One (D1) rotate in 60 seconds.',
+        'Outer rings in Dimension Two (D2) rotate in 10 minutes.',
+        'Expect a slight delay on startup for patterns to warm.',
+        '',
+        'Each metric has its own ring in each Dimension.',
+        'Pulses transition from D1 after 60 seconds,',
+        'forming D2 patterns that rotate 10 minutes.',
+        'Hover over pulses to see related groups',
+        'and over rings for endpoint and metric names.',
+        '',
+        'Browse the way patterns interact by',
+        'experimenting with the controls below!',
+        'Hover over each element for help.',
+        '',
+        '[ ESC or ~click~ to close ]',
+    ];
+
+    const boxWidth = 400;
+    const boxHeight = helpText.length * 20 + 20;
+
+    // Background
+    svg.append('rect')
+        .attr('class', 'help-dialog')
+        .attr('x', width/2 - boxWidth/2)
+        .attr('y', 25)
+        .attr('width', boxWidth)
+        .attr('height', boxHeight)
+        .style('fill', 'rgba(0, 0, 0, 0.4)')
+        .style('stroke', '#00E676FF')
+        .style('stroke-width', 2)
+        .style('cursor', 'help')
+        .style('rx', 8)
+        .on('click', () => svg.selectAll('.help-dialog').remove());
+
+    // Text
+    helpText.forEach((line, i) => {
+        svg.append('text')
+            .attr('class', 'help-dialog')
+            .attr('x', width/2)
+            .attr('y', 45 + (i * 20))
+            .attr('text-anchor', 'middle')
+            .style('fill', i === 0 ? 'rgb(232,95,248)' : '#00E676FF')
+            .style('font-size', i === 0 ? '18px' : '14px')
+            .style('font-weight', i === 0 ? 'bold' : 'normal')
+            .style('pointer-events', 'none')
+            .text(line);
+    });
+
+    // Add ESC key listener
+    const escHandler = function(event) {
+        if (event.key === 'Escape' || event.key === 'Esc') {
+            svg.selectAll('.help-dialog').remove();
+            document.removeEventListener('keydown', escHandler);
+        }
+    };
+
+    document.addEventListener('keydown', escHandler);
+}
+
+function updateTimeDisplay() {
+    svg.selectAll('.time-display').remove();
+
+    // const timeString = currentTime.toLocaleTimeString();
+    const timeString = currentTime.toISOString()
+
+    svg.append('text')
+        .attr('class', 'time-display')
+        .attr('x', width / 2)
+        .attr('y', 20)
+        .attr('text-anchor', 'middle')
+        .style('fill', '#00E676FF')
+        .style('opacity', 0.3)
+        .style('font-size', '12px')
+        .style('font-family', 'monospace')
+        .style('pointer-events', 'none')
+        .text(timeString);
+}
+
+// Initial time display, which is also updated each second.
+updateTimeDisplay();
+
 // Add center dot immediately
+// (transparent in CSS by default)
 svg.append("circle")
     .attr("cx", centerX)
     .attr("cy", centerY)
     .attr("r", 4)
     .attr("class", "center-dot")
     .style("fill", "#ccc");
+
+// Help button in lower-left
+const helpGroup = svg.append('g')
+    .attr('class', 'help-button')
+    .style('cursor', 'help')
+    .on('click', showHelpDialog);
+
+// Help Circle background
+helpGroup.append('circle')
+    .attr('cx', 20)
+    .attr('cy', height - 20)
+    .attr('r', 15)
+    .style('fill', '#2d2d2d')
+    .style('stroke', '#00E676FF')
+    .style('opacity', 0.1)
+    .style('stroke-width', 2);
+
+// Help Question mark
+helpGroup.append('text')
+    .attr('x', 20)
+    .attr('y', height - 20)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'central')
+    .style('fill', '#00E676FF')
+    .style('opacity', 0.2)
+    .style('font-size', '20px')
+    .style('font-weight', 'bold')
+    .style('pointer-events', 'none')
+    .style('font-family', 'sans-serif')
+    .text('?');
 
 console.log('JavaScript loaded, waiting for WebSocket data...');

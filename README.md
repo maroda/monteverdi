@@ -1,5 +1,7 @@
 # Monteverdi
 
+[![Release](https://github.com/maroda/monteverdi/actions/workflows/release.yml/badge.svg)](https://github.com/maroda/monteverdi/actions/workflows/release.yml)
+
 ## Seconda Practica Observability
 
 Monteverdi is a live data streaming system that uses _Harmonic Accent Analysis_ to identify operational pulses of the system.
@@ -22,11 +24,15 @@ If you run `monteverdi` in the same directory as the shipped `config.json` you s
 
 ### Web UI
 
+![Web Interface](docs/images/monteverdi-webui-preview-v0.9.png)
+
 - There is a D3 web UI at <http://localhost:8090> with several visualization features. This "radar view" shows pattern recognition only, no raw data.
 - Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected.
 - If no TTY is detected the logging is directed to STDOUT
  
 ### Terminal UI
+
+![Terminal Interface](docs/images/monteverdi-tui-preview-v0.9.png)
 
 - This is the default view of Monteverdi when it is run in a TTY, parallel with the Web UI.
 - There is now a `-headless` runtime flag for no TTY (i.e. containers).
@@ -44,14 +50,16 @@ If you run `monteverdi` in the same directory as the shipped `config.json` you s
 ## Feature Requests
 
 - [Plugin Architecture](./PLUGINS.md) to support things like rates and non-KV.
-- Better support for Env Vars (config file, logging setup, headless, etc)
 - Automatically reload config. Currently loads on first run.
 - Metrics input. Can read an existing timeseries with KV and extract pulses.
 - Inference. How do we take a history of pulses and define expected behaviors?
 - Monitor. How do we "alert" on pulse diversion?
+- Output. Can the pulses be converted to other formats?
+- Audio. How do the patterns sound?
 
 ## How to use
 
+### Configuration File
 Monteverdi reads any number of metrics from any number of endpoints.
 
 You will need at least one endpoint configured. It should respond with a Key/Value format for metrics (e.g. Netdata, Prometheus). Populate these into a `config.json` in the same directory as running Monteverdi.
@@ -67,7 +75,42 @@ The fields are:
 
 > See `example_config.json` for a complex example, or `config.json` to play around with Monteverdi's own Prometheus stats.
 
-With a valid `config.json` in the same directory, run Monteverdi in the terminal you prefer.
+Once you have this populated, use the runtime options below to point Monteverdi at your config.
+
+### Runtime
+
+Refer to the command help for any special configurations you want to make. The options and environment variables are listed:
+```shell
+>>> ./monteverdi -help
+Monteverdi - Seconda Practica Observability
+
+Usage: ./monteverdi [options]
+
+Options:
+  -config string
+    	Path to configuration JSON (default "config.json")
+  -headless
+    	Container mode: no Terminal UI, logs sink to STDOUT
+
+Environment Variables:
+  MONTEVERDI_CONFIG_FILE
+        Path to configuration file (default: config.json)
+  MONTEVERDI_LOGLEVEL
+        Log level: debug or info (default: info)
+  MONTEVERDI_TUI_TSDB_VISUAL_WINDOW
+        TUI display width in characters (default: 80)
+  MONTEVERDI_PULSE_WINDOW_SECONDS
+        Pulse lifecycle window in seconds (default: 3600)
+
+Examples:
+  ./monteverdi -config=/path/to/config.json
+  ./monteverdi -headless
+  MONTEVERDI_CONFIG_FILE=myconfig.json ./monteverdi
+
+Run with no options to start the terminal UI with webserver (port 8090).
+There is a short warmup before pulses will appear in the web UI.
+Logs sink to ./monteverdi.log unless in -headless mode.
+```
 
 Currently its default size is 80x20, but you can set it to wider in your environment with:
 ```shell
@@ -90,16 +133,77 @@ This repo builds public container packages that you can use to try Monteverdi ou
 docker run -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
 ```
 
-The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works.
+> The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works. When using public hostnames in `config.json`, this is not necessary.
 
-External (public) addresses won't have this problem.
-
-To use your own config, set up the JSON and pass it to the container:
+To use your own config, set up the JSON and pass it to the container as a mount:
 ```shell
 docker run -p 8090:8090 -v ./myconfig.json:/app/config.json ghcr.io/maroda/monteverdi:latest
 ```
 
+Or use a different filename with an environment variable:
+```shell
+docker run -p 8090:8090 \
+  -e MONTEVERDI_CONFIG_FILE=/app/myconfig.json \
+  -v ./myconfig.json:/app/myconfig.json \
+  ghcr.io/maroda/monteverdi:latest
+```
+
+## Kubernetes
+
+You should be able to use a ConfigMap to run this in a Kubernetes cluster. This is an untested config, but should work!
+
+Create the ConfigMap from your local JSON:
+```shell
+kubectl create configmap monteverdi-config --from-file=config.json
+```
+
+Once that is in place, an example manifest should look like:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monteverdi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monteverdi
+  template:
+    metadata:
+      labels:
+        app: monteverdi
+    spec:
+      containers:
+      - name: monteverdi
+        image: ghcr.io/maroda/monteverdi:latest
+        args: ["-headless"]
+        ports:
+        - containerPort: 8090
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.json
+          subPath: config.json
+      volumes:
+      - name: config
+        configMap:
+          name: monteverdi-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monteverdi
+spec:
+  selector:
+    app: monteverdi
+  ports:
+  - port: 8090
+    targetPort: 8090
+  type: LoadBalancer
+```
+
+
 ## Known bugs
 
 1. The Pulse View in the TUI is drawing weird, covering more space in the terminal than its configuration is supposed to be allowing.
+2. Clicking on pulses in WebUI is inconsistent, sometimes the metadata popup will work, sometimes it's really difficult to trigger.
 

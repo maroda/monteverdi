@@ -10,7 +10,7 @@
 },
 {
   "id": "VERIFICAT",
-  "url": "http://verificat.rainbowq.com/metrics",
+  "url": "http://verificat.rainbowq.net:4330/metrics",
   "delim": " ",
   "metrics": {
     "go_memstats_heap_alloc_bytes": 3000000,
