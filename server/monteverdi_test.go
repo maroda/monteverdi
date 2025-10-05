@@ -984,7 +984,102 @@ func TestQNet_PulseDetect_SequenceTrimming(t *testing.T) {
 	}
 }
 
+func TestEndpoint_ValueToHysteresis(t *testing.T) {
+	ep := makeEndpoint("test", "http://test")
+	metric := "CPU1"
+
+	t.Run("Writes at least one value to hysteresis", func(t *testing.T) {
+		ep.ValueToHysteresis(metric)
+
+		got := ep.Hysteresis[metric].Values[0]
+		want := int64(11)
+		assertInt64(t, got, want)
+	})
+
+	t.Run("Writes multiple values to hysteresis", func(t *testing.T) {
+		// Because we're checking for the entire Values, we have 20 values to set
+		valuesForMetric := []int64{10, 11, 12, 13, 14, 15, 16}
+		for _, mv := range valuesForMetric {
+			// Write a new data value, as if we have gotten a new read
+			ep.MU.Lock()
+			ep.Mdata[metric] = mv
+			ep.MU.Unlock()
+
+			// Write that value to the buffer
+			ep.ValueToHysteresis(metric)
+		}
+
+		// Use GetHysteresis() to retrieve only the values recorded
+		got := ep.GetHysteresis(metric, len(valuesForMetric))
+		want := reverse64(valuesForMetric)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Hysteresis Values = %v, want %v", got, want)
+		}
+	})
+}
+
+func TestEndpoint_GetHysteresis(t *testing.T) {
+	ep := makeEndpoint("test", "http://test")
+	metric := "CPU1"
+
+	t.Run("No hysteresis exists", func(t *testing.T) {
+		got := ep.GetHysteresis(metric, 5)
+		want := []int64{}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetHysteresis = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("Retrieves chronological hysteresis metrics", func(t *testing.T) {
+		valuesForMetric := []int64{10, 11, 12, 13, 14, 15, 16}
+		for _, mv := range valuesForMetric {
+			// Write a new data value, as if we have gotten a new read
+			ep.MU.Lock()
+			ep.Mdata[metric] = mv
+			ep.MU.Unlock()
+
+			// Write that value to the buffer
+			ep.ValueToHysteresis(metric)
+		}
+
+		// This should return the last five entries
+		// in reverse chronological order
+		got := ep.GetHysteresis(metric, 5)
+		want := reverse64(valuesForMetric[2:])
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetHysteresis() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("Clamps retrieval depth to MaxSize", func(t *testing.T) {
+		// Collect and write 20 values to the buffer
+		var valuesForMetric []int64
+		for i := 0; i < 20; i++ {
+			valuesForMetric = append(valuesForMetric, int64(i))
+			ep.MU.Lock()
+			ep.Mdata[metric] = int64(i)
+			ep.MU.Unlock()
+			ep.ValueToHysteresis(metric)
+		}
+
+		// Attempt to get a larger depth than 20
+		got := ep.GetHysteresis(metric, 30)
+		want := reverse64(valuesForMetric)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetHysteresis() = %v, want %v", got, want)
+		}
+	})
+}
+
 // Helpers //
+
+// reverse []int64 in place
+func reverse64(s []int64) []int64 {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+	return s
+}
 
 // See what we actually got
 func getPositions(points []Ms.PulseVizPoint) []int {
@@ -1042,20 +1137,22 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		Buffer:     make([]Ms.PulseEvent, 0),
 		Groups:     make([]*Ms.PulseTree, 0),
 	}
+	hb := make(map[string]*Ms.CycBuffer)
 
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{
-		MU:       sync.RWMutex{},
-		ID:       id,
-		URL:      url,
-		Delim:    "=",
-		Metric:   c,
-		Mdata:    d,
-		Maxval:   x,
-		Accent:   nil,
-		Layer:    l,
-		Sequence: is,
-		Pulses:   tg,
+		MU:         sync.RWMutex{},
+		ID:         id,
+		URL:        url,
+		Delim:      "=",
+		Metric:     c,
+		Hysteresis: hb,
+		Mdata:      d,
+		Maxval:     x,
+		Accent:     nil,
+		Layer:      l,
+		Sequence:   is,
+		Pulses:     tg,
 	}
 }
 

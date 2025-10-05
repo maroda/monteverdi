@@ -61,17 +61,18 @@ type EndpointOperate interface {
 //     However, the Accent is always located by the Metric key itself.
 //     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
-	MU       sync.RWMutex
-	ID       string                    // string describing the endpoint source
-	URL      string                    // URL endpoint for the service
-	Delim    string                    // delimiter for KV
-	Metric   map[int]string            // map of all metric keys to be retrieved
-	Mdata    map[string]int64          // map of all metric data by metric key
-	Maxval   map[string]int64          // map of metric data max val to find accents
-	Accent   map[string]*Accent        // map of accents by metric key, timestamped
-	Layer    map[string]*Timeseries    // map of rolling timeseries by metric key
-	Sequence map[string]*IctusSequence // map of total timeseries for pattern matching
-	Pulses   *TemporalGrouper          // accent groups arranged by pattern in time
+	MU         sync.RWMutex
+	ID         string                    // string describing the endpoint source
+	URL        string                    // URL endpoint for the service
+	Delim      string                    // delimiter for KV
+	Metric     map[int]string            // map of all metric keys to be retrieved
+	Mdata      map[string]int64          // map of all metric data by metric key
+	Hysteresis map[string]*CycBuffer     // map of buffers holding a history of metric data
+	Maxval     map[string]int64          // map of metric data max val to find accents
+	Accent     map[string]*Accent        // map of accents by metric key, timestamped
+	Layer      map[string]*Timeseries    // map of rolling timeseries by metric key
+	Sequence   map[string]*IctusSequence // map of total timeseries for pattern matching
+	Pulses     *TemporalGrouper          // accent groups arranged by pattern in time
 }
 
 type Endpoints []*Endpoint
@@ -497,8 +498,8 @@ func (q *QNet) PollMulti() error {
 	var delimiter string
 	delimiter = "="
 
-	// Step through all Networks in QNet
-	for ni, nv := range q.Network {
+	// Step through all Networks (i.e. Endpoints) in QNet
+	for ni, ep := range q.Network {
 		// get custom delimiter
 		delimiter = q.Network[ni].Delim
 
@@ -510,13 +511,15 @@ func (q *QNet) PollMulti() error {
 			return err
 		}
 
-		// nv.Metric is the list of configured metrics we want to use
-		for _, mv := range nv.Metric {
+		// ep.Metric is the list of configured metrics
+		// we want to use from the Endpoint
+		for _, mv := range ep.Metric {
 			// pollSource is the full list of metrics from above
+			// we want to find ep.Metric in this list
 			for k, v := range pollSource {
 				if k == mv {
-					// we've found the key, now grab its metric from the poll
-					// convert the metric to int64 on assignment
+					// we've found the key! now grab its metric from the poll
+					// and convert the metric to int64 on assignment
 					if floatVal, err := strconv.ParseFloat(v, 64); err != nil {
 						slog.Error("invalid syntax in metric", slog.Any("Error", err))
 						return err
@@ -536,8 +539,74 @@ func (q *QNet) PollMulti() error {
 					q.Network[ni].MU.Unlock()
 				}
 			}
+
+			// Record Mdata[mv] to the hysteresis buffer
+			ep.ValueToHysteresis(mv)
+
+			// Once we have hysteresis working,
+			// here is where a transformer plugin can be applied
+			// transformer := ep.GetTransformer()
 		}
 	}
 
 	return nil
+}
+
+// CycBuffer is a cyclic buffer for hysteresis,
+// where MaxSize number of Mdata values are kept.
+type CycBuffer struct {
+	Values  []int64
+	MaxSize int
+	Index   int
+}
+
+// ValueToHysteresis records metric data to a cyclical buffer
+// Currently configured with a static length of 20
+func (ep *Endpoint) ValueToHysteresis(metric string) {
+	ep.MU.Lock()
+	defer ep.MU.Unlock()
+
+	// Initialize the buffer if it doesn't exist, Index will be 0
+	if ep.Hysteresis[metric] == nil {
+		ep.Hysteresis[metric] = &CycBuffer{
+			Values:  make([]int64, 20), // Initialize at 20 values
+			MaxSize: 20,                // Limit on this buffer is 20
+		}
+	}
+
+	// Get the buffer
+	buffer := ep.Hysteresis[metric]
+
+	// Assign the metric value to the buffer
+	buffer.Values[buffer.Index] = ep.Mdata[metric]
+
+	// Index always points to the next empty slot
+	buffer.Index = (buffer.Index + 1) % buffer.MaxSize
+}
+
+func (ep *Endpoint) GetHysteresis(metric string, depth int) []int64 {
+	ep.MU.Lock()
+	defer ep.MU.Unlock()
+
+	buffer := ep.Hysteresis[metric]
+	if buffer == nil {
+		// No buffer! So no depth to report.
+		return []int64{}
+	}
+
+	// Clamp depth to the max buffer size
+	if depth > buffer.MaxSize {
+		depth = buffer.MaxSize
+	}
+
+	// Slice size equals the requested depth
+	result := make([]int64, 0, depth)
+
+	// Read backwards from current Index to get chronology
+	for i := 0; i < depth; i++ {
+		idx := (buffer.Index - 1 - i + buffer.MaxSize) % buffer.MaxSize
+		result = append(result, buffer.Values[idx])
+	}
+
+	return result
 }
