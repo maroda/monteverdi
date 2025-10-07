@@ -26,7 +26,7 @@ func (p *CalcRatePlugin) Transform(metric string, current int64, historical []in
 	}
 
 	// Check the value in the plugin struct
-	if prev, exists := p.PrevVal[metric]; exists {
+	if prev, ok := p.PrevVal[metric]; ok {
 		rate := CalcRate(current, prev, timestamp, p.PrevTime[metric])
 		return rate, nil
 	}

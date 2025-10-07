@@ -22,7 +22,3 @@ type MetricTransformer interface {
 	HysteresisReq() int // Required measurements in the past needed for calculation
 	Type() string       // Unique ID for the transformer
 }
-
-type Registry struct {
-	transformers map[string]MetricTransformer
-}

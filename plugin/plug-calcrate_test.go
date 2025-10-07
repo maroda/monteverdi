@@ -95,7 +95,7 @@ func TestCalcRatePlugin(t *testing.T) {
 	})
 }
 
-/// Helpers
+// Helpers //
 
 func assertError(t testing.TB, got, want error) {
 	t.Helper()

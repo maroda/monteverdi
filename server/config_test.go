@@ -27,18 +27,26 @@ func createTempFile(t testing.TB, data string) (*os.File, func()) {
 	return tmpfile, removeFile
 }
 
-// TODO: DEPRECATE
 func TestLoadConfigFileName(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-          "delim": "=",
-		  "metrics": {
-		    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
-		    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 3,
-		    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 10
-		  }
-		}]`)
+  "id": "MONTEVERDI_INTERNAL",
+  "url": "http://localhost:8090/metrics",
+  "delim": "=",
+  "metrics": {
+    "CPU_USAGE": {
+      "type": "gauge",
+      "max": 90
+    },
+    "HTTP_REQUESTS_TOTAL": {
+      "type": "counter",
+      "transform": "calc_rate",
+      "max": 3000
+    }
+  }
+}]
+
+}]`)
+
 	defer delConfig()
 	fileName := configFile.Name()
 
@@ -54,7 +62,7 @@ func TestLoadConfigFileName(t *testing.T) {
 	t.Run("Returns the correct filename when loading", func(t *testing.T) {
 		loadConfig, err := Ms.LoadConfigFileName(fileName)
 		got := loadConfig[0].ID
-		want := "NETDATA"
+		want := "MONTEVERDI_INTERNAL"
 
 		assertError(t, err, nil)
 		assertString(t, got, want)

@@ -15,11 +15,15 @@ const (
 	webTimeout = 10 * time.Second
 )
 
+// HTTPClient is implemented to enable testing and
+// supports the global client with SingleFetchWithClient
 type HTTPClient interface {
 	Get(string) (*http.Response, error)
 }
 
-// Shared HTTP Client
+// sharedHTTPClient is a global client to ensure we're reusing connections
+// (putting this directly in SingleFetch would
+// create a new client every request every second)
 var sharedHTTPClient = &http.Client{
 	Timeout: webTimeout,
 	Transport: &http.Transport{

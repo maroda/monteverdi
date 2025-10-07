@@ -1,13 +1,32 @@
 [{
+  "id": "NETDATA",
+  "url": "http://localhost:19999/api/v3/allmetrics",
+  "delim": "=",
+  "metrics": {
+    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": { "type":  "gauge", "max": 10},
+    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": { "type":  "gauge", "max": 20},
+    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": { "type":  "gauge", "max": 100}
+  }
+},
+  {
+    "id": "VERIFICAT",
+    "url": "http://verificat.rainbowq.net:4330/metrics",
+    "delim": " ",
+    "metrics": {
+      "go_memstats_heap_alloc_bytes": { "type": "gauge", "max": 3000000 },
+      "go_memstats_heap_inuse_bytes": { "type": "gauge", "max": 6000000 },
+      "process_resident_memory_bytes": { "type": "gauge", "max": 25000000 },
+      "go_memstats_heap_objects": { "type": "counter", "transform": "calc_rate", "max":  20000}
+    }
+  },
+  {
   "id": "MONTEVERDI_INTERNAL",
   "url": "http://localhost:8090/metrics",
   "delim": " ",
   "metrics": {
-    "go_memstats_heap_alloc_bytes": 8000000,
-    "go_memstats_heap_inuse_bytes": 8000000,
-    "go_goroutines": 18,
-    "go_gc_heap_objects_objects": 44000,
-    "process_resident_memory_bytes": 25000000,
-    "process_open_fds": 18
+    "go_memstats_heap_alloc_bytes": { "type": "gauge", "max": 10000000 },
+    "go_memstats_heap_inuse_bytes": { "type": "gauge", "max": 12000000 },
+    "process_resident_memory_bytes": { "type": "gauge", "max": 25000000 },
+    "process_cpu_seconds_total": { "type": "counter", "transform": "calc_rate", "max": 10}
   }
 }]
