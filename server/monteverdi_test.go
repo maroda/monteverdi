@@ -1,5 +1,9 @@
 package monteverdi_test
 
+/*
+	Monteverdi core tests
+*/
+
 import (
 	"fmt"
 	"math"
@@ -11,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
 )
 
@@ -80,14 +85,20 @@ func TestQNet_PollMultiDataError(t *testing.T) {
 
 func TestNewEndpointsFromConfig(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "delim": "=",
-		  "metrics": {
-		    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
-		    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 3,
-		    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 10
-		  }
+  "id": "MONTEVERDI_INTERNAL",
+  "url": "http://localhost:8090/metrics",
+  "delim": " ",
+  "metrics": {
+    "CPU_USAGE": {
+      "type": "gauge",
+      "max": 90
+    },
+    "HTTP_REQUESTS_TOTAL": {
+      "type": "counter",
+      "transformer": "calc_rate",
+      "max": 3000
+    }
+  }
 		}]`)
 	defer delConfig()
 	fileName := configFile.Name()
@@ -95,11 +106,20 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 	loadConfig, err := Ms.LoadConfigFileName(fileName)
 	assertError(t, err, nil)
 
-	config, err := Ms.NewEndpointsFromConfig(loadConfig)
+	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
 	assertError(t, err, nil)
 
+	t.Run("Transformer is returned", func(t *testing.T) {
+		ep := (*eps)[0]
+		t.Logf("metric: %v", ep.Metric)
+		if ep.Transformers["HTTP_REQUESTS_TOTAL"] == nil {
+			t.Error("Transformer calc_rate was not returned for HTTP_REQUESTS_TOTAL")
+			t.Logf("transformers: %+v", ep.Transformers)
+		}
+	})
+
 	t.Run("Endpoint contains expected TSDB configuration", func(t *testing.T) {
-		for _, c := range *config {
+		for _, c := range *eps {
 			m := c.Metric
 			got := c.Layer[m[0]].MaxSize
 			want := 80
@@ -111,10 +131,10 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 	t.Run("Returns correct metadata", func(t *testing.T) {
 		// there's only one member of the slice
 		var got string
-		for _, c := range *config {
+		for _, c := range *eps {
 			got = c.ID
 		}
-		want := "NETDATA"
+		want := "MONTEVERDI_INTERNAL"
 		assertString(t, got, want)
 	})
 }
@@ -206,8 +226,8 @@ func TestConcurrentAccentDetection(t *testing.T) {
 					qn.Network[0].Mdata[k] = 6 // Below threshold
 				}
 
-				qn.FindAccent(k, 0)
 				qn.Network[0].MU.Unlock()
+				qn.FindAccent(k, 0)
 			}
 		}(i)
 	}
@@ -257,9 +277,23 @@ func TestQNet_PollMulti(t *testing.T) {
 
 func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+  "id": "MONTEVERDI_INTERNAL",
+  "url": "http://localhost:8090/metrics",
+  "delim": " ",
+  "metrics": {
+    "CPU1": {
+      "type": "gauge",
+      "max": 10
+    },
+    "CPU2": {
+      "type": "gauge",
+      "max": 3
+    },
+    "CPU3": {
+      "type": "gauge",
+      "max": 10
+    }
+  }
 		}]`)
 	defer delConfig()
 	fileName := configFile.Name()
@@ -363,9 +397,23 @@ func TestEndpoint_RecordIctus(t *testing.T) {
 
 func TestEndpoint_GetDisplay(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
-		  "id": "NETDATA",
-		  "url": "http://localhost:19999/api/v3/allmetrics",
-		  "metrics": { "CPU1": 10, "CPU2": 3, "CPU3": 10 }
+  "id": "MONTEVERDI_INTERNAL",
+  "url": "http://localhost:8090/metrics",
+  "delim": " ",
+  "metrics": {
+    "CPU1": {
+      "type": "gauge",
+      "max": 10
+    },
+    "CPU2": {
+      "type": "gauge",
+      "max": 3
+    },
+    "CPU3": {
+      "type": "gauge",
+      "max": 10
+    }
+  }
 		}]`)
 	defer delConfig()
 	fileName := configFile.Name()
@@ -773,18 +821,13 @@ func TestConcurrentPollAndDisplay(t *testing.T) {
 }
 
 func TestConfigWithMissingMetrics(t *testing.T) {
-	// Test empty MWithMax
-	config := []Ms.ConfigFile{{ID: "test", URL: "http://test", MWithMax: map[string]int{}}}
-	endpoints, err := Ms.NewEndpointsFromConfig(config)
+	config := []Ms.ConfigFile{{
+		ID:      "test",
+		URL:     "http://test",
+		Metrics: map[string]Ms.MetricConfig{}},
+	}
+	_, err := Ms.NewEndpointsFromConfig(config)
 	assertError(t, err, nil)
-	fmt.Println(endpoints)
-}
-
-func TestConfigWithInvalidURL(t *testing.T) {
-	// Test malformed URLs
-	config := []Ms.ConfigFile{{ID: "test", URL: "not-a-url", MWithMax: map[string]int{"cpu": 80}}}
-	// Should this return an error, or handle gracefully?
-	fmt.Println(config)
 }
 
 func TestPulseDetect_AddPulseCoverage(t *testing.T) {
@@ -986,6 +1029,14 @@ func TestQNet_PulseDetect_SequenceTrimming(t *testing.T) {
 
 // Helpers //
 
+// reverse []int64 in place
+func reverse64(s []int64) []int64 {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+	return s
+}
+
 // See what we actually got
 func getPositions(points []Ms.PulseVizPoint) []int {
 	positions := make([]int, len(points))
@@ -1042,20 +1093,50 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 		Buffer:     make([]Ms.PulseEvent, 0),
 		Groups:     make([]*Ms.PulseTree, 0),
 	}
+	hb := make(map[string]*Ms.CycBuffer)
 
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{
-		MU:       sync.RWMutex{},
-		ID:       id,
-		URL:      url,
-		Delim:    "=",
-		Metric:   c,
-		Mdata:    d,
-		Maxval:   x,
-		Accent:   nil,
-		Layer:    l,
-		Sequence: is,
-		Pulses:   tg,
+		MU:         sync.RWMutex{},
+		ID:         id,
+		URL:        url,
+		Delim:      "=",
+		Metric:     c,
+		Hysteresis: hb,
+		Mdata:      d,
+		Maxval:     x,
+		Accent:     nil,
+		Layer:      l,
+		Sequence:   is,
+		Pulses:     tg,
+	}
+}
+
+func makeEndpointMTrans(metric string, url string, transformer Mp.MetricTransformer) *Ms.Endpoint {
+	return &Ms.Endpoint{
+		MU:     sync.RWMutex{},
+		ID:     "test",
+		URL:    url,
+		Delim:  "=",
+		Metric: map[int]string{0: metric},
+		Mdata:  make(map[string]int64),
+		Maxval: map[string]int64{metric: 1000},
+		Accent: make(map[string]*Ms.Accent),
+		Layer: map[string]*Ms.Timeseries{
+			metric: {
+				Runes:   make([]rune, 80),
+				MaxSize: 80,
+				Current: 0,
+			},
+		},
+		Sequence: make(map[string]*Ms.IctusSequence),
+		Pulses: &Ms.TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]Ms.PulseEvent, 0),
+			Groups:     make([]*Ms.PulseTree, 0),
+		},
+		Hysteresis:   make(map[string]*Ms.CycBuffer),
+		Transformers: map[string]Mp.MetricTransformer{metric: transformer},
 	}
 }
 

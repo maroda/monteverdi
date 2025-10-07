@@ -44,7 +44,7 @@ Transform raw metric data into gauges suitable for accent detection.
 ```go
 type MetricTransformer interface {
     Transform(current int64, historical []int64, timestamp time.Time) (int64, error)
-    NeedsHistory() int // Number of previous values required
+    HysteresisReq() int // Number of previous values required
     Type() string      // Identifier for the transformer
 }
 ```
@@ -86,7 +86,7 @@ func (p *CalcRatePlugin) Transform(current int64, historical []int64, timestamp 
     return 0, nil
 }
 
-func (p *CalcRatePlugin) NeedsHistory() int { return 1 }
+func (p *CalcRatePlugin) HysteresisReq() int { return 1 }
 func (p *CalcRatePlugin) Type() string { return "calc_rate" }
 ```
 

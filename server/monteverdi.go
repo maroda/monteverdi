@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	Mp "github.com/maroda/monteverdi/plugin"
 )
 
 // QNet represents the entire connected Network of Qualities
@@ -61,17 +63,19 @@ type EndpointOperate interface {
 //     However, the Accent is always located by the Metric key itself.
 //     The display can be configured to show a certain number of Accents.
 type Endpoint struct {
-	MU       sync.RWMutex
-	ID       string                    // string describing the endpoint source
-	URL      string                    // URL endpoint for the service
-	Delim    string                    // delimiter for KV
-	Metric   map[int]string            // map of all metric keys to be retrieved
-	Mdata    map[string]int64          // map of all metric data by metric key
-	Maxval   map[string]int64          // map of metric data max val to find accents
-	Accent   map[string]*Accent        // map of accents by metric key, timestamped
-	Layer    map[string]*Timeseries    // map of rolling timeseries by metric key
-	Sequence map[string]*IctusSequence // map of total timeseries for pattern matching
-	Pulses   *TemporalGrouper          // accent groups arranged by pattern in time
+	MU           sync.RWMutex
+	ID           string                          // string describing the endpoint source
+	URL          string                          // URL endpoint for the service
+	Delim        string                          // delimiter for KV
+	Metric       map[int]string                  // map of all metric keys to be retrieved
+	Mdata        map[string]int64                // map of all metric data by metric key
+	Maxval       map[string]int64                // map of metric data max val to find accents
+	Transformers map[string]Mp.MetricTransformer // map of metric transformers in use
+	Hysteresis   map[string]*CycBuffer           // map of buffers holding a history of metric data
+	Accent       map[string]*Accent              // map of accents by metric key, timestamped
+	Layer        map[string]*Timeseries          // map of rolling timeseries by metric key
+	Sequence     map[string]*IctusSequence       // map of total timeseries for pattern matching
+	Pulses       *TemporalGrouper                // accent groups arranged by pattern in time
 }
 
 type Endpoints []*Endpoint
@@ -95,12 +99,14 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		// DEBUG ::: fmt.Printf("Config MWithMax: %+v\n", c.MWithMax)
 
 		// All string Keys are /metric/
-		metric := make(map[int]string)            // The metric name
-		mdata := make(map[string]int64)           // Data
-		maxval := make(map[string]int64)          // Value triggers an accent
-		accent := make(map[string]*Accent)        // The accent metadata
-		metsdb := make(map[string]*Timeseries)    // Timeseries tracking accents
-		ictseq := make(map[string]*IctusSequence) // Running change Sequence
+		metric := make(map[int]string)                        // The metric name
+		mdata := make(map[string]int64)                       // Data
+		maxval := make(map[string]int64)                      // Value triggers an accent
+		hysteresis := make(map[string]*CycBuffer)             // Hysteresis buffer
+		transformers := make(map[string]Mp.MetricTransformer) // Transformers in use
+		accent := make(map[string]*Accent)                    // The accent metadata
+		metsdb := make(map[string]*Timeseries)                // Timeseries tracking accents
+		ictseq := make(map[string]*IctusSequence)             // Running change Sequence
 		pulses := &TemporalGrouper{
 			WindowSize: time.Duration(pulseWindow) * time.Second, // This is a display config
 			Buffer:     make([]PulseEvent, 0),
@@ -109,14 +115,24 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 
 		// This locates the desired metrics from the on-disk config
 		j := 0
-		for k, v := range c.MWithMax {
+		for k, mc := range c.Metrics {
 			metric[j] = k            // assign the metric name from the config key
-			maxval[k] = int64(v)     // assign the metric max value from the config value
+			maxval[k] = mc.Max       // assign the metric max value from the config value
 			metsdb[k] = &Timeseries{ // create a new rolling tsdb for this metric
 				Runes:   make([]rune, tsdbWindow),
 				MaxSize: tsdbWindow,
 				Current: 0,
 			}
+			if mc.Transformer != "" { // initialize transformer plugin if configured
+				switch mc.Transformer {
+				case "calc_rate":
+					transformers[k] = &Mp.CalcRatePlugin{
+						PrevVal:  make(map[string]int64),
+						PrevTime: make(map[string]time.Time),
+					}
+				}
+			}
+
 			j++
 		}
 
@@ -124,16 +140,18 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 
 		// Assign data we know, initialize data we don't
 		NewEP := Endpoint{
-			ID:       c.ID,
-			URL:      c.URL,
-			Delim:    c.Delim,
-			Metric:   metric,
-			Mdata:    mdata,
-			Maxval:   maxval,
-			Accent:   accent,
-			Layer:    metsdb,
-			Sequence: ictseq,
-			Pulses:   pulses,
+			ID:           c.ID,
+			URL:          c.URL,
+			Delim:        c.Delim,
+			Metric:       metric,
+			Mdata:        mdata,
+			Hysteresis:   hysteresis,
+			Transformers: transformers,
+			Maxval:       maxval,
+			Accent:       accent,
+			Layer:        metsdb,
+			Sequence:     ictseq,
+			Pulses:       pulses,
 		}
 		endpoints = append(endpoints, &NewEP)
 	}
@@ -385,6 +403,10 @@ func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPo
 // i == Network index
 // p == Metric name
 func (q *QNet) FindAccent(m string, i int) *Accent {
+	// Lock for the entire accent detection + timeline updates
+	q.Network[i].MU.Lock()
+	defer q.Network[i].MU.Unlock()
+
 	// The metric data
 	md := q.Network[i].Mdata[m]
 
@@ -490,15 +512,15 @@ func Max(a, b int) int {
 
 // PollMulti reads all configured metrics from QNet and retrieves them.
 func (q *QNet) PollMulti() error {
-	var metric int64
-	metric = 0
+	var mdata int64
+	mdata = 0
 
 	// Default delimiter is /=/
 	var delimiter string
 	delimiter = "="
 
-	// Step through all Networks in QNet
-	for ni, nv := range q.Network {
+	// Step through all Networks (i.e. Endpoints) in QNet
+	for ni := range q.Network {
 		// get custom delimiter
 		delimiter = q.Network[ni].Delim
 
@@ -510,34 +532,109 @@ func (q *QNet) PollMulti() error {
 			return err
 		}
 
-		// nv.Metric is the list of configured metrics we want to use
-		for _, mv := range nv.Metric {
-			// pollSource is the full list of metrics from above
+		// For each metric in the configuration...
+		for _, mname := range q.Network[ni].Metric {
+			// ... search through the polled data for its match
 			for k, v := range pollSource {
-				if k == mv {
-					// we've found the key, now grab its metric from the poll
-					// convert the metric to int64 on assignment
+				if k == mname {
+					// we've found the key! now grab from the poll
 					if floatVal, err := strconv.ParseFloat(v, 64); err != nil {
 						slog.Error("invalid syntax in metric", slog.Any("Error", err))
 						return err
 					} else {
-						metric = int64(floatVal) // Convert float to int64
+						mdata = int64(floatVal) // Convert float to int64
 					}
 
 					// Lock endpoint for the entire op
 					q.Network[ni].MU.Lock()
 
-					// Populate the map in the struct
-					q.Network[ni].Mdata[mv] = metric
+					// Record data to the hysteresis buffer
+					q.Network[ni].ValueToHysteresis(mname, mdata)
 
-					// Find any Accents at the same time
-					q.FindAccent(mv, ni)
+					// If a Transformer plugin is detected, use it
+					transformers := q.Network[ni].Transformers
+					if transformers != nil {
+						mt := transformers[mname] // Mp.CalcRatePlugin
+						if mt != nil {
+							var tdata int64
 
+							// Transform using hysteresis
+							tdata, err = mt.Transform(mname, mdata, q.Network[ni].GetHysteresis(mname, mt.HysteresisReq()), time.Now())
+							if err != nil {
+								slog.Error("Error transforming metric", slog.Any("Error", err))
+								q.Network[ni].MU.Unlock()
+								return fmt.Errorf("error transforming %s: %w", mname, err)
+							}
+
+							mdata = tdata
+						}
+					}
+
+					q.Network[ni].Mdata[mname] = mdata // Populate the map in the struct
 					q.Network[ni].MU.Unlock()
+					q.FindAccent(mname, ni) // Find any Accents at the same time
+					break                   // Stop, we've found the one we want
 				}
 			}
+
 		}
 	}
 
 	return nil
+}
+
+// CycBuffer is a cyclic buffer for hysteresis,
+// where MaxSize number of Mdata values are kept.
+type CycBuffer struct {
+	Values  []int64
+	MaxSize int
+	Index   int
+}
+
+// ValueToHysteresis records metric data to a cyclical buffer
+// Currently configured with a static length of 20
+// NB: Caller must hold ep.MU.Lock()
+func (ep *Endpoint) ValueToHysteresis(metric string, value int64) {
+	// Initialize the buffer if it doesn't exist, Index will be 0
+	if ep.Hysteresis[metric] == nil {
+		ep.Hysteresis[metric] = &CycBuffer{
+			Values:  make([]int64, 20), // Initialize at 20 values
+			MaxSize: 20,                // Limit on this buffer is 20
+		}
+	}
+
+	// Get the buffer
+	buffer := ep.Hysteresis[metric]
+
+	// Assign the metric value to the buffer
+	buffer.Values[buffer.Index] = value
+
+	// Index always points to the next empty slot
+	buffer.Index = (buffer.Index + 1) % buffer.MaxSize
+}
+
+// GetHysteresis retrieves a depth of metrics to use for calculations
+// NB: Caller must hold ep.MU.Lock()
+func (ep *Endpoint) GetHysteresis(metric string, depth int) []int64 {
+	buffer := ep.Hysteresis[metric]
+	if buffer == nil {
+		// No buffer! So no depth to report.
+		return []int64{}
+	}
+
+	// Clamp depth to the max buffer size
+	if depth > buffer.MaxSize {
+		depth = buffer.MaxSize
+	}
+
+	// Slice size equals the requested depth
+	result := make([]int64, 0, depth)
+
+	// Read backwards from current Index to get chronology
+	for i := 0; i < depth; i++ {
+		idx := (buffer.Index - 1 - i + buffer.MaxSize) % buffer.MaxSize
+		result = append(result, buffer.Values[idx])
+	}
+
+	return result
 }
