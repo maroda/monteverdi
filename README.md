@@ -16,6 +16,8 @@ Traditional monitoring observes individual component metric in isolation. Montev
 
 Streams data from multiple endpoints to draw histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
 
+> NEW! Metrics are now configurable as **COUNTERS** using the new Plugin architecture. Using the `transformer="calc_rate"` entry in the config will do the job (see the included configs for examples).
+
 - The included `config.json` checks Monteverdi's local prometheus metrics only. This means you can try it without needing to have to set up a KV endpoint.
 - The included `example_config.json` shows three endpoints, including the local, but also Netdata and something else I have running locally.
 - Logging is found in `monteverdi.log`.
@@ -64,18 +66,16 @@ Monteverdi reads any number of metrics from any number of endpoints.
 
 You will need at least one endpoint configured. It should respond with a Key/Value format for metrics (e.g. Netdata, Prometheus). Populate these into a `config.json` in the same directory as running Monteverdi.
 
-> This will work best when using 'gauge' type metrics, where you define a threshold to trigger an accent. Plugin support is coming for converting counters to rates.
-
 The fields are:
 
 - **id**: The unique string ID of the endpoint where you're getting metrics. Small is best, it is displayed in the UI.
 - **url**: The URL of that endpoint.
 - **delim**: The delimiter used to indicate "key" and "value".
-- **metrics**: Each is defined as: <metric_name>: <data_maxval>, where data_maxval is the "trigger" for this metric to record an accent.
+- **metrics**: Gauges or Counters (with a built-in Rate Transformer Plugin), see examples for details.
 
 > See `example_config.json` for a complex example, or `config.json` to play around with Monteverdi's own Prometheus stats.
 
-Once you have this populated, use the runtime options below to point Monteverdi at your config.
+Once you have this populated, use the runtime or docker options below to point Monteverdi at your config.
 
 ### Runtime
 
