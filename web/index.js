@@ -358,7 +358,7 @@ function updateRingStructure() {
     }
 
     timeRings = [];
-    const baseRadius = 20;
+    const baseRadius = 40;
     // const ringSpacing = 20;
 
     // Ring 0 (inner) - one sub-ring per metric

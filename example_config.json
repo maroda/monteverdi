@@ -1,33 +1,64 @@
-[{
-  "id": "NETDATA",
-  "url": "http://localhost:19999/api/v3/allmetrics",
-  "delim": "=",
-  "metrics": {
-    "NETDATA_USER_ROOT_CPU_UTILIZATION_VISIBLETOTAL": 10,
-    "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": 20,
-    "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": 100
+[
+  {
+    "id": "NETDATA",
+    "url": "http://localhost:19999/api/v3/allmetrics",
+    "delim": "=",
+    "metrics": {
+      "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": {
+        "type": "gauge",
+        "max": 20
+      },
+      "NETDATA_IPV4_PACKETS_VISIBLETOTAL": {
+        "type": "rate",
+        "max": 30
+      }
+    }
+  },
+  {
+    "id": "VERIFICAT",
+    "url": "http://verificat.rainbowq.net:4330/metrics",
+    "delim": " ",
+    "metrics": {
+      "process_network_receive_bytes_total": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 400
+      },
+      "process_network_transmit_bytes_total": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 2700
+      },
+      "go_memstats_alloc_bytes_total": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 145000
+      },
+      "http_requests_inbound_total{code=\"200\",method=\"GET:/healthz\"}": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 1
+      }
+    }
+  },
+  {
+    "id": "MONTEVERDI_INTERNAL",
+    "url": "http://localhost:8090/metrics",
+    "delim": " ",
+    "metrics": {
+      "process_resident_memory_bytes": {
+        "type": "gauge",
+        "max": 30000000
+      },
+      "go_memstats_heap_inuse_bytes": {
+        "type": "gauge",
+        "max": 8000000
+      },
+      "go_memstats_alloc_bytes_total": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 20000000
+      }
+    }
   }
-},
-{
-  "id": "VERIFICAT",
-  "url": "http://verificat.rainbowq.net:4330/metrics",
-  "delim": " ",
-  "metrics": {
-    "go_memstats_heap_alloc_bytes": 3000000,
-    "go_memstats_heap_inuse_bytes": 6000000,
-    "go_memstats_heap_objects": 10000
-  }
-},
-{
-  "id": "MONTEVERDI_INTERNAL",
-  "url": "http://localhost:8090/metrics",
-  "delim": " ",
-  "metrics": {
-    "go_memstats_heap_alloc_bytes": 10000000,
-    "go_memstats_heap_inuse_bytes": 12000000,
-    "go_goroutines": 18,
-    "go_gc_heap_objects_objects": 44000,
-    "process_resident_memory_bytes": 35000000,
-    "process_open_fds": 18
-  }
-}]
+]
