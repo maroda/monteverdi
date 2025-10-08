@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monteverdi - Metrics Data</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="metrics-data.css">
+</head>
+<body>
+
+<div id="container">
+    <h1>Monteverdi <span style="font-size: 0.5em; color: #888;" id="version"></span></h1>
+
+    <div style="margin-top: 20px; padding: 15px; background: rgba(45,45,45,0.5); border-radius: 8px; font-size: 13px; color: #aaa;">
+        <h4 style="color: #e85ff8; margin-top: 0;">How to tune your config.json:</h4>
+        <ol style="line-height: 1.8;">
+            <li>Watch the <strong style="color: #00fce7;">Current</strong> values to see typical ranges for your metrics</li>
+            <li>The <strong style="color: #ffcc00;">% Used</strong> shows how close you are to triggering an accent</li>
+            <li>When <strong style="color: #ff7f00;">? 🔥</strong> appears, that metric has exceeded its maxval threshold</li>
+            <li>Adjust the <code>"metrics"</code> values in <code>config.json</code> to set appropriate thresholds</li>
+            <li>Restart Monteverdi to apply changes</li>
+        </ol>
+        <p style="margin: 10px 0 0 0; font-style: italic;">
+            Tip: Set maxval slightly above normal peaks to avoid false positives, but low enough to catch real issues.
+        </p>
+    </div>
+
+    <div class="nav-link">
+            <a href="/" style="font-size: 14px; font-weight: bold;">
+            ← Back to Radar View
+        </a>
+    </div>
+
+
+    <div id="metrics-panel">
+        <h3 style="color: #5fa73b; margin-top: 0;">
+            Current Metric Values
+            <span style="font-size: 0.6em; color: #888;">(for tuning maxval in config.json)</span>
+        </h3>
+        <div id="metrics-table-container">
+            <table id="metrics-table">
+                <thead>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Metric</th>
+                    <th>Current</th>
+                    <th>Max</th>
+                    <th>% Used</th>
+                    <th>?</th>
+                </tr>
+                </thead>
+                <tbody id="metrics-tbody">
+                <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script src="metrics-data.js"></script>
+<script>
+    // Fetch version
+    fetch('/api/version')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('version').textContent = data.version;
+        })
+        .catch(err => console.log('Version fetch failed:', err));
+</script>
+</body>
+</html>
