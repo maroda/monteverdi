@@ -1,0 +1,102 @@
+/* metrics.css - Styles for the metrics data page */
+
+#metrics-panel {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(45,45,45,0.8);
+    border-radius: 8px;
+    border: 1px solid #555;
+}
+
+#metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#metrics-table thead tr {
+    border-bottom: 2px solid #555;
+}
+
+#metrics-table th {
+    text-align: left;
+    padding: 8px;
+    color: #e85ff8;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    background: #2d2d2d;
+}
+
+#metrics-table th:nth-child(3),
+#metrics-table th:nth-child(4),
+#metrics-table th:nth-child(5) {
+    text-align: right;
+}
+
+#metrics-table th:nth-child(6) {
+    text-align: center;
+}
+
+#metrics-table tbody tr {
+    border-bottom: 1px solid #333;
+}
+
+#metrics-table tbody tr:hover {
+    background-color: #2a2a2a;
+}
+
+.nav-link {
+    display: inline-block;
+    margin: 10px 0;
+    color: #5fa73b;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.nav-link:hover {
+    color: #7fc95f;
+}
+
+a:visited {
+    color: #5fa73b;
+}
+
+a:visited:hover {
+    color: #7fc95f;
+}
+
+.help-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(45,45,45,0.5);
+    border-radius: 8px;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.help-section h4 {
+    color: #e85ff8;
+    margin-top: 0;
+}
+
+.help-section ol {
+    line-height: 1.8;
+}
+
+.help-section strong {
+    color: #00fce7;
+}
+
+.help-section code {
+    background: #1e1e1e;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #ff7f00;
+    font-family: 'Courier New', monospace;
+}
+
+.help-section p {
+    margin: 10px 0 0 0;
+    font-style: italic;
+}

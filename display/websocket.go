@@ -256,13 +256,21 @@ func (v *View) CalcSpeedForPulse(pe Ms.PulseEvent) float64 {
 	return CalcSpeed(pe.StartTime, config)
 }
 
+var Version = "dev"
+
+func (v *View) versionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"version": Version})
+}
+
 // Mux handles both Prometheus metrics and WebSocket data delivery
 func (v *View) setupMux() *mux.Router {
 	r := mux.NewRouter()
 
 	r.Handle("/metrics", v.stats.Handler())
 	r.HandleFunc("/ws", v.websocketHandler)
-	r.HandleFunc("/api/version", v.versionHandler) // Add this line
+	r.HandleFunc("/api/version", v.versionHandler)
+	r.HandleFunc("/api/metrics-data", v.metricsDataHandler)
 
 	// Static files for D3 frontend
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
@@ -271,11 +279,4 @@ func (v *View) setupMux() *mux.Router {
 	api.Use(v.statsMiddleware)
 
 	return r
-}
-
-var Version = "dev"
-
-func (v *View) versionHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"version": Version})
 }
