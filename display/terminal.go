@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
@@ -21,31 +20,24 @@ const (
 	screenGutter = 4
 )
 
-type ScreenViewer interface {
-	exit()
-	handleKeyBoardEvent()
-	resizeScreen()
-	updateScreen()
-}
-
 // View is updated by whatever is in the QNet
 type View struct {
 	mu          sync.Mutex        // State locks to read data
 	QNet        *Ms.QNet          // Quality Network
-	screen      tcell.Screen      // the screen itself
+	Screen      tcell.Screen      // the screen itself
 	display     []string          // rune display sequence
 	Stats       *Mo.StatsInternal // Internal status for prometheus
 	server      *http.Server      // Prometheus metrics server
-	selectEP    int               // Selected Endpoint with MouseClick
-	showEP      bool              // Display Endpoint ID
-	selectMe    string            // Selected Metric with MouseClick
-	showMe      bool              // Display Metric ID
+	SelectEP    int               // Selected Endpoint with MouseClick
+	ShowEP      bool              // Display Endpoint ID
+	SelectMe    string            // Selected Metric with MouseClick
+	ShowMe      bool              // Display Metric ID
 	showPulse   bool              // Display pulse view overlay
 	pulseFilter *Ms.PulsePattern  // For filtering the display
 }
 
-// Figure out where to draw the next Timeseries entry on the graph
-func (v *View) calcTimeseriesY(endpointIndex, metricIndex, gutter int) int {
+// CalcTimeseriesY figures out where to draw the next Timeseries entry on the graph
+func (v *View) CalcTimeseriesY(endpointIndex, metricIndex, gutter int) int {
 	// Calculate cumulative offset from all previous endpoints
 	offset := 0
 	for i := 0; i < endpointIndex; i++ {
@@ -56,8 +48,8 @@ func (v *View) calcTimeseriesY(endpointIndex, metricIndex, gutter int) int {
 
 ////////// PULSE VIS
 
-func (v *View) calcTimePos(pulseStartTime time.Time) int {
-	width, _ := v.getScreenSize()
+func (v *View) CalcTimePos(pulseStartTime time.Time) int {
+	width, _ := v.GetScreenSize()
 	timelineW := width - 2 // room for border drawing
 
 	now := time.Now()
@@ -71,8 +63,8 @@ func (v *View) calcTimePos(pulseStartTime time.Time) int {
 	return position
 }
 
-func (v *View) calcDurationWidth(duration time.Duration) int {
-	width, _ := v.getScreenSize()
+func (v *View) CalcDurationWidth(duration time.Duration) int {
+	width, _ := v.GetScreenSize()
 	maxW := width - 2 // room for border drawing
 
 	// Convert pulse duration to character width on timeline
@@ -93,20 +85,20 @@ func (v *View) getAccentStateAtPos(pulse Ms.PulseEvent, pos int) bool {
 	case Ms.Iamb:
 		// Iamb: non-accent → accent
 		// First part is non-accent, second part is accent
-		midPoint := v.calcTimePos(pulse.StartTime) + (v.calcDurationWidth(pulse.Duration) / 2)
+		midPoint := v.CalcTimePos(pulse.StartTime) + (v.CalcDurationWidth(pulse.Duration) / 2)
 		return pos >= midPoint
 
 	case Ms.Trochee:
 		// Trochee: accent → non-accent
 		// First part is accent, second part is non-accent
-		midPoint := v.calcTimePos(pulse.StartTime) + (v.calcDurationWidth(pulse.Duration) / 2)
+		midPoint := v.CalcTimePos(pulse.StartTime) + (v.CalcDurationWidth(pulse.Duration) / 2)
 		return pos < midPoint
 	}
 
 	return false
 }
 
-func (v *View) getPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell.Style) {
+func (v *View) GetPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell.Style) {
 	var baseColor tcell.Color
 	var symbol rune
 
@@ -144,20 +136,20 @@ func (v *View) getPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell
 
 func (v *View) renderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
 	for _, point := range tld {
-		symbol, style := v.getPulseRune(point.Pattern, point.IsAccent)
-		v.screen.SetContent(x+point.Position, y, symbol, nil, style)
+		symbol, style := v.GetPulseRune(point.Pattern, point.IsAccent)
+		v.Screen.SetContent(x+point.Position, y, symbol, nil, style)
 	}
 }
 
 func (v *View) drawPulseView() {
-	width, height := v.getScreenSize()
+	width, height := v.GetScreenSize()
 	timelineW := width - 2 // room for border drawing
 
 	// Clear screen completely first
-	v.screen.Clear()
+	v.Screen.Clear()
 
 	// Redraw borders
-	v.drawViewBorder(width, height)
+	v.DrawViewBorder(width, height)
 
 	// Clear or dim the background first
 	v.drawPulseBackground()
@@ -175,13 +167,13 @@ func (v *View) drawPulseView() {
 		}
 	}
 
-	v.drawText(1, 1, width-10, 2, fmt.Sprintf("PULSE VIEW - %s (triple ictus analysis)", filterText))
-	v.drawText(1, 2, width-10, 3, "i=Iamb | t=Trochee | a=Amphibrach | x=All | ► stacked long pulses ◄ ")
+	v.DrawText(1, 1, width-10, 2, fmt.Sprintf("PULSE VIEW - %s (triple ictus analysis)", filterText))
+	v.DrawText(1, 2, width-10, 3, "i=Iamb | t=Trochee | a=Amphibrach | x=All | ► stacked long pulses ◄ ")
 
 	// Draw pulse visualization for each endpoint/metric
 	for ni := range v.QNet.Network {
 		for di, dm := range v.QNet.Network[ni].Metric {
-			yTS := v.calcTimeseriesY(ni, di, screenGutter)
+			yTS := v.CalcTimeseriesY(ni, di, screenGutter)
 
 			// Pass the filter for display
 			timelineData := v.QNet.Network[ni].GetPulseVizData(dm, v.pulseFilter)
@@ -207,30 +199,30 @@ func (v *View) drawPulseView() {
 			// Mark start and end of frozen section
 			if longPulseStart >= 0 {
 				leftStyle := tcell.StyleDefault.Foreground(tcell.ColorDodgerBlue)
-				v.screen.SetContent(1+longPulseStart, yTS, '►', nil, leftStyle)
+				v.Screen.SetContent(1+longPulseStart, yTS, '►', nil, leftStyle)
 			}
 
 			if longPulseEnd >= 0 && longPulseEnd != longPulseStart {
 				rightStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkTurquoise)
-				v.screen.SetContent(1+longPulseEnd, yTS, '◄', nil, rightStyle)
+				v.Screen.SetContent(1+longPulseEnd, yTS, '◄', nil, rightStyle)
 			}
 		}
 	}
 
 	// Add pulse view indicator
-	v.drawText(1, 1, 20, 2, "PULSE VIEW")
+	v.DrawText(1, 1, 20, 2, "PULSE VIEW")
 }
 
 func (v *View) drawPulseBackground() {
-	width, height := v.getScreenSize()
+	width, height := v.GetScreenSize()
 
 	// Dim the existing content
 	for y := 2; y < height-2; y++ {
 		for x := 1; x < width-1; x++ {
 			// Get current content and dim it
-			mainc, combc, style, _ := v.screen.GetContent(x, y)
+			mainc, combc, style, _ := v.Screen.GetContent(x, y)
 			dimmedStyle := style.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkGray)
-			v.screen.SetContent(x, y, mainc, combc, dimmedStyle)
+			v.Screen.SetContent(x, y, mainc, combc, dimmedStyle)
 		}
 	}
 }
@@ -239,14 +231,14 @@ func (v *View) drawPulseBackground() {
 
 // place a single '' on the screen
 // used to draw the accents/second indicator
-func (v *View) drawRune(x, y, m int) {
+func (v *View) DrawRune(x, y, m int) {
 	color := tcell.NewRGBColor(int32(150+x), int32(150+y), int32(255-m))
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
-	v.screen.SetContent(x, y, '', nil, style)
+	v.Screen.SetContent(x, y, '', nil, style)
 }
 
-// Display the current Timeseries data for a metric
-func (v *View) drawTimeseries(x, y, i int, m string) {
+// DrawTimeseries displays the current Timeseries data for a metric
+func (v *View) DrawTimeseries(x, y, i int, m string) {
 	runes := v.QNet.Network[i].GetDisplay(m)
 
 	for runeIndex, r := range runes { // Use a different variable name
@@ -277,17 +269,17 @@ func (v *View) drawTimeseries(x, y, i int, m string) {
 			style = tcell.StyleDefault
 		}
 
-		v.screen.SetContent(x+runeIndex, y, r, nil, style) // Use runeIndex here
+		v.Screen.SetContent(x+runeIndex, y, r, nil, style) // Use runeIndex here
 	}
 }
 
 // Display text
-func (v *View) drawText(x1, y1, x2, y2 int, text string) {
+func (v *View) DrawText(x1, y1, x2, y2 int, text string) {
 	row := y1
 	col := x1
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorLightSteelBlue)
 	for _, r := range text {
-		v.screen.SetContent(col, row, r, nil, style)
+		v.Screen.SetContent(col, row, r, nil, style)
 		col++
 		if col >= x2 {
 			row++
@@ -299,42 +291,29 @@ func (v *View) drawText(x1, y1, x2, y2 int, text string) {
 	}
 }
 
-// Display the outline of the View
-func (v *View) drawViewBorder(width, height int) {
+// DrawViewBorder displays the outline of the View
+func (v *View) DrawViewBorder(width, height int) {
 	hvStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
-	v.screen.SetContent(0, 0, tcell.RuneULCorner, nil, hvStyle)
+	v.Screen.SetContent(0, 0, tcell.RuneULCorner, nil, hvStyle)
 	for i := 1; i < width; i++ {
-		v.screen.SetContent(i, 0, tcell.RuneHLine, nil, hvStyle)
+		v.Screen.SetContent(i, 0, tcell.RuneHLine, nil, hvStyle)
 	}
-	v.screen.SetContent(width, 0, tcell.RuneURCorner, nil, hvStyle)
+	v.Screen.SetContent(width, 0, tcell.RuneURCorner, nil, hvStyle)
 
 	for i := 1; i < height; i++ {
-		v.screen.SetContent(0, i, tcell.RuneVLine, nil, hvStyle)
+		v.Screen.SetContent(0, i, tcell.RuneVLine, nil, hvStyle)
 	}
 
-	v.screen.SetContent(0, height, tcell.RuneLLCorner, nil, hvStyle)
+	v.Screen.SetContent(0, height, tcell.RuneLLCorner, nil, hvStyle)
 
 	for i := 1; i < height; i++ {
-		v.screen.SetContent(width, i, tcell.RuneVLine, nil, hvStyle)
+		v.Screen.SetContent(width, i, tcell.RuneVLine, nil, hvStyle)
 	}
 
-	v.screen.SetContent(width, height, tcell.RuneLRCorner, nil, hvStyle)
+	v.Screen.SetContent(width, height, tcell.RuneLRCorner, nil, hvStyle)
 
 	for i := 1; i < width; i++ {
-		v.screen.SetContent(i, height, tcell.RuneHLine, nil, hvStyle)
-	}
-}
-
-// drawBar shows a long bar for the amount entered
-// x1 = starting X axis (from left), x2 = ending X axis (from left)
-// y1 = starting Y axis (from top), y2 = ending Y axis (from top)
-func (v *View) drawBar(x1, y1, x2, y2 int) {
-	for row := y1; row < y2; row++ {
-		for col := x1; col < x2; col++ {
-			color := tcell.NewRGBColor(int32(80+row), int32(80+col), int32(250+row))
-			barStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(color)
-			v.screen.SetContent(col, row, '', nil, barStyle)
-		}
+		v.Screen.SetContent(i, height, tcell.RuneHLine, nil, hvStyle)
 	}
 }
 
@@ -342,7 +321,7 @@ func (v *View) drawBar(x1, y1, x2, y2 int) {
 // Includes a toggle for view mode
 func (v *View) drawHarmonyViewMulti() {
 	// This is the border of the box
-	width, height := v.getScreenSize()
+	width, height := v.GetScreenSize()
 
 	// Lock QNet first, then view state
 	v.QNet.MU.RLock()
@@ -350,15 +329,15 @@ func (v *View) drawHarmonyViewMulti() {
 
 	// Obtain a lock and grab needed display data
 	v.mu.Lock()
-	showEP := v.showEP
-	showMe := v.showMe
+	showEP := v.ShowEP
+	showMe := v.ShowMe
 	showPulse := v.showPulse
-	selectEP := v.selectEP
-	selectMe := v.selectMe
+	selectEP := v.SelectEP
+	selectMe := v.SelectMe
 	v.mu.Unlock()
 
 	// Draw basic elements
-	v.drawViewBorder(width, height)
+	v.DrawViewBorder(width, height)
 
 	// Support toggle to pulse view by wrapping in a boolean
 	if showPulse {
@@ -374,7 +353,7 @@ func (v *View) drawHarmonyViewMulti() {
 			v.showMetricWithState(2, screenGutter, 0, 4, showMe, selectEP, selectMe)
 		}
 
-		v.drawText(1, height-1, width, height+10, "/p/ to exit | /ESC/ to quit")
+		v.DrawText(1, height-1, width, height+10, "/p/ to exit | /ESC/ to quit")
 	} else {
 		// step through all Network endpoints
 		for ni := range v.QNet.Network {
@@ -384,10 +363,10 @@ func (v *View) drawHarmonyViewMulti() {
 				ddm := v.QNet.Network[ni].Mdata[dm]
 
 				// Calculate unique y position for each endpoint/metric combination
-				yTS := v.calcTimeseriesY(ni, di, screenGutter)
+				yTS := v.CalcTimeseriesY(ni, di, screenGutter)
 
 				// draw timeseries - each endpoint gets its own line
-				v.drawTimeseries(1, yTS, ni, dm)
+				v.DrawTimeseries(1, yTS, ni, dm)
 
 				// See an Accent happen
 				dda := v.QNet.Network[ni].Accent[dm]
@@ -397,7 +376,7 @@ func (v *View) drawHarmonyViewMulti() {
 					s := newTime.Second()
 
 					// draw a rune across the top
-					v.drawRune(s, 1, int(ddm))
+					v.DrawRune(s, 1, int(ddm))
 				}
 			}
 
@@ -408,13 +387,13 @@ func (v *View) drawHarmonyViewMulti() {
 					if ni == selectEP {
 						for di, dm := range v.QNet.Network[ni].Metric {
 							if dm == selectMe {
-								yTS := v.calcTimeseriesY(ni, di, screenGutter)
+								yTS := v.CalcTimeseriesY(ni, di, screenGutter)
 
 								mdata := v.QNet.Network[ni].Mdata[dm]
 								label := fmt.Sprintf("... %s ...", dm) // The Metric
 								data := fmt.Sprintf("%d", mdata)       // The raw data
-								v.drawText(2, yTS, width, yTS, data)
-								v.drawText(4, height-2, width, height-2, label)
+								v.DrawText(2, yTS, width, yTS, data)
+								v.DrawText(4, height-2, width, height-2, label)
 							}
 						}
 					}
@@ -427,32 +406,32 @@ func (v *View) drawHarmonyViewMulti() {
 			}
 		}
 
-		v.drawText(1, height-1, width, height+10, "/p/ for pulses | /ESC/ to quit")
+		v.DrawText(1, height-1, width, height+10, "/p/ for pulses | /ESC/ to quit")
 	}
 
-	v.drawText(width-12, height-1, width, height+10, "MONTEVERDI")
+	v.DrawText(width-12, height-1, width, height+10, "MONTEVERDI")
 }
 
 // showMetricWithState does not retrieve a state lock
 // and takes parameters for these values instead
 func (v *View) showMetricWithState(by, g, dx, lx int, showMe bool, selectEP int, selectMe string) {
-	width, height := v.getScreenSize()
+	width, height := v.GetScreenSize()
 
 	if showMe {
 		for ni := range v.QNet.Network {
 			if ni == selectEP {
 				for di, dm := range v.QNet.Network[ni].Metric {
 					if dm == selectMe {
-						yTS := v.calcTimeseriesY(ni, di, g)
+						yTS := v.CalcTimeseriesY(ni, di, g)
 						mdata := v.QNet.Network[ni].Mdata[dm]
 						data := fmt.Sprintf("%d", mdata)       // The raw data
 						label := fmt.Sprintf("... %s ...", dm) // The Metric
 
 						// Turn off drawing raw metrics by using dx=0
 						if dx != 0 {
-							v.drawText(dx, yTS, width, yTS, data)
+							v.DrawText(dx, yTS, width, yTS, data)
 						}
-						v.drawText(lx, height-by, width, height-by, label)
+						v.DrawText(lx, height-by, width, height-by, label)
 					}
 				}
 			}
@@ -463,10 +442,10 @@ func (v *View) showMetricWithState(by, g, dx, lx int, showMe bool, selectEP int,
 // showEndpointWithState does not retrieve a state lock
 // and takes parameters for these values instead
 func (v *View) showEndpointWithState(x, by int, showEP bool, selectEP int) {
-	width, height := v.getScreenSize()
+	width, height := v.GetScreenSize()
 	if showEP {
 		epName := v.QNet.Network[selectEP].ID
-		v.drawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
+		v.DrawText(x, height-by, width, height, fmt.Sprintf("|  Polling: %s  |", epName))
 	}
 }
 
@@ -474,14 +453,14 @@ func (v *View) showEndpointWithState(x, by int, showEP bool, selectEP int) {
 func (v *View) exit() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.screen.Fini()
+	v.Screen.Fini()
 	os.Exit(0)
 }
 
 // Running Loop to handle events
 func (v *View) handleKeyBoardEvent() {
 	for {
-		ev := v.screen.PollEvent()
+		ev := v.Screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			v.resizeScreen()
@@ -526,13 +505,13 @@ func (v *View) handleKeyBoardEvent() {
 		case *tcell.EventMouse:
 			// Button1 is Left Mouse Button
 			if ev.Buttons() == tcell.Button1 {
-				v.handleMouseClick(ev.Position())
+				v.HandleMouseClick(ev.Position())
 			}
 		}
 	}
 }
 
-func (v *View) handleMouseClick(x, y int) {
+func (v *View) HandleMouseClick(x, y int) {
 	// Lock QNet to safely read Network endpoint data
 	v.QNet.MU.RLock()
 	defer v.QNet.MU.RUnlock()
@@ -542,24 +521,24 @@ func (v *View) handleMouseClick(x, y int) {
 	defer v.mu.Unlock()
 
 	// Assume there is no label so the last one is cleared.
-	v.showEP = false
-	v.showMe = false
+	v.ShowEP = false
+	v.ShowMe = false
 
 	// Check for a click on any timeseries graph
 	for ni := range v.QNet.Network {
 		for di, dm := range v.QNet.Network[ni].Metric {
 			// yTS is the same as drawHarmonyViewMulti
-			yTS := v.calcTimeseriesY(ni, di, screenGutter)
+			yTS := v.CalcTimeseriesY(ni, di, screenGutter)
 
 			// Check if click is on this timeseries line
 			// Timeseries spans x=1 to x=60
 			// Exit if a match is found
-			width, _ := v.getScreenSize()
+			width, _ := v.GetScreenSize()
 			if y == yTS && x >= 1 && x <= width-20 {
-				v.selectEP = ni
-				v.selectMe = dm
-				v.showEP = true
-				v.showMe = true
+				v.SelectEP = ni
+				v.SelectMe = dm
+				v.ShowEP = true
+				v.ShowMe = true
 				return
 			}
 		}
@@ -584,22 +563,22 @@ func (v *View) PollQNetAll() error {
 	return nil
 }
 
-// Provide terminal size for drawing
-func (v *View) getScreenSize() (int, int) {
-	width, height := v.screen.Size()
+// GetScreenSize provides the terminal size for drawing
+func (v *View) GetScreenSize() (int, int) {
+	width, height := v.Screen.Size()
 	return width, height
 }
 
 // Resize for terminal changes
 func (v *View) resizeScreen() {
-	v.screen.Sync()
+	v.Screen.Sync()
 	v.updateScreen()
 }
 
 func (v *View) updateScreen() {
-	v.screen.Clear()
+	v.Screen.Clear()
 	v.drawHarmonyViewMulti()
-	v.screen.Show()
+	v.Screen.Show()
 }
 
 // run runs a loop and updates periodically
@@ -635,66 +614,39 @@ func (v *View) run() {
 				return
 			}
 			v.updateScreen()
-		case <-memTicker.C:
-			v.logMemoryUsage()
 		}
 	}
 }
 
-func (v *View) logMemoryUsage() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	// Count data structure sizes
-	totalEvents := 0
-	totalPulses := 0
-
-	for _, ep := range v.QNet.Network {
-		for _, seq := range ep.Sequence {
-			if seq != nil {
-				totalEvents += len(seq.Events)
-			}
-		}
-		if ep.Pulses != nil {
-			totalPulses += len(ep.Pulses.Buffer)
-			totalPulses += len(ep.Pulses.Groups)
-		}
-	}
-
-	slog.Debug("Memory Usage",
-		slog.Uint64("alloc_mb", m.Alloc/1024/1024),
-		slog.Uint64("heap_mb", m.HeapAlloc/1024/1024),
-		slog.Int("total_events", totalEvents),
-		slog.Int("total_pulses", totalPulses))
-}
-
-type responseWriter struct {
+// RespWriter is a wrapper with StatsMiddleware, used for Prometheus
+type RespWriter struct {
 	http.ResponseWriter
-	status int
+	Status int
 }
 
-func (w *responseWriter) WriteHeader(status int) {
-	w.status = status
+// WriteHeader is a helper for StatsMiddleware, used for Prometheus
+func (w *RespWriter) WriteHeader(status int) {
+	w.Status = status
 	w.ResponseWriter.WriteHeader(status)
 }
 
-// optional for non header
-func (w *responseWriter) Write(b []byte) (int, error) {
+// Write is a helper for StatsMiddleware, used for Prometheus
+func (w *RespWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-func (v *View) statsMiddleware(next http.Handler) http.Handler {
+func (v *View) StatsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// start := time.Now()
 
-		wrapped := &responseWriter{
+		wrapped := &RespWriter{
 			ResponseWriter: w,
-			status:         200,
+			Status:         200,
 		}
 		next.ServeHTTP(wrapped, r)
 
 		// duration := time.Since(start).Seconds()
-		v.Stats.RecWWW(strconv.Itoa(wrapped.status), r.Method)
+		v.Stats.RecWWW(strconv.Itoa(wrapped.Status), r.Method)
 	})
 }
 
@@ -733,7 +685,7 @@ func NewView(q *Ms.QNet) (*View, error) {
 
 	view := &View{
 		QNet:    q,
-		screen:  screen,
+		Screen:  screen,
 		display: display, // something is overranging this display slice!
 		Stats:   stats,
 	}

@@ -25,7 +25,7 @@ func (v *View) SetupMux() *mux.Router {
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
 
 	api := r.PathPrefix("/api").Subrouter()
-	api.Use(v.statsMiddleware)
+	api.Use(v.StatsMiddleware)
 
 	return r
 }
