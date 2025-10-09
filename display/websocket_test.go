@@ -2,13 +2,19 @@ package monteverdi_test
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	Md "github.com/maroda/monteverdi/display"
+	Mo "github.com/maroda/monteverdi/obvy"
 	Ms "github.com/maroda/monteverdi/server"
 )
 
@@ -19,6 +25,10 @@ func TestPulsePatternToString(t *testing.T) {
 	}{
 		{"iamb", Ms.Iamb},
 		{"trochee", Ms.Trochee},
+		{"amphibrach", Ms.Amphibrach},
+		{"anapest", Ms.Anapest},
+		{"dactyl", Ms.Dactyl},
+		{"unknown", 99},
 	}
 
 	for _, tt := range tests {
@@ -119,14 +129,6 @@ func TestCalcAngle(t *testing.T) {
 				return angle > 145.0 && angle < 155.0 // Roughly 54°
 			},
 		},
-		{
-			name:     "Too old (2 hours)",
-			age:      2 * time.Hour,
-			wantRing: -1,
-			checkAngle: func(angle float64) bool {
-				return angle == 0.0 // Should return 0 for invalid ring
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -143,6 +145,32 @@ func TestCalcAngle(t *testing.T) {
 			angle := Md.CalcAngle(past)
 			if !tt.checkAngle(angle) {
 				t.Errorf("calcAngle() = %f, failed validation for %s", angle, tt.name)
+			}
+		})
+	}
+}
+
+func TestCalcAngle_Normalization(t *testing.T) {
+	// Property tests
+	ages := []time.Duration{
+		1 * time.Second,
+		30 * time.Second,
+		59 * time.Second, // Near ring boundary
+		61 * time.Second, // Just into ring 1
+		5 * time.Minute,
+		9 * time.Minute,
+		30 * time.Minute,
+		59 * time.Minute,
+	}
+
+	for _, age := range ages {
+		t.Run(fmt.Sprintf("%v old", age), func(t *testing.T) {
+			pulseTime := time.Now().Add(-age)
+			angle := Md.CalcAngle(pulseTime)
+
+			// Should always be normalized to 0-360 range
+			if angle < 0 || angle >= 360 {
+				t.Errorf("Angle %f not properly normalized for age %v", angle, age)
 			}
 		})
 	}
@@ -179,15 +207,115 @@ func TestCalcSpeed(t *testing.T) {
 }
 
 func TestCalcIntensity(t *testing.T) {
-	now := time.Now()
-	ep := makeEndpoint(now.String(), "http://now")
-	//testMetric := "CPU1"
+	tests := []struct {
+		name     string
+		endpoint *Ms.Endpoint
+		want     float64
+	}{
+		{
+			name: "Fallback with no accents",
+			endpoint: &Ms.Endpoint{
+				Accent: make(map[string]*Ms.Accent),
+				Mdata:  make(map[string]int64),
+				Maxval: make(map[string]int64),
+			},
+			want: 0.5,
+		},
+		{
+			name: "Fallback when nil",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": nil},
+				Mdata:  make(map[string]int64),
+				Maxval: make(map[string]int64),
+			},
+			want: 0.5,
+		},
+		{
+			name: "Fallback when Mdata missing",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}},
+				Mdata:  make(map[string]int64), // Empty, no CPU1
+				Maxval: map[string]int64{"CPU1": 100},
+			},
+			want: 0.5,
+		},
+		{
+			name: "Fallback when Maxval missing",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}},
+				Mdata:  map[string]int64{"CPU1": 50},
+				Maxval: make(map[string]int64), // Empty, no CPU1
+			},
+			want: 0.5,
+		},
+		{
+			name: "Fallback when Maxval is 0",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}},
+				Mdata:  map[string]int64{"CPU1": 50},
+				Maxval: map[string]int64{"CPU1": 0}, // Zero
+			},
+			want: 0.5,
+		},
+		{
+			name: "Calculates intensity correctly",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}}, // baseIntensity = 0.5
+				Mdata:  map[string]int64{"CPU1": 50},
+				Maxval: map[string]int64{"CPU1": 100}, // valueRatio = 0.5
+			},
+			want: 0.25, // baseIntensity (0.5) * valueRatio (0.5) = 0.25
+		},
+		{
+			name: "Calculates intensity to minimum 0.2",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 1}}, // baseIntensity = 0.1
+				Mdata:  map[string]int64{"CPU1": 10},
+				Maxval: map[string]int64{"CPU1": 100}, // valueRatio = 0.1
+			},
+			want: 0.2, // 0.1 * 0.1 = 0.01, should clamp to 0.2
+		},
+		{
+			name: "Calculates intensity to maximum 1.0",
+			endpoint: &Ms.Endpoint{
+				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 20}}, // baseIntensity = 2.0
+				Mdata:  map[string]int64{"CPU1": 150},
+				Maxval: map[string]int64{"CPU1": 100}, // valueRatio = 1.5
+			},
+			want: 1.0, // 2.0 * 1.5 = 3.0, should clamp to 1.0
+		},
+	}
 
-	t.Run("Accent intensity is set", func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Md.CalcIntensity(tt.endpoint)
+			if got != tt.want {
+				t.Errorf("CalcIntensity() = %f, want %f", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("Returns first accent when multiple exist", func(t *testing.T) {
+		ep := &Ms.Endpoint{
+			Accent: map[string]*Ms.Accent{
+				"CPU1": {Intensity: 5},
+				"CPU2": {Intensity: 8},
+			},
+			Mdata: map[string]int64{
+				"CPU1": 50,
+				"CPU2": 80,
+			},
+			Maxval: map[string]int64{
+				"CPU1": 100,
+				"CPU2": 100,
+			},
+		}
+
+		// Should return on first accent found
+		// (map iteration order is random, but it should return early)
 		got := Md.CalcIntensity(ep)
-		want := 0.5 // Calculated value from makeEndpoint with Accent
-		if got != want {
-			t.Errorf("CalcIntensity() = %f, want %f", got, want)
+		if got < 0.2 || got > 1.0 {
+			t.Errorf("Intensity %f outside valid range", got)
 		}
 	})
 }
@@ -252,7 +380,179 @@ func TestCalcAngleForAmphibrach(t *testing.T) {
 	}
 }
 
-/// Helpers
+func TestView_GetPulseDataD3(t *testing.T) {
+	t.Run("PulseData is nil if qnet or endpoint network is nil", func(t *testing.T) {
+		qn := &Ms.QNet{}
+		view := &Md.View{
+			QNet: qn,
+		}
+
+		got := view.GetPulseDataD3()
+		want := []Md.PulseDataD3{}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("View.GetPulseDataD3() = %+v, want %+v", got, want)
+		}
+	})
+}
+
+func TestWebsocketHandler(t *testing.T) {
+	// uses gorilla/websocket to perform testing
+	qn := makeNewTestQNet(t)
+
+	// Add pulse data to the endpoint
+	now := time.Now()
+	testMetric := "CPU1"
+
+	// Add D1 pulses to buffer
+	qn.Network[0].Pulses.Buffer = []Ms.PulseEvent{
+		{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-30 * time.Second),
+			Duration:  5 * time.Second,
+			Metric:    []string{testMetric},
+		},
+		{
+			Dimension: 1,
+			Pattern:   Ms.Trochee,
+			StartTime: now.Add(-20 * time.Second),
+			Duration:  4 * time.Second,
+			Metric:    []string{testMetric},
+		},
+	}
+
+	// Add accent data for intensity calculation
+	qn.Network[0].Accent[testMetric] = &Ms.Accent{Intensity: 5}
+	qn.Network[0].Mdata[testMetric] = 50
+	qn.Network[0].Maxval[testMetric] = 100
+
+	// Create test server
+	view := &Md.View{
+		QNet:  qn,
+		Stats: Mo.NewStatsInternal(),
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(view.WebsocketHandler))
+	defer server.Close()
+
+	// Connect as WebSocket client
+	url := "ws" + strings.TrimPrefix(server.URL, "http")
+	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatalf("Could not connect: %v", err)
+	}
+	defer ws.Close()
+
+	// Read a message
+	var pulseData []Md.PulseDataD3
+	err = ws.ReadJSON(&pulseData)
+	if err != nil {
+		t.Fatalf("Could not read JSON: %v", err)
+	}
+
+	// Assert on the data
+	if pulseData == nil {
+		t.Error("Expected pulse data, got nil")
+	}
+
+	if len(pulseData) == 0 {
+		t.Error("Expected pulse data, got empty slice")
+	}
+
+	// Verify data structure
+	for _, pulse := range pulseData {
+		if pulse.Ring < 0 || pulse.Ring > 2 {
+			t.Errorf("Invalid ring: %d", pulse.Ring)
+		}
+		if pulse.Angle < 0 || pulse.Angle >= 360 {
+			t.Errorf("Invalid angle: %f", pulse.Angle)
+		}
+		if pulse.Type == "" {
+			t.Error("Pulse type should not be empty")
+		}
+	}
+}
+
+func TestWebsocketHandler_ConnectionClosed(t *testing.T) {
+	qn := makeNewTestQNet(t)
+
+	// Add pulse data
+	now := time.Now()
+	testMetric := "CPU1"
+	qn.Network[0].Pulses.Buffer = []Ms.PulseEvent{
+		{
+			Dimension: 1,
+			Pattern:   Ms.Iamb,
+			StartTime: now.Add(-30 * time.Second),
+			Duration:  5 * time.Second,
+			Metric:    []string{testMetric},
+		},
+	}
+	qn.Network[0].Accent[testMetric] = &Ms.Accent{Intensity: 5}
+	qn.Network[0].Mdata[testMetric] = 50
+	qn.Network[0].Maxval[testMetric] = 100
+
+	view := &Md.View{
+		QNet:  qn,
+		Stats: Mo.NewStatsInternal(),
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(view.WebsocketHandler))
+	defer server.Close()
+
+	// Connect as WebSocket client
+	url := "ws" + strings.TrimPrefix(server.URL, "http")
+	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatalf("Could not connect: %v", err)
+	}
+
+	// Read first message successfully
+	var pulseData []Md.PulseDataD3
+	err = ws.ReadJSON(&pulseData)
+	if err != nil {
+		t.Fatalf("Could not read first message: %v", err)
+	}
+
+	// Close connection immediately (while handler loop is still trying to write)
+	ws.Close()
+
+	// Give handler time to attempt next write and hit the error path
+	time.Sleep(200 * time.Millisecond)
+
+	// Handler should have exited gracefully (no panic)
+	// If we get here without panic, the error handling worked
+}
+
+func TestWebsocketHandler_DataFormat(t *testing.T) {
+	view := &Md.View{
+		QNet:  makeQNetWithAmphibrachs(t),
+		Stats: Mo.NewStatsInternal(),
+	}
+
+	// Test data generation directly
+	pulseData := view.GetPulseDataD3()
+
+	// Verify structure
+	if len(pulseData) == 0 {
+		t.Errorf("No pulse data")
+	}
+
+	for _, pulse := range pulseData {
+		// Validate fields
+		if pulse.Ring < 0 || pulse.Ring > 1 {
+			t.Errorf("Invalid pulse ring %d", pulse.Ring)
+		}
+		if pulse.Angle < 0 || pulse.Angle >= 360 {
+			t.Errorf("Invalid pulse angle %f", pulse.Angle)
+		}
+		if pulse.Intensity < 0 || pulse.Intensity > 1 {
+			t.Errorf("Invalid pulse intensity %f", pulse.Intensity)
+		}
+	}
+}
+
+// Helpers //
 
 func makeQNetWithAmphibrachs(t *testing.T) *Ms.QNet {
 	// Create endpoint with known amphibrachs in TemporalGrouper

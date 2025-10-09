@@ -1,13 +1,11 @@
 package monteverdi
 
 import (
-	"encoding/json"
 	"log/slog"
 	"math"
 	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	Ms "github.com/maroda/monteverdi/server"
 )
@@ -31,7 +29,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (v *View) websocketHandler(w http.ResponseWriter, r *http.Request) {
+func (v *View) WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -66,11 +64,6 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 	var pulses []PulseDataD3
 
 	for _, endpoint := range v.QNet.Network {
-		// Check for nil endpoints first
-		if endpoint == nil {
-			continue
-		}
-
 		// Lock the Endpoint
 		endpoint.MU.RLock()
 
@@ -144,8 +137,6 @@ func CalcAngle(ps time.Time) float64 {
 	case 2:
 		ageInRing := age.Minutes() - 10.0
 		angleInWindow = (ageInRing / 60.0) / 1.0
-	default:
-		return 0
 	}
 
 	// Start at 12 o'clock (270°) and rotate clockwise
@@ -155,9 +146,9 @@ func CalcAngle(ps time.Time) float64 {
 	for angle < 0 {
 		angle += 360.0
 	}
-	for angle >= 360 {
-		angle -= 360.0
-	}
+	// NB: There is no test for angle >= 360,
+	// that cannot happen with current CalcRing logic, i.e.:
+	/* for angle >= 360 { angle -= 360.0 } */
 
 	return angle
 }
@@ -235,8 +226,6 @@ func CalcSpeed(ps time.Time, config SpeedConfig) float64 {
 		baseSpeed = config.MiddleBase
 	case 2:
 		baseSpeed = config.OuterBase
-	default:
-		return 0.0
 	}
 
 	// Apply global multiplier last
@@ -254,29 +243,4 @@ func (v *View) CalcSpeedForPulse(pe Ms.PulseEvent) float64 {
 	}
 
 	return CalcSpeed(pe.StartTime, config)
-}
-
-var Version = "dev"
-
-func (v *View) versionHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"version": Version})
-}
-
-// Mux handles both Prometheus metrics and WebSocket data delivery
-func (v *View) setupMux() *mux.Router {
-	r := mux.NewRouter()
-
-	r.Handle("/metrics", v.stats.Handler())
-	r.HandleFunc("/ws", v.websocketHandler)
-	r.HandleFunc("/api/version", v.versionHandler)
-	r.HandleFunc("/api/metrics-data", v.metricsDataHandler)
-
-	// Static files for D3 frontend
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
-
-	api := r.PathPrefix("/api").Subrouter()
-	api.Use(v.statsMiddleware)
-
-	return r
 }

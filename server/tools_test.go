@@ -1,6 +1,7 @@
 package monteverdi_test
 
 import (
+	"math"
 	"os"
 	"strconv"
 	"testing"
@@ -98,6 +99,29 @@ func TestUrlCat(t *testing.T) {
 			assertString(t, got, want)
 		}
 	})
+}
+
+func TestFloatPrecise(t *testing.T) {
+	number := 100.12345678
+
+	tests := []struct {
+		Number    float64
+		Precision int
+		Expected  float64
+	}{
+		{number, 1, 100.1},
+		{number, 2, 100.12},
+		{number, 3, 100.123},
+		{number, 4, 100.1234},
+	}
+
+	for _, test := range tests {
+		got := Ms.FloatPrecise(test.Number, test.Precision)
+		epsilon := 0.0000001 // give tolerance for floating point precision
+		if math.Abs(got-test.Expected) > epsilon {
+			t.Errorf("FloatPrecise(%f, %d) = %f, want %f", test.Number, test.Precision, got, test.Expected)
+		}
+	}
 }
 
 func assertString(t *testing.T, got, want string) {

@@ -2,6 +2,7 @@ package monteverdi
 
 import (
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 )
@@ -43,4 +44,10 @@ func UrlCat(u ...string) string {
 	}
 	slog.Info("New endpoint", slog.String("URL", completeURL))
 	return completeURL
+}
+
+// FloatPrecise returns a truncated (unrounded) float
+func FloatPrecise(f float64, precision int) float64 {
+	multiplier := math.Pow(10, float64(precision))
+	return math.Trunc(f*multiplier) / multiplier
 }

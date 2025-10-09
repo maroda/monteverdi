@@ -34,7 +34,7 @@ type View struct {
 	QNet        *Ms.QNet          // Quality Network
 	screen      tcell.Screen      // the screen itself
 	display     []string          // rune display sequence
-	stats       *Mo.StatsInternal // Internal status for prometheus
+	Stats       *Mo.StatsInternal // Internal status for prometheus
 	server      *http.Server      // Prometheus metrics server
 	selectEP    int               // Selected Endpoint with MouseClick
 	showEP      bool              // Display Endpoint ID
@@ -579,7 +579,7 @@ func (v *View) PollQNetAll() error {
 	}
 
 	duration := time.Since(start).Seconds()
-	v.stats.RecPollTimer(duration)
+	v.Stats.RecPollTimer(duration)
 
 	return nil
 }
@@ -694,7 +694,7 @@ func (v *View) statsMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(wrapped, r)
 
 		// duration := time.Since(start).Seconds()
-		v.stats.RecWWW(strconv.Itoa(wrapped.status), r.Method)
+		v.Stats.RecWWW(strconv.Itoa(wrapped.status), r.Method)
 	})
 }
 
@@ -735,7 +735,7 @@ func NewView(q *Ms.QNet) (*View, error) {
 		QNet:    q,
 		screen:  screen,
 		display: display, // something is overranging this display slice!
-		stats:   stats,
+		Stats:   stats,
 	}
 
 	view.updateScreen()
@@ -767,7 +767,7 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 	// Server for stats endpoint
 	view.server = &http.Server{
 		Addr:    ":8090",
-		Handler: view.setupMux(),
+		Handler: view.SetupMux(),
 	}
 
 	// Run Monteverdi
@@ -805,13 +805,13 @@ func StartWebNoTUI(c []Ms.ConfigFile) error {
 	stats := Mo.NewStatsInternal()
 	view := &View{
 		QNet:  qn,
-		stats: stats,
+		Stats: stats,
 	}
 
 	// Server for stats endpoint
 	view.server = &http.Server{
 		Addr:    ":8090",
-		Handler: view.setupMux(),
+		Handler: view.SetupMux(),
 	}
 
 	// Start polling loop
