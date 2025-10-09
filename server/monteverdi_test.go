@@ -42,14 +42,13 @@ func TestNewQNet(t *testing.T) {
 func TestQNet_PollMultiNetworkError(t *testing.T) {
 	qn := NewTestQNet(t)
 
-	t.Run("Error returned on bad URL", func(t *testing.T) {
+	t.Run("No error returned on bad URL (code continues)", func(t *testing.T) {
 		qn.Network[0].URL = "http://unreachable-craquemattic:2345/metrics"
-
 		err := qn.PollMulti()
-		assertGotError(t, err)
+		assertError(t, err, nil)
 	})
 
-	t.Run("Error returned when endpoint times out", func(t *testing.T) {
+	t.Run("No error returned when endpoint times out (code continues)", func(t *testing.T) {
 		slowServ := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(1 + webTimeout)
 		}))
@@ -57,30 +56,32 @@ func TestQNet_PollMultiNetworkError(t *testing.T) {
 
 		qn.Network[0].URL = slowServ.URL
 		err := qn.PollMulti()
-		assertGotError(t, err)
+		assertError(t, err, nil)
 	})
 }
 
 func TestQNet_PollMultiDataError(t *testing.T) {
-	partialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "CPU1=notanumber")
-		fmt.Fprintln(w, "CPU2=22.222")
-		fmt.Fprintln(w, "CPU3=123")
-		fmt.Fprintln(w, "CPU4=")
-	}))
-	defer partialServer.Close()
+	t.Run("No error on bad server data (code continues)", func(t *testing.T) {
+		partialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "CPU1=notanumber")
+			fmt.Fprintln(w, "CPU2=22.222")
+			fmt.Fprintln(w, "CPU3=123")
+			fmt.Fprintln(w, "CPU4=")
+		}))
+		defer partialServer.Close()
 
-	qn := NewTestQNet(t)
-	qn.Network[0].URL = partialServer.URL
-	qn.Network[0].Metric = map[int]string{
-		0: "CPU1",
-		1: "CPU2",
-		2: "CPU3",
-		3: "CPU4",
-	}
+		qn := NewTestQNet(t)
+		qn.Network[0].URL = partialServer.URL
+		qn.Network[0].Metric = map[int]string{
+			0: "CPU1",
+			1: "CPU2",
+			2: "CPU3",
+			3: "CPU4",
+		}
 
-	err := qn.PollMulti()
-	assertGotError(t, err)
+		err := qn.PollMulti()
+		assertError(t, err, nil)
+	})
 }
 
 func TestNewEndpointsFromConfig(t *testing.T) {
@@ -111,7 +112,6 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 
 	t.Run("Transformer is returned", func(t *testing.T) {
 		ep := (*eps)[0]
-		t.Logf("metric: %v", ep.Metric)
 		if ep.Transformers["HTTP_REQUESTS_TOTAL"] == nil {
 			t.Error("Transformer calc_rate was not returned for HTTP_REQUESTS_TOTAL")
 			t.Logf("transformers: %+v", ep.Transformers)
@@ -158,6 +158,7 @@ func TestQNet_FindAccent(t *testing.T) {
 	t.Run("No accent with value below Maxval", func(t *testing.T) {
 		// Using CPU1:10 from NewTestQNet
 		k := "CPU1"
+		qn.Network[0].Maxval[k] = 10
 		qn.Network[0].Mdata[k] = 2
 		accent := qn.FindAccent(k, 0)
 		if accent.SourceID != "" {
@@ -237,6 +238,45 @@ func TestConcurrentAccentDetection(t *testing.T) {
 }
 
 func TestQNet_PollMulti(t *testing.T) {
+	t.Run("Continues polling other endpoints after one fails", func(t *testing.T) {
+		// First endpoint - will fail (bad URL)
+		badEndpoint := makeEndpoint("bad-endpoint", "http://localhost:99999")
+		badEndpoint.Metric = map[int]string{0: "CPU1"}
+
+		// Second endpoint - will succeed
+		goodServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "CPU2=200")
+			fmt.Fprintln(w, "CPU3=300")
+		}))
+		defer goodServer.Close()
+
+		goodEndpoint := makeEndpoint("good-endpoint", goodServer.URL)
+		goodEndpoint.Metric = map[int]string{0: "CPU2", 1: "CPU3"}
+
+		qnet := &Ms.QNet{
+			Network: []*Ms.Endpoint{badEndpoint, goodEndpoint},
+		}
+
+		// Call PollMulti - should not return error despite bad endpoint
+		err := qnet.PollMulti()
+		if err != nil {
+			t.Errorf("Expected nil error (resilient behavior), got %v", err)
+		}
+
+		// Verify the good endpoint was still polled successfully
+		if goodEndpoint.Mdata["CPU2"] != 200 {
+			t.Errorf("Expected CPU2=200, got %d", goodEndpoint.Mdata["CPU2"])
+		}
+		if goodEndpoint.Mdata["CPU3"] != 300 {
+			t.Errorf("Expected CPU3=300, got %d", goodEndpoint.Mdata["CPU3"])
+		}
+
+		// Bad endpoint should have no data
+		if len(badEndpoint.Mdata) > 0 {
+			t.Errorf("Bad endpoint should have no metrics, got %v", badEndpoint.Mdata)
+		}
+	})
+
 	var eps Ms.Endpoints
 
 	// Create remote server
@@ -262,17 +302,12 @@ func TestQNet_PollMulti(t *testing.T) {
 		assertString(t, got, want)
 	})
 
-	t.Run("Fetches known KV", func(t *testing.T) {
-		got := qn.Network[0].Maxval["CPU1"]
-		want := 4
-
-		assertInt64(t, got, int64(want))
-	})
-
-	t.Run("Reads Accent", func(t *testing.T) {
-		fmt.Println(qn.Network[0].Accent["CPU1"])
-		fmt.Println(qn.Network[1].Accent["CPU2"])
-	})
+	/*
+		t.Run("Reads Accent", func(t *testing.T) {
+			fmt.Println(qn.Network[0].Accent["CPU1"])
+			fmt.Println(qn.Network[1].Accent["CPU2"])
+		})
+	*/
 }
 
 func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
@@ -737,6 +772,119 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 	})
 }
 
+func TestEndpoint_GetHysteresis(t *testing.T) {
+	ep := makeEndpoint("test", "http://test")
+	metric := "CPU1"
+
+	t.Run("No hysteresis exists", func(t *testing.T) {
+		got := ep.GetHysteresis(metric, 5)
+		want := []int64{}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetHysteresis = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("Retrieves chronological hysteresis metrics", func(t *testing.T) {
+		valuesForMetric := []int64{10, 11, 12, 13, 14, 15, 16}
+		for _, mv := range valuesForMetric {
+			// Write a new data value, as if we have gotten a new read
+			ep.MU.Lock()
+			ep.Mdata[metric] = mv
+			ep.MU.Unlock()
+
+			// Write that value to the buffer
+			ep.ValueToHysteresis(metric, mv)
+		}
+
+		// This should return the last five entries
+		// in reverse chronological order
+		got := ep.GetHysteresis(metric, 5)
+		want := reverse64(valuesForMetric[2:])
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetHysteresis() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("Clamps retrieval depth to MaxSize", func(t *testing.T) {
+		// Collect and write 20 values to the buffer
+		var valuesForMetric []int64
+		for i := 0; i < 20; i++ {
+			valuesForMetric = append(valuesForMetric, int64(i))
+			ep.MU.Lock()
+			ep.Mdata[metric] = int64(i)
+			ep.MU.Unlock()
+			ep.ValueToHysteresis(metric, int64(i))
+		}
+
+		// Attempt to get a larger depth than 20
+		got := ep.GetHysteresis(metric, 30)
+		want := reverse64(valuesForMetric)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("GetHysteresis() = %v, want %v", got, want)
+		}
+	})
+}
+
+func TestEndpoint_ValueToHysteresis(t *testing.T) {
+	ep := makeEndpoint("test", "http://test")
+	metric := "CPU1"
+	mdata := int64(11)
+
+	t.Run("Initializes Hysteresis map if nil", func(t *testing.T) {
+		// Create an endpoint WITHOUT initializing Hysteresis
+		ep := &Ms.Endpoint{
+			ID:         "test",
+			Mdata:      make(map[string]int64),
+			Hysteresis: nil,
+		}
+
+		// This should not panic - it should initialize the map
+		ep.ValueToHysteresis("CPU1", 100)
+
+		// Verify the map was created
+		if ep.Hysteresis == nil {
+			t.Error("Hysteresis map should have been initialized")
+		}
+
+		// Verify the buffer was created and value stored
+		if ep.Hysteresis["CPU1"] == nil {
+			t.Error("CycBuffer for CPU1 should have been created")
+		}
+
+		if ep.Hysteresis["CPU1"].Values[0] != 100 {
+			t.Errorf("Expected value 100, got %d", ep.Hysteresis["CPU1"].Values[0])
+		}
+	})
+
+	t.Run("Writes at least one value to hysteresis", func(t *testing.T) {
+		ep.ValueToHysteresis(metric, mdata)
+
+		got := ep.Hysteresis[metric].Values[0]
+		assertInt64(t, got, mdata)
+	})
+
+	t.Run("Writes multiple values to hysteresis", func(t *testing.T) {
+		// Because we're checking for the entire Values, we have 20 values to set
+		valuesForMetric := []int64{10, 11, 12, 13, 14, 15, 16}
+		for _, mv := range valuesForMetric {
+			// Write a new data value, as if we have gotten a new read
+			ep.MU.Lock()
+			ep.Mdata[metric] = mv
+			ep.MU.Unlock()
+
+			// Write that value to the buffer
+			ep.ValueToHysteresis(metric, mv)
+		}
+
+		// Use GetHysteresis() to retrieve only the values recorded
+		got := ep.GetHysteresis(metric, len(valuesForMetric))
+		want := reverse64(valuesForMetric)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Hysteresis Values = %v, want %v", got, want)
+		}
+	})
+}
+
 func TestPulseToPoints_Clamping(t *testing.T) {
 	// These tests assume the default char width of 80
 	ep := &Ms.Endpoint{}
@@ -1066,16 +1214,16 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	// What data each of these metrics has from a PollMulti()
 	// Normally no metrics come with a new Endpoint
 	d := make(map[string]int64)
-	d[c[1]] = 11
-	d[c[2]] = 12
-	d[c[3]] = 13
+	//d[c[1]] = 11
+	//d[c[2]] = 12
+	//d[c[3]] = 13
 
 	// Accent trigger data map literal for Maxval
 	// Greater than or equal to, an accent happens
 	x := make(map[string]int64)
-	x[c[1]] = 4
-	x[c[2]] = 5
-	x[c[3]] = 6
+	//x[c[1]] = 4
+	//x[c[2]] = 5
+	//x[c[3]] = 6
 
 	// Initialize the Timeseries structure
 	l := make(map[string]*Ms.Timeseries)

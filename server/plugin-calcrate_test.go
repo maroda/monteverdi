@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -49,7 +48,7 @@ func TestQNet_PollMultiPlugin(t *testing.T) {
 		}
 	})
 
-	t.Run("Returns transformer error", func(t *testing.T) {
+	t.Run("No error returned from transformer (code continues)", func(t *testing.T) {
 		// Create mock server
 		mockMetricsServ := makeRemoteGauge(100)
 		defer mockMetricsServ.Close()
@@ -57,100 +56,8 @@ func TestQNet_PollMultiPlugin(t *testing.T) {
 		// Create endpoint with a transformer that errors
 		ep := makeEndpointMTrans(metric, mockMetricsServ.URL, &MockErrorTransformer{})
 		qn := Ms.NewQNet(Ms.Endpoints{ep})
-
-		// should return a transformer error
 		err := qn.PollMulti()
-
-		assertGotError(t, err)
-		assertStringContains(t, err.Error(), "error transforming CPU1")
-		assertStringContains(t, err.Error(), "mock transformer error")
-	})
-}
-
-func TestEndpoint_GetHysteresis(t *testing.T) {
-	ep := makeEndpoint("test", "http://test")
-	metric := "CPU1"
-
-	t.Run("No hysteresis exists", func(t *testing.T) {
-		got := ep.GetHysteresis(metric, 5)
-		want := []int64{}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetHysteresis = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("Retrieves chronological hysteresis metrics", func(t *testing.T) {
-		valuesForMetric := []int64{10, 11, 12, 13, 14, 15, 16}
-		for _, mv := range valuesForMetric {
-			// Write a new data value, as if we have gotten a new read
-			ep.MU.Lock()
-			ep.Mdata[metric] = mv
-			ep.MU.Unlock()
-
-			// Write that value to the buffer
-			ep.ValueToHysteresis(metric, mv)
-		}
-
-		// This should return the last five entries
-		// in reverse chronological order
-		got := ep.GetHysteresis(metric, 5)
-		want := reverse64(valuesForMetric[2:])
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetHysteresis() = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("Clamps retrieval depth to MaxSize", func(t *testing.T) {
-		// Collect and write 20 values to the buffer
-		var valuesForMetric []int64
-		for i := 0; i < 20; i++ {
-			valuesForMetric = append(valuesForMetric, int64(i))
-			ep.MU.Lock()
-			ep.Mdata[metric] = int64(i)
-			ep.MU.Unlock()
-			ep.ValueToHysteresis(metric, int64(i))
-		}
-
-		// Attempt to get a larger depth than 20
-		got := ep.GetHysteresis(metric, 30)
-		want := reverse64(valuesForMetric)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("GetHysteresis() = %v, want %v", got, want)
-		}
-	})
-}
-
-func TestEndpoint_ValueToHysteresis(t *testing.T) {
-	ep := makeEndpoint("test", "http://test")
-	metric := "CPU1"
-	mdata := int64(11)
-
-	t.Run("Writes at least one value to hysteresis", func(t *testing.T) {
-		ep.ValueToHysteresis(metric, mdata)
-
-		got := ep.Hysteresis[metric].Values[0]
-		assertInt64(t, got, mdata)
-	})
-
-	t.Run("Writes multiple values to hysteresis", func(t *testing.T) {
-		// Because we're checking for the entire Values, we have 20 values to set
-		valuesForMetric := []int64{10, 11, 12, 13, 14, 15, 16}
-		for _, mv := range valuesForMetric {
-			// Write a new data value, as if we have gotten a new read
-			ep.MU.Lock()
-			ep.Mdata[metric] = mv
-			ep.MU.Unlock()
-
-			// Write that value to the buffer
-			ep.ValueToHysteresis(metric, mv)
-		}
-
-		// Use GetHysteresis() to retrieve only the values recorded
-		got := ep.GetHysteresis(metric, len(valuesForMetric))
-		want := reverse64(valuesForMetric)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Hysteresis Values = %v, want %v", got, want)
-		}
+		assertError(t, err, nil)
 	})
 }
 

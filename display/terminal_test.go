@@ -1,6 +1,7 @@
 package monteverdi_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -704,8 +705,6 @@ func TestView_StatsMiddleware(t *testing.T) {
 	})
 }
 
-/*
-// TODO: WIP... this is uncovering a panic somewhere?
 func TestView_PollQNetAll(t *testing.T) {
 	t.Run("Successfully polls and records timing", func(t *testing.T) {
 		// Create mock server with metrics
@@ -751,8 +750,6 @@ func TestView_PollQNetAll(t *testing.T) {
 		// (We can't easily verify the exact value, but we know it was called)
 	})
 }
-
-*/
 
 // Helpers //
 

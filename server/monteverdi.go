@@ -529,7 +529,7 @@ func (q *QNet) PollMulti() error {
 		pollSource, err := MetricKV(delimiter, q.Network[ni].URL)
 		if err != nil {
 			slog.Error("Could not poll metric", slog.Any("Error", err))
-			return err
+			continue
 		}
 
 		// For each metric in the configuration...
@@ -537,10 +537,11 @@ func (q *QNet) PollMulti() error {
 			// ... search through the polled data for its match
 			for k, v := range pollSource {
 				if k == mname {
-					// we've found the key! now grab from the poll
+					// We've found the key! now grab from the poll
+					// make floats (e.g. exponential notation) become big integers
 					if floatVal, err := strconv.ParseFloat(v, 64); err != nil {
 						slog.Error("invalid syntax in metric", slog.Any("Error", err))
-						return err
+						continue
 					} else {
 						mdata = int64(floatVal) // Convert float to int64
 					}
@@ -553,24 +554,26 @@ func (q *QNet) PollMulti() error {
 
 					// If a Transformer plugin is detected, use it
 					transformers := q.Network[ni].Transformers
+					dataSink := true
 					if transformers != nil {
 						mt := transformers[mname] // Mp.CalcRatePlugin
 						if mt != nil {
-							var tdata int64
-
-							// Transform using hysteresis
-							tdata, err = mt.Transform(mname, mdata, q.Network[ni].GetHysteresis(mname, mt.HysteresisReq()), time.Now())
+							tdata, err := mt.Transform(mname, mdata, q.Network[ni].GetHysteresis(mname, mt.HysteresisReq()), time.Now())
 							if err != nil {
+								// Keep going, log the error, do not write any data
 								slog.Error("Error transforming metric", slog.Any("Error", err))
-								q.Network[ni].MU.Unlock()
-								return fmt.Errorf("error transforming %s: %w", mname, err)
+								dataSink = false
+							} else {
+								// No check for dataSink here, we know it's true
+								mdata = tdata
 							}
-
-							mdata = tdata
 						}
 					}
 
-					q.Network[ni].Mdata[mname] = mdata // Populate the map in the struct
+					if dataSink {
+						q.Network[ni].Mdata[mname] = mdata // Populate the map in the struct
+					}
+
 					q.Network[ni].MU.Unlock()
 					q.FindAccent(mname, ni) // Find any Accents at the same time
 					break                   // Stop, we've found the one we want
@@ -595,6 +598,11 @@ type CycBuffer struct {
 // Currently configured with a static length of 20
 // NB: Caller must hold ep.MU.Lock()
 func (ep *Endpoint) ValueToHysteresis(metric string, value int64) {
+	// Initialize the map if it doesn't exist
+	if ep.Hysteresis == nil {
+		ep.Hysteresis = make(map[string]*CycBuffer)
+	}
+
 	// Initialize the buffer if it doesn't exist, Index will be 0
 	if ep.Hysteresis[metric] == nil {
 		ep.Hysteresis[metric] = &CycBuffer{
