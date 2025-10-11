@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -253,17 +254,28 @@ func TestView_CalcDurationWidth(t *testing.T) {
 	s, err := makeTestScreen(t, "utf8")
 	assertError(t, err, nil)
 	defer s.Fini()
-	s.SetSize(100, 20)
+
+	width, height := 100, 20
+	s.SetSize(width, height)
 
 	view := &Md.View{
 		QNet:   &Ms.QNet{},
 		Screen: s,
 	}
 
-	dur := 10 * time.Second
-	want := 10
-	got := view.CalcDurationWidth(dur)
-	assertInt(t, got, want)
+	t.Run("Correct duration is returned", func(t *testing.T) {
+		dur := 10 * time.Second
+		want := 10
+		got := view.CalcDurationWidth(dur)
+		assertInt(t, got, want)
+	})
+
+	t.Run("Duration is correctly clipped", func(t *testing.T) {
+		dur := 200 * time.Second
+		want := width - 2
+		got := view.CalcDurationWidth(dur)
+		assertInt(t, got, want)
+	})
 }
 
 func TestHandleMouseClick(t *testing.T) {
@@ -343,10 +355,10 @@ func TestView_DrawRune(t *testing.T) {
 		view.DrawRune(x, y, m)
 
 		s.Show() // Process content
-		mainc, _, style, width := s.GetContent(x, y)
+		got, _, style, width := s.GetContent(x, y)
 
-		if mainc != '' {
-			t.Errorf("Expected rune \uF8FF, got %c", mainc)
+		if got != '' {
+			t.Errorf("Expected rune \uF8FF, got %c", got)
 		}
 
 		if width != 1 {
@@ -390,10 +402,10 @@ func TestView_DrawText(t *testing.T) {
 		// Verify each character
 		expectedRunes := []rune(text)
 		for i, expectedRune := range expectedRunes {
-			mainc, _, style, _ := view.Screen.GetContent(5+i, 10)
+			got, _, style, _ := view.Screen.GetContent(5+i, 10)
 
-			if mainc != expectedRune {
-				t.Errorf("Position %d: expected '%c', got '%c'", i, expectedRune, mainc)
+			if got != expectedRune {
+				t.Errorf("Position %d: expected '%c', got '%c'", i, expectedRune, got)
 			}
 
 			// Compare styles directly
@@ -432,10 +444,10 @@ func TestView_DrawViewBorder(t *testing.T) {
 		}
 
 		for _, c := range corners {
-			mainc, _, style, _ := view.Screen.GetContent(c.x, c.y)
-			if mainc != c.want {
+			got, _, style, _ := view.Screen.GetContent(c.x, c.y)
+			if got != c.want {
 				t.Errorf("Corner at (%d,%d): expected %c, got %c",
-					c.x, c.y, c.want, mainc)
+					c.x, c.y, c.want, got)
 			}
 
 			// Compare styles directly
@@ -525,12 +537,12 @@ func TestView_DrawTimeseries(t *testing.T) {
 		displayOffset := 60 - len(allIntensityRunes) // 52
 		for i, expectedRune := range allIntensityRunes {
 			screenPos := 5 + displayOffset + i // Screen x position
-			mainc, _, style, _ := view.Screen.GetContent(screenPos, 10)
+			got, _, style, _ := view.Screen.GetContent(screenPos, 10)
 
 			// Check the rune
-			if mainc != expectedRune {
+			if got != expectedRune {
 				t.Errorf("Position %d: expected rune '%c', got '%c'",
-					i, expectedRune, mainc)
+					i, expectedRune, got)
 			}
 
 			// Check the color matches the intensity
@@ -545,10 +557,10 @@ func TestView_DrawTimeseries(t *testing.T) {
 
 		// First 52 positions should be spaces (zero runes)
 		for i := 0; i < displayOffset; i++ {
-			mainc, _, style, _ := view.Screen.GetContent(5+i, 10)
+			got, _, style, _ := view.Screen.GetContent(5+i, 10)
 
-			if mainc != ' ' && mainc != 0 {
-				t.Errorf("Position %d: expected space, got '%c'", i, mainc)
+			if got != ' ' && got != 0 {
+				t.Errorf("Position %d: expected space, got '%c'", i, got)
 			}
 
 			expectedStyle := tcell.StyleDefault
@@ -579,12 +591,147 @@ func TestView_DrawTimeseries(t *testing.T) {
 
 		// All positions should have spaces
 		for i := 0; i < 60; i++ {
-			mainc, _, _, _ := view.Screen.GetContent(5+i, 10)
-			if mainc != ' ' && mainc != 0 {
-				t.Errorf("Position %d: expected space, got '%c'", i, mainc)
+			got, _, _, _ := view.Screen.GetContent(5+i, 10)
+			if got != ' ' && got != 0 {
+				t.Errorf("Position %d: expected space, got '%c'", i, got)
 			}
 		}
 	})
+}
+
+func TestView_DrawHarmonyViewMulti_Borders(t *testing.T) {
+	ep := makeEndpointMetrics(t)
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{ep})
+	defer view.Screen.Fini()
+	w, h := view.Screen.Size()
+
+	t.Run("Correct border is drawn for view", func(t *testing.T) {
+		// Use the same values passed to DrawViewBorder
+		width := w - 2
+		height := h - 1
+		view.DrawHarmonyViewMulti()
+
+		// Check corners
+		assertRunePos(t, view, 0, 0, tcell.RuneULCorner)
+		assertRunePos(t, view, width, 0, tcell.RuneURCorner)
+		assertRunePos(t, view, 0, height, tcell.RuneLLCorner)
+		assertRunePos(t, view, width, height, tcell.RuneLRCorner)
+	})
+}
+
+func TestView_DrawHarmonyViewMulti_Selections(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	defer view.Screen.Fini()
+	_, h := view.Screen.Size()
+	height := h - 1
+
+	view.MU.Lock()
+	view.ShowPulse = true
+	view.ShowEP = true
+	view.SelectEP = 0
+	view.ShowMe = true
+	view.SelectMe = "CPU"
+	view.MU.Unlock()
+
+	view.DrawHarmonyViewMulti()
+
+	t.Run("Endpoint label appears correctly", func(t *testing.T) {
+		ep := view.QNet.Network[view.SelectEP].ID
+		for _, rep := range ep {
+			assertRunePos(t, view, 55, height, rep)
+			break
+		}
+	})
+
+	t.Run("Metric label appears correctly", func(t *testing.T) {
+		metric := view.QNet.Network[view.SelectEP].Metric[0]
+		for _, rm := range metric {
+			assertRunePos(t, view, 8, height-1, rm)
+			break
+		}
+	})
+
+}
+
+func TestView_DrawHarmonyViewMulti_IfShowMe(t *testing.T) {
+	ep1 := makeEndpointMetrics(t)
+	ep2 := makeEndpointMetrics(t)
+
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{ep1, ep2})
+	defer view.Screen.Fini()
+
+	view.MU.Lock()
+	view.ShowPulse = false
+	view.ShowMe = true
+	view.SelectEP = 0
+	view.SelectMe = "CPU"
+	view.MU.Unlock()
+
+	view.DrawHarmonyViewMulti()
+
+	_, height := view.Screen.Size()
+
+	expectedLabel := "... CPU ..."
+	got, _, _, _ := view.Screen.GetContent(4, height-2)
+	if got != rune(expectedLabel[0]) {
+		t.Errorf("Metric label not found at expected position after fix")
+	}
+
+	yTS := view.CalcTimeseriesY(0, 0, 4)
+	mdata := view.QNet.Network[0].Mdata["CPU"]
+	expectedData := fmt.Sprintf("%d", mdata)
+	got, _, _, _ = view.Screen.GetContent(2, yTS)
+	if got != rune(expectedData[0]) {
+		t.Errorf("Metric data not found at expected position after fix")
+	}
+}
+
+func TestView_DrawHarmonyViewMulti_Concurrent(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{})
+	defer view.Screen.Fini()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			view.DrawHarmonyViewMulti()
+		}()
+	}
+
+	wg.Wait() // Should not deadlock or panic
+}
+
+func TestView_DrawHarmonyViewMulti_EmptyQNet(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{})
+	defer view.Screen.Fini()
+	w, h := view.Screen.Size()
+	width := w - 2
+	height := h - 1
+	view.DrawHarmonyViewMulti()
+
+	// Check corners
+	assertRunePos(t, view, 0, 0, tcell.RuneULCorner)
+	assertRunePos(t, view, width, 0, tcell.RuneURCorner)
+	assertRunePos(t, view, 0, height, tcell.RuneLLCorner)
+	assertRunePos(t, view, width, height, tcell.RuneLRCorner)
+}
+
+func TestView_DrawHarmonyViewMulti_Accent(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	defer view.Screen.Fini()
+
+	view.QNet.Network[0].Accent["CPU"] = &Ms.Accent{
+		Timestamp: time.Now().UnixMicro(),
+		Intensity: 1,
+		SourceID:  view.QNet.Network[0].ID,
+	}
+	accent := view.QNet.Network[0].Accent["CPU"]
+	newTime := time.Unix(accent.Timestamp/1e9, accent.Timestamp%1e9)
+	x := newTime.Second()
+
+	view.DrawHarmonyViewMulti()
+	assertRunePos(t, view, x, 1, '')
 }
 
 func TestView_GetPulseRune(t *testing.T) {
@@ -751,7 +898,59 @@ func TestView_PollQNetAll(t *testing.T) {
 	})
 }
 
+func TestView_ResizeScreen(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	defer view.Screen.Fini()
+
+	// Draw initial screen
+	// w1, h1 := view.GetScreenSize()
+	view.UpdateScreen()
+
+	// Resize it to something else
+	w2, h2 := 90, 30
+	view.Screen.SetSize(w2, h2)
+
+	// Now to sync and redraw
+	view.ResizeScreen()
+
+	// Verify new size
+	wnew, hnew := view.GetScreenSize()
+	if wnew != w2 || hnew != h2 {
+		t.Errorf("Screen size: got (%d, %d), want (%d, %d)", wnew, hnew, w2, h2)
+	}
+}
+
 // Helpers //
+
+func makeEndpointMetrics(t *testing.T) *Ms.Endpoint {
+	t.Helper()
+
+	return &Ms.Endpoint{
+		MU:     sync.RWMutex{},
+		ID:     "test",
+		Metric: map[int]string{0: "CPU", 1: "MEM"},
+		Mdata:  map[string]int64{"CPU": 40, "MEM": 500},
+		Maxval: map[string]int64{"CPU": 80, "MEM": 1000},
+		Accent: make(map[string]*Ms.Accent),
+		Layer: map[string]*Ms.Timeseries{
+			"CPU": {
+				Runes:   make([]rune, 80),
+				MaxSize: 80,
+				Current: 0,
+			},
+			"MEM": {
+				Runes:   make([]rune, 80),
+				MaxSize: 80,
+				Current: 0,
+			},
+		},
+		Pulses: &Ms.TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]Ms.PulseEvent, 0),
+			Groups:     make([]*Ms.PulseTree, 0),
+		},
+	}
+}
 
 func getStyleForTimeseriesRune(r rune) tcell.Style {
 	switch r {
@@ -794,4 +993,13 @@ func makeTestScreen(t *testing.T, charset string) (tcell.SimulationScreen, error
 		return s, err
 	}
 	return s, nil
+}
+
+func assertRunePos(t *testing.T, v *Md.View, x, y int, want rune) {
+	t.Helper()
+
+	got, _, _, _ := v.Screen.GetContent(x, y)
+	if got != want {
+		t.Errorf("At position (%d, %d) got '%c', want '%c'", x, y, got, want)
+	}
 }

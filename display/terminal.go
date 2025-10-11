@@ -22,7 +22,7 @@ const (
 
 // View is updated by whatever is in the QNet
 type View struct {
-	mu          sync.Mutex        // State locks to read data
+	MU          sync.Mutex        // State locks to read data
 	QNet        *Ms.QNet          // Quality Network
 	Screen      tcell.Screen      // the screen itself
 	display     []string          // rune display sequence
@@ -32,7 +32,7 @@ type View struct {
 	ShowEP      bool              // Display Endpoint ID
 	SelectMe    string            // Selected Metric with MouseClick
 	ShowMe      bool              // Display Metric ID
-	showPulse   bool              // Display pulse view overlay
+	ShowPulse   bool              // Display pulse view overlay
 	pulseFilter *Ms.PulsePattern  // For filtering the display
 }
 
@@ -75,27 +75,6 @@ func (v *View) CalcDurationWidth(duration time.Duration) int {
 		durationSeconds = maxW
 	}
 	return durationSeconds
-}
-
-func (v *View) getAccentStateAtPos(pulse Ms.PulseEvent, pos int) bool {
-	// Determine if this timeline position represents accent or non-accent
-	// Based on the pulse pattern and position within the pulse span
-
-	switch pulse.Pattern {
-	case Ms.Iamb:
-		// Iamb: non-accent → accent
-		// First part is non-accent, second part is accent
-		midPoint := v.CalcTimePos(pulse.StartTime) + (v.CalcDurationWidth(pulse.Duration) / 2)
-		return pos >= midPoint
-
-	case Ms.Trochee:
-		// Trochee: accent → non-accent
-		// First part is accent, second part is non-accent
-		midPoint := v.CalcTimePos(pulse.StartTime) + (v.CalcDurationWidth(pulse.Duration) / 2)
-		return pos < midPoint
-	}
-
-	return false
 }
 
 func (v *View) GetPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell.Style) {
@@ -152,7 +131,9 @@ func (v *View) drawPulseView() {
 	v.DrawViewBorder(width, height)
 
 	// Clear or dim the background first
-	v.drawPulseBackground()
+	/*
+		v.drawPulseBackground()
+	*/
 
 	// Show current filter mode
 	filterText := "All Patterns"
@@ -213,6 +194,7 @@ func (v *View) drawPulseView() {
 	v.DrawText(1, 1, 20, 2, "PULSE VIEW")
 }
 
+/*
 func (v *View) drawPulseBackground() {
 	width, height := v.GetScreenSize()
 
@@ -227,9 +209,11 @@ func (v *View) drawPulseBackground() {
 	}
 }
 
+*/
+
 ////////// PULSE VIS ^^^^^
 
-// place a single '' on the screen
+// DrawRune places a single '' on the screen
 // used to draw the accents/second indicator
 func (v *View) DrawRune(x, y, m int) {
 	color := tcell.NewRGBColor(int32(150+x), int32(150+y), int32(255-m))
@@ -273,7 +257,7 @@ func (v *View) DrawTimeseries(x, y, i int, m string) {
 	}
 }
 
-// Display text
+// DrawText displays the text string at the given (x1, y1) with box size (x2, y2)
 func (v *View) DrawText(x1, y1, x2, y2 int, text string) {
 	row := y1
 	col := x1
@@ -317,9 +301,9 @@ func (v *View) DrawViewBorder(width, height int) {
 	}
 }
 
-// Draw the HarmonyView itself
-// Includes a toggle for view mode
-func (v *View) drawHarmonyViewMulti() {
+// DrawHarmonyViewMulti draws the HarmonyView itself with tcell
+// Includes a toggle for View mode (Accent or Pulse)
+func (v *View) DrawHarmonyViewMulti() {
 	// This is the border of the box
 	width, height := v.GetScreenSize()
 
@@ -328,16 +312,16 @@ func (v *View) drawHarmonyViewMulti() {
 	defer v.QNet.MU.RUnlock()
 
 	// Obtain a lock and grab needed display data
-	v.mu.Lock()
+	v.MU.Lock()
 	showEP := v.ShowEP
 	showMe := v.ShowMe
-	showPulse := v.showPulse
+	showPulse := v.ShowPulse
 	selectEP := v.SelectEP
 	selectMe := v.SelectMe
-	v.mu.Unlock()
+	v.MU.Unlock()
 
 	// Draw basic elements
-	v.DrawViewBorder(width, height)
+	v.DrawViewBorder(width-2, height-1)
 
 	// Support toggle to pulse view by wrapping in a boolean
 	if showPulse {
@@ -379,31 +363,31 @@ func (v *View) drawHarmonyViewMulti() {
 					v.DrawRune(s, 1, int(ddm))
 				}
 			}
+		}
 
-			// A MouseClick has happened on a graph, show the metric name and value
-			// retrieve the data via lock
-			if showMe {
-				for ni := range v.QNet.Network {
-					if ni == selectEP {
-						for di, dm := range v.QNet.Network[ni].Metric {
-							if dm == selectMe {
-								yTS := v.CalcTimeseriesY(ni, di, screenGutter)
+		// A MouseClick has happened on a graph, show the metric name and value
+		// retrieve the data via lock
+		if showMe {
+			for ni := range v.QNet.Network {
+				if ni == selectEP {
+					for di, dm := range v.QNet.Network[ni].Metric {
+						if dm == selectMe {
+							yTS := v.CalcTimeseriesY(ni, di, screenGutter)
 
-								mdata := v.QNet.Network[ni].Mdata[dm]
-								label := fmt.Sprintf("... %s ...", dm) // The Metric
-								data := fmt.Sprintf("%d", mdata)       // The raw data
-								v.DrawText(2, yTS, width, yTS, data)
-								v.DrawText(4, height-2, width, height-2, label)
-							}
+							mdata := v.QNet.Network[ni].Mdata[dm]
+							label := fmt.Sprintf("... %s ...", dm) // The Metric
+							data := fmt.Sprintf("%d", mdata)       // The raw data
+							v.DrawText(2, yTS, width, yTS, data)
+							v.DrawText(4, height-2, width, height-2, label)
 						}
 					}
 				}
 			}
+		}
 
-			// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
-			if showEP {
-				v.showEndpointWithState(40, 1, showEP, selectEP)
-			}
+		// A MouseClick has happened on a graph, show the Endpoint ID at the bottom
+		if showEP {
+			v.showEndpointWithState(40, 1, showEP, selectEP)
 		}
 
 		v.DrawText(1, height-1, width, height+10, "/p/ for pulses | /ESC/ to quit")
@@ -451,8 +435,8 @@ func (v *View) showEndpointWithState(x, by int, showEP bool, selectEP int) {
 
 // Exit cleanly
 func (v *View) exit() {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.MU.Lock()
+	defer v.MU.Unlock()
 	v.Screen.Fini()
 	os.Exit(0)
 }
@@ -463,7 +447,7 @@ func (v *View) handleKeyBoardEvent() {
 		ev := v.Screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
-			v.resizeScreen()
+			v.ResizeScreen()
 		case *tcell.EventKey:
 			// Catch quit and exit
 			if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
@@ -472,33 +456,33 @@ func (v *View) handleKeyBoardEvent() {
 
 			// Toggle pulse view with 'p'
 			if ev.Rune() == 'p' {
-				v.mu.Lock()
-				v.showPulse = !v.showPulse
-				v.mu.Unlock()
+				v.MU.Lock()
+				v.ShowPulse = !v.ShowPulse
+				v.MU.Unlock()
 			}
 
 			// Pattern filtering (only when in pulse view)
-			if v.showPulse {
+			if v.ShowPulse {
 				switch ev.Rune() {
 				case 'a':
-					v.mu.Lock()
+					v.MU.Lock()
 					amphibrach := Ms.Amphibrach
 					v.pulseFilter = &amphibrach
-					v.mu.Unlock()
+					v.MU.Unlock()
 				case 'i':
-					v.mu.Lock()
+					v.MU.Lock()
 					iamb := Ms.Iamb
 					v.pulseFilter = &iamb
-					v.mu.Unlock()
+					v.MU.Unlock()
 				case 't':
-					v.mu.Lock()
+					v.MU.Lock()
 					trochee := Ms.Trochee
 					v.pulseFilter = &trochee
-					v.mu.Unlock()
+					v.MU.Unlock()
 				case 'x':
-					v.mu.Lock()
+					v.MU.Lock()
 					v.pulseFilter = nil // Show all patterns
-					v.mu.Unlock()
+					v.MU.Unlock()
 				}
 			}
 
@@ -517,8 +501,8 @@ func (v *View) HandleMouseClick(x, y int) {
 	defer v.QNet.MU.RUnlock()
 
 	// Lock display for updates
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.MU.Lock()
+	defer v.MU.Unlock()
 
 	// Assume there is no label so the last one is cleared.
 	v.ShowEP = false
@@ -569,15 +553,15 @@ func (v *View) GetScreenSize() (int, int) {
 	return width, height
 }
 
-// Resize for terminal changes
-func (v *View) resizeScreen() {
+// ResizeScreen resizes HarmonyView after terminal changes
+func (v *View) ResizeScreen() {
 	v.Screen.Sync()
-	v.updateScreen()
+	v.UpdateScreen()
 }
 
-func (v *View) updateScreen() {
+func (v *View) UpdateScreen() {
 	v.Screen.Clear()
-	v.drawHarmonyViewMulti()
+	v.DrawHarmonyViewMulti()
 	v.Screen.Show()
 }
 
@@ -613,7 +597,7 @@ func (v *View) run() {
 				slog.Error("Failed to PollQNetAll", slog.Any("Error", err))
 				return
 			}
-			v.updateScreen()
+			v.UpdateScreen()
 		}
 	}
 }
@@ -690,7 +674,7 @@ func NewView(q *Ms.QNet) (*View, error) {
 		Stats:   stats,
 	}
 
-	view.updateScreen()
+	view.UpdateScreen()
 
 	return view, err
 }
