@@ -44,8 +44,7 @@ func TestQNet_PollMultiNetworkError(t *testing.T) {
 
 	t.Run("No error returned on bad URL (code continues)", func(t *testing.T) {
 		qn.Network[0].URL = "http://unreachable-craquemattic:2345/metrics"
-		err := qn.PollMulti()
-		assertError(t, err, nil)
+		qn.PollMulti()
 	})
 
 	t.Run("No error returned when endpoint times out (code continues)", func(t *testing.T) {
@@ -55,8 +54,7 @@ func TestQNet_PollMultiNetworkError(t *testing.T) {
 		defer slowServ.Close()
 
 		qn.Network[0].URL = slowServ.URL
-		err := qn.PollMulti()
-		assertError(t, err, nil)
+		qn.PollMulti()
 	})
 }
 
@@ -79,8 +77,7 @@ func TestQNet_PollMultiDataError(t *testing.T) {
 			3: "CPU4",
 		}
 
-		err := qn.PollMulti()
-		assertError(t, err, nil)
+		qn.PollMulti()
 	})
 }
 
@@ -152,8 +149,7 @@ func TestQNet_FindAccent(t *testing.T) {
 
 	// create a new QNet and poll
 	qn := Ms.NewQNet(eps)
-	err := qn.PollMulti()
-	assertError(t, err, nil)
+	qn.PollMulti()
 
 	t.Run("No accent with value below Maxval", func(t *testing.T) {
 		// Using CPU1:10 from NewTestQNet
@@ -257,11 +253,7 @@ func TestQNet_PollMulti(t *testing.T) {
 			Network: []*Ms.Endpoint{badEndpoint, goodEndpoint},
 		}
 
-		// Call PollMulti - should not return error despite bad endpoint
-		err := qnet.PollMulti()
-		if err != nil {
-			t.Errorf("Expected nil error (resilient behavior), got %v", err)
-		}
+		qnet.PollMulti()
 
 		// Verify the good endpoint was still polled successfully
 		if goodEndpoint.Mdata["CPU2"] != 200 {
@@ -289,8 +281,7 @@ func TestQNet_PollMulti(t *testing.T) {
 
 	// create a new QNet and poll
 	qn := Ms.NewQNet(eps)
-	err := qn.PollMulti()
-	assertError(t, err, nil)
+	qn.PollMulti()
 
 	t.Run("Fetches correct IDs", func(t *testing.T) {
 		got := qn.Network[0].ID
@@ -943,8 +934,7 @@ func TestConcurrentPollAndDisplay(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			err := qn.PollMulti()
-			assertError(t, err, nil)
+			qn.PollMulti()
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()

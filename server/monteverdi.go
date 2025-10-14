@@ -511,7 +511,9 @@ func Max(a, b int) int {
 }
 
 // PollMulti reads all configured metrics from QNet and retrieves them.
-func (q *QNet) PollMulti() error {
+// NB: This func can create errors but does not pass any of them up.
+// Instead, it logs the problem and continues with the data.
+func (q *QNet) PollMulti() {
 	var mdata int64
 	mdata = 0
 
@@ -583,7 +585,7 @@ func (q *QNet) PollMulti() error {
 		}
 	}
 
-	return nil
+	return
 }
 
 // CycBuffer is a cyclic buffer for hysteresis,

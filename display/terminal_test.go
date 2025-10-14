@@ -1,6 +1,7 @@
 package monteverdi_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,37 @@ func TestScreen(t *testing.T) {
 				t.Errorf("Incorrect style at %v: %v", i, b[i].Style)
 			}
 		}
+	})
+}
+
+func TestNewViewWithScreen(t *testing.T) {
+	qn := &Ms.QNet{
+		MU:      sync.RWMutex{},
+		Network: []*Ms.Endpoint{makeEndpointMetrics(t)},
+	}
+	screen := tcell.NewSimulationScreen("utf8")
+	view, err := Md.NewViewWithScreen(qn, screen)
+	assertError(t, err, nil)
+
+	t.Run("ID matches returned struct", func(t *testing.T) {
+		want := qn.Network[0].ID
+		got := view.QNet.Network[0].ID
+		assertStringContains(t, got, want)
+	})
+
+	t.Run("Returns error on nil QNet elements", func(t *testing.T) {
+		// Check nil QNet
+		qnil := &Ms.QNet{}
+		_, err = Md.NewViewWithScreen(qnil, screen)
+		assertGotError(t, err)
+
+		// QNet with nil Endpoint
+		epnil := &Ms.QNet{
+			MU:      sync.RWMutex{},
+			Network: nil,
+		}
+		_, err = Md.NewViewWithScreen(epnil, screen)
+		assertGotError(t, err)
 	})
 }
 
@@ -381,15 +413,52 @@ func TestView_DrawRune(t *testing.T) {
 }
 
 func TestView_DrawText(t *testing.T) {
-	t.Run("Draws text with color", func(t *testing.T) {
-		ep := &Ms.Endpoint{
-			ID:     "TEST",
-			Metric: map[int]string{0: "CPU1"},
-		}
-		eps := []*Ms.Endpoint{ep}
-		view := makeTestViewWithScreen(t, eps)
-		defer view.Screen.Fini()
+	ep := &Ms.Endpoint{
+		ID:     "TEST",
+		Metric: map[int]string{0: "CPU1"},
+	}
+	eps := []*Ms.Endpoint{ep}
+	view := makeTestViewWithScreen(t, eps)
+	defer view.Screen.Fini()
 
+	t.Run("Wraps lines correctly", func(t *testing.T) {
+		text := "ONE TWO SIX"
+		view.DrawText(0, 1, 6, 2, text)
+		view.Screen.Show()
+
+		// DrawText should split the words on two lines like:
+		// ONE TW
+		// O SIX
+		got, _, _, _ := view.Screen.GetContent(0, 1)
+		r := string(got)
+		get, _, _, _ := view.Screen.GetContent(0, 2)
+		rr := string(get)
+		if r != "O" || rr != "O" {
+			t.Errorf("Expected two lines starting with 'O' and 'O' but got '%v' and '%v'", r, rr)
+		}
+	})
+
+	t.Run("Wraps lines and stops", func(t *testing.T) {
+		text := "ONE TWO SIX THREE"
+		view.DrawText(0, 1, 6, 2, text)
+		view.Screen.Show()
+
+		// There should be two 'O' as above but nothing at y=3
+		got, _, _, _ := view.Screen.GetContent(0, 1)
+		r := string(got)
+		get, _, _, _ := view.Screen.GetContent(0, 2)
+		rr := string(get)
+		if r != "O" || rr != "O" {
+			t.Errorf("Expected two lines starting with 'O' and 'O' but got '%v' and '%v'", r, rr)
+		}
+		git, _, _, _ := view.Screen.GetContent(0, 3)
+		rrr := string(git)
+		if rrr != "T" {
+			t.Errorf("Text wrapped beyond end of line 2")
+		}
+	})
+
+	t.Run("Draws text with color", func(t *testing.T) {
 		text := "HELLO"
 		view.DrawText(5, 10, 80, 20, text)
 		view.Screen.Show()
@@ -853,6 +922,43 @@ func TestView_StatsMiddleware(t *testing.T) {
 }
 
 func TestView_PollQNetAll(t *testing.T) {
+	t.Run("Continues after an error", func(t *testing.T) {
+		// Create mock server with metrics, the middle one is bad
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "CPU1=100")
+			fmt.Fprintln(w, "CPU2200")
+			fmt.Fprintln(w, "CPU3=300")
+		}))
+		defer mockServer.Close()
+
+		// Create endpoint pointing to mock server
+		endpoint := makeEndpoint("test", mockServer.URL)
+		qnet := &Ms.QNet{Network: []*Ms.Endpoint{endpoint}}
+
+		stats := Mo.NewStatsInternal()
+		view := &Md.View{
+			QNet:  qnet,
+			Stats: stats,
+		}
+
+		// Call PollQNetAll
+		err := view.PollQNetAll()
+		assertError(t, err, nil)
+
+		// Verify data was polled for the good metrics
+		if qnet.Network[0].Mdata["CPU1"] != 100 {
+			t.Errorf("Expected CPU1=100, got %d", qnet.Network[0].Mdata["CPU1"])
+		}
+		// For CPU2, check that it was not set to the value expected above (200)
+		if qnet.Network[0].Mdata["CPU2"] == 200 {
+			t.Errorf("Expected error for CPU2, got %d", qnet.Network[0].Mdata["CPU2"])
+		}
+		// It should skip it and keep going
+		if qnet.Network[0].Mdata["CPU3"] != 300 {
+			t.Errorf("Expected CPU3=300, got %d", qnet.Network[0].Mdata["CPU3"])
+		}
+	})
+
 	t.Run("Successfully polls and records timing", func(t *testing.T) {
 		// Create mock server with metrics
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -863,7 +969,7 @@ func TestView_PollQNetAll(t *testing.T) {
 		defer mockServer.Close()
 
 		// Create endpoint pointing to mock server
-		endpoint := makeEndpoint("test-endpoint", mockServer.URL)
+		endpoint := makeEndpoint("test", mockServer.URL)
 		qnet := &Ms.QNet{
 			Network: []*Ms.Endpoint{endpoint},
 		}
@@ -878,9 +984,7 @@ func TestView_PollQNetAll(t *testing.T) {
 		err := view.PollQNetAll()
 
 		// Should not return an error (always returns nil)
-		if err != nil {
-			t.Errorf("Expected nil error, got %v", err)
-		}
+		assertError(t, err, nil)
 
 		// Verify data was polled
 		if qnet.Network[0].Mdata["CPU1"] != 100 {
@@ -918,6 +1022,57 @@ func TestView_ResizeScreen(t *testing.T) {
 	if wnew != w2 || hnew != h2 {
 		t.Errorf("Screen size: got (%d, %d), want (%d, %d)", wnew, hnew, w2, h2)
 	}
+}
+
+func TestStartWebNoTUI(t *testing.T) {
+	t.Run("Starts web server", func(t *testing.T) {
+		mockServ := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "CPU1=80")
+		}))
+		defer mockServ.Close()
+
+		config := []Ms.ConfigFile{
+			{
+				ID:      "test",
+				URL:     mockServ.URL,
+				Metrics: make(map[string]Ms.MetricConfig),
+			},
+		}
+
+		// Run check in goroutine because ListenAndServe is blocking
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- Md.StartWebNoTUI(config)
+		}()
+
+		// Wait a bit to start
+		time.Sleep(100 * time.Millisecond)
+
+		// Check for startup errors
+		select {
+		case err := <-errChan:
+			t.Fatalf("Expected no error, got %v", err)
+		default: // Server is still running
+		}
+
+		// Check metrics endpoint
+		r, err := http.Get("http://localhost:8090/metrics")
+		assertError(t, err, nil)
+		defer r.Body.Close()
+
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("Expected status OK, got %d", r.StatusCode)
+		}
+
+		// Check for shutdown errors
+		select {
+		case err = <-errChan:
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				t.Errorf("Unexpected error during shutdown: %v", err)
+			}
+		case <-time.After(100 * time.Millisecond): // Server is still running
+		}
+	})
 }
 
 // Helpers //

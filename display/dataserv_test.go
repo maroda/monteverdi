@@ -89,8 +89,6 @@ func TestView_MetricsDataHandler(t *testing.T) {
 	view := &Md.View{QNet: qn}
 
 	view.MetricsDataHandler(w, r)
-	t.Logf("Metrics data: %s", w.Body.String())
-
 }
 
 // NewTestQNet is a special use func for tests that manually set up data and don't need network calls

@@ -25,7 +25,7 @@ type View struct {
 	MU          sync.Mutex        // State locks to read data
 	QNet        *Ms.QNet          // Quality Network
 	Screen      tcell.Screen      // the screen itself
-	display     []string          // rune display sequence
+	Display     []string          // rune display sequence
 	Stats       *Mo.StatsInternal // Internal status for prometheus
 	server      *http.Server      // Prometheus metrics server
 	SelectEP    int               // Selected Endpoint with MouseClick
@@ -34,6 +34,42 @@ type View struct {
 	ShowMe      bool              // Display Metric ID
 	ShowPulse   bool              // Display pulse view overlay
 	pulseFilter *Ms.PulsePattern  // For filtering the display
+}
+
+// NewViewWithScreen inits the tcell screen that displays HarmonyView.
+// It takes a tcell.screen as an input alongside the current QNet.
+func NewViewWithScreen(q *Ms.QNet, screen tcell.Screen) (*View, error) {
+	if q == nil || q.Network == nil {
+		slog.Error("Could not get a QNet for display")
+		return nil, errors.New("quality network not found")
+	}
+
+	// Define and configure the default screen
+	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
+	screen.SetStyle(defStyle)
+	screen.EnableMouse()
+
+	// Get all configured metrics from all Endpoints
+	display := make([]string, 0)
+	for _, ep := range q.Network {
+		for _, mv := range ep.Metric {
+			display = append(display, mv)
+		}
+	}
+
+	// create an attached prometheus registry
+	stats := Mo.NewStatsInternal()
+
+	view := &View{
+		QNet:    q,
+		Screen:  screen,
+		Display: display,
+		Stats:   stats,
+	}
+
+	view.UpdateScreen()
+
+	return view, nil
 }
 
 // CalcTimeseriesY figures out where to draw the next Timeseries entry on the graph
@@ -131,9 +167,7 @@ func (v *View) drawPulseView() {
 	v.DrawViewBorder(width, height)
 
 	// Clear or dim the background first
-	/*
-		v.drawPulseBackground()
-	*/
+	v.drawPulseBackground()
 
 	// Show current filter mode
 	filterText := "All Patterns"
@@ -194,7 +228,6 @@ func (v *View) drawPulseView() {
 	v.DrawText(1, 1, 20, 2, "PULSE VIEW")
 }
 
-/*
 func (v *View) drawPulseBackground() {
 	width, height := v.GetScreenSize()
 
@@ -208,8 +241,6 @@ func (v *View) drawPulseBackground() {
 		}
 	}
 }
-
-*/
 
 ////////// PULSE VIS ^^^^^
 
@@ -264,13 +295,13 @@ func (v *View) DrawText(x1, y1, x2, y2 int, text string) {
 	style := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorLightSteelBlue)
 	for _, r := range text {
 		v.Screen.SetContent(col, row, r, nil, style)
+		if row > y2 {
+			break
+		}
 		col++
 		if col >= x2 {
 			row++
 			col = x1
-		}
-		if row > y2 {
-			break
 		}
 	}
 }
@@ -534,12 +565,7 @@ func (v *View) HandleMouseClick(x, y int) {
 // so that Poll misses are only logged, not fatal (and blocking)
 func (v *View) PollQNetAll() error {
 	start := time.Now()
-
-	err := v.QNet.PollMulti()
-	if err != nil {
-		// Only log the error, keep going otherwise
-		slog.Error("Failed to PollMulti", slog.Any("Error", err))
-	}
+	v.QNet.PollMulti()
 
 	duration := time.Since(start).Seconds()
 	v.Stats.RecPollTimer(duration)
@@ -584,10 +610,6 @@ func (v *View) run() {
 	slog.Info("Starting HarmonyView")
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-
-	// Memory usage reporter
-	memTicker := time.NewTicker(5 * time.Second)
-	defer memTicker.Stop()
 
 	for {
 		select {
@@ -634,51 +656,6 @@ func (v *View) StatsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// NewView creates the tcell screen that displays HarmonyView
-func NewView(q *Ms.QNet) (*View, error) {
-	if q == nil || q.Network == nil {
-		slog.Error("Could not get a QNet for display")
-		return nil, errors.New("quality network not found")
-	}
-
-	screen, err := tcell.NewScreen()
-	if err != nil {
-		slog.Error("Could not get new screen", slog.Any("Error", err))
-		return nil, err
-	}
-	if err := screen.Init(); err != nil {
-		slog.Error("Could not initialize screen", slog.Any("Error", err))
-		return nil, err
-	}
-
-	// Define and configure the default screen
-	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorPink)
-	screen.SetStyle(defStyle)
-	screen.EnableMouse()
-
-	// Get all configured metrics from all Endpoints
-	display := make([]string, 0)
-	for _, ep := range q.Network {
-		for _, mv := range ep.Metric {
-			display = append(display, mv)
-		}
-	}
-
-	// create an attached prometheus registry
-	stats := Mo.NewStatsInternal()
-
-	view := &View{
-		QNet:    q,
-		Screen:  screen,
-		display: display, // something is overranging this display slice!
-		Stats:   stats,
-	}
-
-	view.UpdateScreen()
-
-	return view, err
-}
-
 // StartHarmonyViewWithConfig is called by main to run the program.
 // This also starts up the /metrics endpoint that is populated by prometheus.
 func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
@@ -689,12 +666,30 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 		return err
 	}
 
+	// Define a QNet - Quality Network - for the view
+	// filled with the config Endpoints
 	qn := Ms.NewQNet(*eps)
 	if qn == nil {
 		slog.Error("Failed to init QNet", slog.Any("Error", err))
+		return err
 	}
 
-	view, err := NewView(qn)
+	// Define a tcell screen for the view
+	screen, err := tcell.NewScreen()
+	if err != nil {
+		slog.Error("Failed to get Screen", slog.Any("Error", err))
+		return err
+	}
+
+	// Init the new screen before use
+	if err = screen.Init(); err != nil {
+		slog.Error("Failed to init Screen", slog.Any("Error", err))
+		return err
+	}
+	defer screen.Fini()
+
+	// If all is good, instantiate the new Terminal UI object
+	view, err := NewViewWithScreen(qn, screen)
 	if err != nil {
 		slog.Error("Could not start HarmonyView", slog.Any("Error", err))
 		return err
@@ -726,7 +721,7 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 func StartWebNoTUI(c []Ms.ConfigFile) error {
 	// Init Endpoints
 	eps, err := Ms.NewEndpointsFromConfig(c)
-	if eps == nil || err != nil {
+	if err != nil {
 		slog.Error("Failed to init endpoints", slog.Any("Error", err))
 		return err
 	}

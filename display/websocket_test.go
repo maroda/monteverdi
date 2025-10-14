@@ -555,6 +555,7 @@ func TestWebsocketHandler_DataFormat(t *testing.T) {
 // Helpers //
 
 func makeQNetWithAmphibrachs(t *testing.T) *Ms.QNet {
+	t.Helper()
 	// Create endpoint with known amphibrachs in TemporalGrouper
 	endpoint := makeEndpoint("TEST", "http://test")
 

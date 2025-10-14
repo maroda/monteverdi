@@ -30,15 +30,13 @@ func TestQNet_PollMultiPlugin(t *testing.T) {
 		qn := Ms.NewQNet(Ms.Endpoints{ep})
 
 		// First poll - no rate yet
-		err := qn.PollMulti()
-		assertError(t, err, nil)
+		qn.PollMulti()
 		firstVal := qn.Network[0].Mdata[metric]
 		t.Logf("First val: %d", firstVal)
 
 		// Second poll - should have a rate
 		time.Sleep(1 * time.Second)
-		err = qn.PollMulti()
-		assertError(t, err, nil)
+		qn.PollMulti()
 		secondVal := qn.Network[0].Mdata[metric]
 		t.Logf("Second val: %d", secondVal)
 
@@ -56,8 +54,7 @@ func TestQNet_PollMultiPlugin(t *testing.T) {
 		// Create endpoint with a transformer that errors
 		ep := makeEndpointMTrans(metric, mockMetricsServ.URL, &MockErrorTransformer{})
 		qn := Ms.NewQNet(Ms.Endpoints{ep})
-		err := qn.PollMulti()
-		assertError(t, err, nil)
+		qn.PollMulti()
 	})
 }
 
