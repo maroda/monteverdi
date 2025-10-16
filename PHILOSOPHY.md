@@ -1,28 +1,4 @@
-[![Go](https://github.com/maroda/monteverdi/actions/workflows/go.yml/badge.svg)](https://github.com/maroda/monteverdi/actions/workflows/go.yml)
-
-# Monteverdi
-
-Seconda Practica Reliability Observability
-
-## What This Is
-
-Monteverdi is a live data analysis system that gives the ability to perform _Harmonic Accent Analysis_ for use in Reliability Engineering.
-
-The following summarizes the brainstorming behind the idea so far.
-
-## Project Overview
-
-This is an observability tool that applies Leonard Meyer's musical analysis techniques to distributed systems monitoring, providing SREs with harmonic pattern recognition for predicting system failures and understanding complex interaction dynamics.
-
-## Core Concept
-
-Traditional monitoring observes individual component metric in isolation. Monteverdi analyzes the **interaction harmonics** between system components, revealing emergent patterns and early warning signals that conventional dashboards miss.
-
-*Monteverdi represents a fundamental shift from reactive monitoring to predictive harmonic analysis, enabling SREs to conduct their systems like skilled orchestral conductors rather than fighting as isolated firefighters.*
-
-### Key Insight
-
-System reliability emerges from **interaction patterns**, not component perfection. By analyzing harmonic relationships between processes, services, and resources, Monteverdi can detect system instability before traditional threshold-based alerts fire.
+# Monteverdi Philosophy
 
 ## Theoretical Foundation
 
@@ -45,7 +21,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 
 ## Core Features
 
-### Harmonic Radar Interface
+### Harmony View Interface
 
 **Visual Design**
 - Concentric circles representing different temporal/system scales
@@ -98,7 +74,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 
 ### Alert Integration
 - Context-aware alerting based on harmonic analysis
-- Alert platform integration with radar snapshots
+- Alert platform integration with harmony view snapshots
 - Before/during/trend visualizations in alerts
 - Reduced alert fatigue through harmonic filtering
 
@@ -136,7 +112,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 ## Development Phases
 
 ### Phase 1: Foundation
-- Implement basic harmonic radar visualization
+- Implement basic harmonic harmony view visualization
 - Integrate with existing monitoring data sources
 - Develop consonance scoring algorithms
 - Create proof-of-concept for single service analysis
@@ -154,7 +130,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 - Develop dynamic maintenance scheduling
 
 ### Phase 4: Operational Integration
-- Alert system integration with radar snapshots
+- Alert system integration with harmony view snapshots
 - Automated alert suppression during harmonic disturbances
 - Change coordination tools based on harmonic analysis
 - Advanced conducting guidance for incident response
@@ -168,7 +144,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 - API for harmonic state queries
 
 ### Frontend
-- Interactive radar visualization (likely React/D3.js)
+- Interactive harmony view visualization (likely React/D3.js)
 - Real-time updates with WebSocket connections
 - Mobile-responsive design for on-call access
 - Integration with existing monitoring dashboards
@@ -198,7 +174,7 @@ System reliability emerges from **interaction patterns**, not component perfecti
 
 ## Next Steps
 
-1. **Prototype Development**: Build minimal viable radar interface with basic consonance visualization
+1. **Prototype Development**: Build minimal viable harmony view interface with basic visualization
 2. **Pattern Research**: Analyze existing incident data to identify common harmonic signatures
 3. **Integration Planning**: Design data ingestion from major monitoring platforms
 4. **User Research**: Interview SREs to validate problem-solution fit and interface design

@@ -9,7 +9,7 @@ const svg = d3.select("#chart")
     .attr("width", width)
     .attr("height", height);
 
-// Radar setup
+// Ring setup
 const centerX = width / 2;
 const centerY = height / 2;
 
@@ -661,7 +661,7 @@ function showHelpDialog() {
         'Monteverdi Help',
         '',
         'Accents are created when a metric hits its max value.',
-        'Pulses in the radar represent accent patterns in time.',
+        'Pulses in the rings represent accent patterns in time.',
         'Inner rings in Dimension One (D1) rotate in 60 seconds.',
         'Outer rings in Dimension Two (D2) rotate in 10 minutes.',
         'Expect a slight delay on startup for patterns to warm.',

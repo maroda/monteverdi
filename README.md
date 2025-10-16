@@ -22,13 +22,13 @@ Streams data from multiple endpoints to draw histograms of the "accents" found b
 - The included `example_config.json` shows three endpoints, including the local, but also Netdata and something else I have running locally.
 - Logging is found in `monteverdi.log`.
 
-If you run `monteverdi` in the same directory as the shipped `config.json` you should get some metrics. You may need to fiddle with the max values in the config to trigger accents correctly.
+If you runTUI `monteverdi` in the same directory as the shipped `config.json` you should get some metrics. You may need to fiddle with the max values in the config to trigger accents correctly.
 
 ### Web UI
 
 ![Web Interface](docs/images/monteverdi-webui-preview-v0.9.png)
 
-- There is a D3 web UI at <http://localhost:8090> with several visualization features. This "radar view" shows pattern recognition only, no raw data.
+- There is a D3 web UI at <http://localhost:8090> with several visualization features. This "harmony view" shows pattern recognition only, no raw data.
 - Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected.
 - If no TTY is detected the logging is directed to STDOUT
  
@@ -36,7 +36,7 @@ If you run `monteverdi` in the same directory as the shipped `config.json` you s
 
 ![Terminal Interface](docs/images/monteverdi-tui-preview-v0.9.png)
 
-- This is the default view of Monteverdi when it is run in a TTY, parallel with the Web UI.
+- This is the default view of Monteverdi when it is runTUI in a TTY, parallel with the Web UI.
 - There is now a `-headless` runtime flag for no TTY (i.e. containers).
 - Draws the accent values in the display as they happen.
 - Graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually).
@@ -52,7 +52,7 @@ If you run `monteverdi` in the same directory as the shipped `config.json` you s
 ## Feature Requests
 
 - [Plugin Architecture](./PLUGINS.md) to support things like rates and non-KV.
-- Automatically reload config. Currently loads on first run.
+- Automatically reload config. Currently loads on first runTUI.
 - Metrics input. Can read an existing timeseries with KV and extract pulses.
 - Inference. How do we take a history of pulses and define expected behaviors?
 - Monitor. How do we "alert" on pulse diversion?
@@ -128,21 +128,21 @@ go build -ldflags "-X github.com/maroda/monteverdi/display.Version=$(git describ
 
 ## Docker
 
-This repo builds public container packages that you can use to try Monteverdi out for yourself. They can be run like this:
+This repo builds public container packages that you can use to try Monteverdi out for yourself. They can be runTUI like this:
 ```shell
-docker run -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
+docker runTUI -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
 ```
 
 > The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works. When using public hostnames in `config.json`, this is not necessary.
 
 To use your own config, set up the JSON and pass it to the container as a mount:
 ```shell
-docker run -p 8090:8090 -v ./myconfig.json:/app/config.json ghcr.io/maroda/monteverdi:latest
+docker runTUI -p 8090:8090 -v ./myconfig.json:/app/config.json ghcr.io/maroda/monteverdi:latest
 ```
 
 Or use a different filename with an environment variable:
 ```shell
-docker run -p 8090:8090 \
+docker runTUI -p 8090:8090 \
   -e MONTEVERDI_CONFIG_FILE=/app/myconfig.json \
   -v ./myconfig.json:/app/myconfig.json \
   ghcr.io/maroda/monteverdi:latest
@@ -150,7 +150,7 @@ docker run -p 8090:8090 \
 
 ## Kubernetes
 
-You should be able to use a ConfigMap to run this in a Kubernetes cluster. This is an untested config, but should work!
+You should be able to use a ConfigMap to runTUI this in a Kubernetes cluster. This is an untested config, but should work!
 
 Create the ConfigMap from your local JSON:
 ```shell

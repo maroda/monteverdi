@@ -33,7 +33,7 @@ type View struct {
 	SelectMe    string            // Selected Metric with MouseClick
 	ShowMe      bool              // Display Metric ID
 	ShowPulse   bool              // Display pulse view overlay
-	pulseFilter *Ms.PulsePattern  // For filtering the display
+	PulseFilter *Ms.PulsePattern  // For filtering the display
 }
 
 // NewViewWithScreen inits the tcell screen that displays HarmonyView.
@@ -149,14 +149,14 @@ func (v *View) GetPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell
 	return symbol, style
 }
 
-func (v *View) renderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
+func (v *View) RenderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
 	for _, point := range tld {
 		symbol, style := v.GetPulseRune(point.Pattern, point.IsAccent)
 		v.Screen.SetContent(x+point.Position, y, symbol, nil, style)
 	}
 }
 
-func (v *View) drawPulseView() {
+func (v *View) DrawPulseView() {
 	width, height := v.GetScreenSize()
 	timelineW := width - 2 // room for border drawing
 
@@ -171,8 +171,8 @@ func (v *View) drawPulseView() {
 
 	// Show current filter mode
 	filterText := "All Patterns"
-	if v.pulseFilter != nil {
-		switch *v.pulseFilter {
+	if v.PulseFilter != nil {
+		switch *v.PulseFilter {
 		case Ms.Iamb:
 			filterText = "Iamb Only"
 		case Ms.Trochee:
@@ -191,8 +191,8 @@ func (v *View) drawPulseView() {
 			yTS := v.CalcTimeseriesY(ni, di, screenGutter)
 
 			// Pass the filter for display
-			timelineData := v.QNet.Network[ni].GetPulseVizData(dm, v.pulseFilter)
-			v.renderPulseViz(1, yTS, timelineData)
+			timelineData := v.QNet.Network[ni].GetPulseVizData(dm, v.PulseFilter)
+			v.RenderPulseViz(1, yTS, timelineData)
 
 			// Track long pulse boundaries
 			var longPulseStart, longPulseEnd = -1, -1
@@ -356,7 +356,7 @@ func (v *View) DrawHarmonyViewMulti() {
 
 	// Support toggle to pulse view by wrapping in a boolean
 	if showPulse {
-		v.drawPulseView()
+		v.DrawPulseView()
 
 		// A MouseClick has happened on a graph
 		// - show the Endpoint ID at the bottom
@@ -429,6 +429,7 @@ func (v *View) DrawHarmonyViewMulti() {
 
 // showMetricWithState does not retrieve a state lock
 // and takes parameters for these values instead
+// coordinate args are: bottom-y, gutter, data-x, label-x
 func (v *View) showMetricWithState(by, g, dx, lx int, showMe bool, selectEP int, selectMe string) {
 	width, height := v.GetScreenSize()
 
@@ -464,68 +465,7 @@ func (v *View) showEndpointWithState(x, by int, showEP bool, selectEP int) {
 	}
 }
 
-// Exit cleanly
-func (v *View) exit() {
-	v.MU.Lock()
-	defer v.MU.Unlock()
-	v.Screen.Fini()
-	os.Exit(0)
-}
-
-// Running Loop to handle events
-func (v *View) handleKeyBoardEvent() {
-	for {
-		ev := v.Screen.PollEvent()
-		switch ev := ev.(type) {
-		case *tcell.EventResize:
-			v.ResizeScreen()
-		case *tcell.EventKey:
-			// Catch quit and exit
-			if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
-				v.exit()
-			}
-
-			// Toggle pulse view with 'p'
-			if ev.Rune() == 'p' {
-				v.MU.Lock()
-				v.ShowPulse = !v.ShowPulse
-				v.MU.Unlock()
-			}
-
-			// Pattern filtering (only when in pulse view)
-			if v.ShowPulse {
-				switch ev.Rune() {
-				case 'a':
-					v.MU.Lock()
-					amphibrach := Ms.Amphibrach
-					v.pulseFilter = &amphibrach
-					v.MU.Unlock()
-				case 'i':
-					v.MU.Lock()
-					iamb := Ms.Iamb
-					v.pulseFilter = &iamb
-					v.MU.Unlock()
-				case 't':
-					v.MU.Lock()
-					trochee := Ms.Trochee
-					v.pulseFilter = &trochee
-					v.MU.Unlock()
-				case 'x':
-					v.MU.Lock()
-					v.pulseFilter = nil // Show all patterns
-					v.MU.Unlock()
-				}
-			}
-
-		case *tcell.EventMouse:
-			// Button1 is Left Mouse Button
-			if ev.Buttons() == tcell.Button1 {
-				v.HandleMouseClick(ev.Position())
-			}
-		}
-	}
-}
-
+// HandleMouseClick shows corresponding data with what was clicked
 func (v *View) HandleMouseClick(x, y int) {
 	// Lock QNet to safely read Network endpoint data
 	v.QNet.MU.RLock()
@@ -561,16 +501,12 @@ func (v *View) HandleMouseClick(x, y int) {
 }
 
 // PollQNetAll is for reading the multi metric config in Endpoint
-// The error return is currently set to /nil/
-// so that Poll misses are only logged, not fatal (and blocking)
-func (v *View) PollQNetAll() error {
+func (v *View) PollQNetAll() {
 	start := time.Now()
 	v.QNet.PollMulti()
 
 	duration := time.Since(start).Seconds()
 	v.Stats.RecPollTimer(duration)
-
-	return nil
 }
 
 // GetScreenSize provides the terminal size for drawing
@@ -585,22 +521,22 @@ func (v *View) ResizeScreen() {
 	v.UpdateScreen()
 }
 
+// UpdateScreen clears, calls the main drawing function, and displays
 func (v *View) UpdateScreen() {
 	v.Screen.Clear()
 	v.DrawHarmonyViewMulti()
 	v.Screen.Show()
 }
 
-// run runs a loop and updates periodically
-// each iteration polls the configured Metric[]
-// and fills the related Mdata[Metric] in QNet,
-// which is then read by drawHarmonyViewMulti
-// TODO: parameterize run loop time
-func (v *View) run() {
+// runTUI updates every 60 seconds in a loop.
+// Each iteration polls the configured Endpoint.Metric[]
+// and fills the related Endpoint.Mdata[Metric] in QNet,
+// which is then read by DrawHarmonyViewMulti
+func (v *View) runTUI() {
 	// Panic recovery and logging
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("Panic in run loop", slog.Any("panic", r))
+			slog.Error("Panic in runTUI loop", slog.Any("panic", r))
 			slog.Error("Recovered from panic", slog.String("stack", string(debug.Stack())))
 			debug.PrintStack()
 		}
@@ -614,17 +550,75 @@ func (v *View) run() {
 	for {
 		select {
 		case <-ticker.C:
-			// Catch a timeout
-			if err := v.PollQNetAll(); err != nil {
-				slog.Error("Failed to PollQNetAll", slog.Any("Error", err))
-				return
-			}
+			v.PollQNetAll()
 			v.UpdateScreen()
 		}
 	}
 }
 
-// RespWriter is a wrapper with StatsMiddleware, used for Prometheus
+// handleEvent is a runtime loop to handle keyboard and mouse
+func (v *View) handleEvent() {
+	for {
+		ev := v.Screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventResize:
+			v.ResizeScreen()
+		case *tcell.EventKey:
+			// Catch quit and exit
+			if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
+				v.exit()
+			}
+
+			// Toggle pulse view with 'p'
+			if ev.Rune() == 'p' {
+				v.MU.Lock()
+				v.ShowPulse = !v.ShowPulse
+				v.MU.Unlock()
+			}
+
+			// Pattern filtering (only when in pulse view)
+			if v.ShowPulse {
+				switch ev.Rune() {
+				case 'a':
+					v.MU.Lock()
+					amphibrach := Ms.Amphibrach
+					v.PulseFilter = &amphibrach
+					v.MU.Unlock()
+				case 'i':
+					v.MU.Lock()
+					iamb := Ms.Iamb
+					v.PulseFilter = &iamb
+					v.MU.Unlock()
+				case 't':
+					v.MU.Lock()
+					trochee := Ms.Trochee
+					v.PulseFilter = &trochee
+					v.MU.Unlock()
+				case 'x':
+					v.MU.Lock()
+					v.PulseFilter = nil // Show all patterns
+					v.MU.Unlock()
+				}
+			}
+
+		case *tcell.EventMouse:
+			// Button1 is Left Mouse Button
+			if ev.Buttons() == tcell.Button1 {
+				v.HandleMouseClick(ev.Position())
+			}
+		}
+	}
+}
+
+// exit cleanly
+func (v *View) exit() {
+	v.MU.Lock()
+	defer v.MU.Unlock()
+	v.Screen.Fini()
+	os.Exit(0)
+}
+
+// RespWriter is used by StatsMiddleware, used for Prometheus
 type RespWriter struct {
 	http.ResponseWriter
 	Status int
@@ -641,6 +635,7 @@ func (w *RespWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
+// StatsMiddleware invokes the HTTP Responses above, used for Prometheus
 func (v *View) StatsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// start := time.Now()
@@ -656,23 +651,57 @@ func (v *View) StatsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// StartHarmonyViewWithConfig is called by main to run the program.
-// This also starts up the /metrics endpoint that is populated by prometheus.
-func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
-	// with the new config c, we can make other stuff
-	eps, err := Ms.NewEndpointsFromConfig(c)
-	if eps == nil || err != nil {
-		slog.Error("Failed to init endpoints", slog.Any("Error", err))
+// StartHarmonyViewWebOnly is the Web UI only, running on localhost:8090
+// The ticker for the runtime loop is here as a goroutine, the web server blocks.
+// This runs when using the `-headless` flag.
+// Logs appear in the console instead of a file.
+func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
+	// Init Endpoints
+	eps := Ms.NewEndpointsFromConfig(c)
+	qn := Ms.NewQNet(*eps)
+
+	// Create View without tcell screen
+	stats := Mo.NewStatsInternal()
+	view := &View{
+		QNet:  qn,
+		Stats: stats,
+	}
+
+	// Server for stats endpoint
+	view.server = &http.Server{
+		Addr:    ":8090",
+		Handler: view.SetupMux(),
+	}
+
+	// Start polling loop
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			view.PollQNetAll()
+		}
+	}()
+
+	// Run stats endpoint (blocks)
+	addr := ":8090"
+	slog.Info("Starting Monteverdi web server...", slog.String("Port", addr))
+	if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("Could not start", slog.Any("Error", err))
 		return err
 	}
 
-	// Define a QNet - Quality Network - for the view
-	// filled with the config Endpoints
+	return nil
+}
+
+// StartHarmonyView is the Terminal UI alongside the Web UI, running on localhost:8090
+// This is the default view when runTUI from a shell. If there is no TTY, it will not runTUI.
+// The `-headless` flag can be used to runTUI in Web UI only mode, StartHarmonyViewWebOnly
+// The TUI operates with several looping and blocking processes, all handled here.
+func StartHarmonyView(c []Ms.ConfigFile) error {
+	// Init endpoints
+	eps := Ms.NewEndpointsFromConfig(c)
 	qn := Ms.NewQNet(*eps)
-	if qn == nil {
-		slog.Error("Failed to init QNet", slog.Any("Error", err))
-		return err
-	}
 
 	// Define a tcell screen for the view
 	screen, err := tcell.NewScreen()
@@ -701,69 +730,20 @@ func StartHarmonyViewWithConfig(c []Ms.ConfigFile) error {
 		Handler: view.SetupMux(),
 	}
 
-	// Run Monteverdi
-	go view.run()
+	// Run HarmonyView in the terminal
+	go view.runTUI()
 
-	// Run stats endpoint
+	// Run webserver in parallel
 	go func() {
 		addr := ":8090"
 		slog.Info("Starting Monteverdi stats endpoint...", slog.String("Port", addr))
 		if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("Could not start stats endpoint", slog.Any("Error", err))
+			slog.Error("Could not start", slog.Any("Error", err))
 		}
 	}()
 
-	view.handleKeyBoardEvent()
+	// Capture keyboard events for TUI controls
+	view.handleEvent()
 
 	return err
-}
-
-func StartWebNoTUI(c []Ms.ConfigFile) error {
-	// Init Endpoints
-	eps, err := Ms.NewEndpointsFromConfig(c)
-	if err != nil {
-		slog.Error("Failed to init endpoints", slog.Any("Error", err))
-		return err
-	}
-
-	qn := Ms.NewQNet(*eps)
-	if qn == nil {
-		slog.Error("Failed to init QNet")
-		return errors.New("failed to init QNet")
-	}
-
-	// Create View without tcell screen
-	stats := Mo.NewStatsInternal()
-	view := &View{
-		QNet:  qn,
-		Stats: stats,
-	}
-
-	// Server for stats endpoint
-	view.server = &http.Server{
-		Addr:    ":8090",
-		Handler: view.SetupMux(),
-	}
-
-	// Start polling loop
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			if err := view.PollQNetAll(); err != nil {
-				slog.Error("Failed to PollQNetAll", slog.Any("Error", err))
-			}
-		}
-	}()
-
-	// Run stats endpoint (blocks)
-	addr := ":8090"
-	slog.Info("Starting Monteverdi web server...", slog.String("Port", addr))
-	if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		slog.Error("Could not start stats endpoint", slog.Any("Error", err))
-		return err
-	}
-
-	return nil
 }

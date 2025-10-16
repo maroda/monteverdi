@@ -81,7 +81,7 @@ type Endpoint struct {
 type Endpoints []*Endpoint
 
 // NewEndpointsFromConfig returns the slice of Endpoint containing all config stanzas
-func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
+func NewEndpointsFromConfig(cf []ConfigFile) *Endpoints {
 	var endpoints Endpoints
 
 	// TUI TSDB display (80 chars wide)
@@ -155,7 +155,7 @@ func NewEndpointsFromConfig(cf []ConfigFile) (*Endpoints, error) {
 		}
 		endpoints = append(endpoints, &NewEP)
 	}
-	return &endpoints, nil
+	return &endpoints
 }
 
 // AddSecondWithCheck tallies each second as a counter

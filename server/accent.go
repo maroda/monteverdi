@@ -142,7 +142,7 @@ func NewPulseConfig(is, ie, ts, te float64) *PulseConfig {
 }
 
 // DetectPulsesWithConfig takes the ictus sequence and
-// recognizes two patterns that make up a pulse:
+// recognizes two patterns that make up a Dimension 1 pulse:
 // Iamb has no accent followed by an accent,
 // Trochee has an accent followed by no accent.
 func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent {
@@ -219,47 +219,6 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 
 	return pulses
 }
-
-// DetectPulses takes the ictus sequence and
-// recognizes two patterns that make up a pulse:
-// Iamb has no accent followed by an accent,
-// Trochee has an accent followed by no accent.
-
-/*
-// TODO: this version of the algorithm is broken
-func (is *IctusSequence) DetectPulses() []PulseEvent {
-	var pulses []PulseEvent
-
-	// Take all ictus events and determine what we're seeing
-	for i := 0; i < len(is.Events)-1; i++ {
-		curr := is.Events[i]
-		next := is.Events[i+1]
-
-		// Detect Iamb: non-accent → accent
-		if !curr.IsAccent && next.IsAccent {
-			pulses = append(pulses, PulseEvent{
-				Dimension: 1,
-				Pattern:   Iamb,
-				StartTime: curr.Timestamp,
-				Duration:  next.Timestamp.Sub(curr.Timestamp),
-				Metric:    []string{is.Metric},
-			})
-		}
-
-		// Detect Trochee: accent → non-accent
-		if curr.IsAccent && !next.IsAccent {
-			pulses = append(pulses, PulseEvent{
-				Dimension: 1,
-				Pattern:   Trochee,
-				StartTime: curr.Timestamp,
-				Duration:  next.Timestamp.Sub(curr.Timestamp),
-				Metric:    []string{is.Metric},
-			})
-		}
-	}
-	return pulses
-}
-*/
 
 type PulseTree struct {
 	Dimension int

@@ -112,9 +112,9 @@ func main() {
 	if *headless {
 		// Run web-only version (no TUI)
 		slog.Info("Using headless UI")
-		err = Md.StartWebNoTUI(config)
+		err = Md.StartHarmonyViewWebOnly(config)
 	} else {
-		err = Md.StartHarmonyViewWithConfig(config)
+		err = Md.StartHarmonyView(config)
 	}
 	if err != nil {
 		slog.Error("Error starting harmony view", slog.Any("Error", err))

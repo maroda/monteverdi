@@ -104,8 +104,7 @@ func TestNewEndpointsFromConfig(t *testing.T) {
 	loadConfig, err := Ms.LoadConfigFileName(fileName)
 	assertError(t, err, nil)
 
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
+	eps := Ms.NewEndpointsFromConfig(loadConfig)
 
 	t.Run("Transformer is returned", func(t *testing.T) {
 		ep := (*eps)[0]
@@ -327,8 +326,7 @@ func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
 	loadConfig, err := Ms.LoadConfigFileName(fileName)
 	assertError(t, err, nil)
 
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
+	eps := Ms.NewEndpointsFromConfig(loadConfig)
 
 	// create fake data for each
 	for _, ep := range *eps {
@@ -447,8 +445,7 @@ func TestEndpoint_GetDisplay(t *testing.T) {
 	loadConfig, err := Ms.LoadConfigFileName(fileName)
 	assertError(t, err, nil)
 
-	eps, err := Ms.NewEndpointsFromConfig(loadConfig)
-	assertError(t, err, nil)
+	eps := Ms.NewEndpointsFromConfig(loadConfig)
 
 	// create fake data for each
 	for _, ep := range *eps {
@@ -956,16 +953,6 @@ func TestConcurrentPollAndDisplay(t *testing.T) {
 	}()
 
 	wg.Wait()
-}
-
-func TestConfigWithMissingMetrics(t *testing.T) {
-	config := []Ms.ConfigFile{{
-		ID:      "test",
-		URL:     "http://test",
-		Metrics: map[string]Ms.MetricConfig{}},
-	}
-	_, err := Ms.NewEndpointsFromConfig(config)
-	assertError(t, err, nil)
 }
 
 func TestPulseDetect_AddPulseCoverage(t *testing.T) {

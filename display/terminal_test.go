@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -688,7 +689,7 @@ func TestView_DrawHarmonyViewMulti_Borders(t *testing.T) {
 	})
 }
 
-func TestView_DrawHarmonyViewMulti_Selections(t *testing.T) {
+func TestView_DrawPulseViewLabels(t *testing.T) {
 	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
 	defer view.Screen.Fini()
 	_, h := view.Screen.Size()
@@ -719,40 +720,82 @@ func TestView_DrawHarmonyViewMulti_Selections(t *testing.T) {
 			break
 		}
 	})
-
 }
 
-func TestView_DrawHarmonyViewMulti_IfShowMe(t *testing.T) {
-	ep1 := makeEndpointMetrics(t)
-	ep2 := makeEndpointMetrics(t)
-
-	view := makeTestViewWithScreen(t, []*Ms.Endpoint{ep1, ep2})
+func TestView_DrawPulseView(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
 	defer view.Screen.Fini()
 
 	view.MU.Lock()
+	view.ShowPulse = true
+	view.MU.Unlock()
+
+	filter_tests := []struct {
+		name   string
+		filter Ms.PulsePattern
+	}{
+		{"Iamb", Ms.Iamb},
+		{"Trochee", Ms.Trochee},
+		{"Amphibrach", Ms.Amphibrach},
+	}
+
+	for _, ff := range filter_tests {
+		t.Run(ff.name, func(t *testing.T) {
+			view.MU.Lock()
+			filter := ff.filter
+			view.PulseFilter = &filter
+			view.MU.Unlock()
+
+			view.DrawPulseView()
+
+			// Was the filter text written?
+			want := []rune(ff.name)
+			assertRunePos(t, view, 14, 1, want[0])
+		})
+	}
+}
+
+func TestView_DrawHarmonyViewLabels(t *testing.T) {
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	defer view.Screen.Fini()
+	_, h := view.Screen.Size()
+	height := h - 1
+
+	view.MU.Lock()
 	view.ShowPulse = false
-	view.ShowMe = true
+	view.ShowEP = true
 	view.SelectEP = 0
+	view.ShowMe = true
 	view.SelectMe = "CPU"
 	view.MU.Unlock()
 
 	view.DrawHarmonyViewMulti()
 
-	_, height := view.Screen.Size()
+	metric := view.QNet.Network[view.SelectEP].Metric[0]
 
-	expectedLabel := "... CPU ..."
-	got, _, _, _ := view.Screen.GetContent(4, height-2)
-	if got != rune(expectedLabel[0]) {
-		t.Errorf("Metric label not found at expected position after fix")
-	}
+	t.Run("Endpoint label appears correctly", func(t *testing.T) {
+		epID := view.QNet.Network[view.SelectEP].ID
+		for _, rep := range epID {
+			assertRunePos(t, view, 55, height, rep)
+			break
+		}
+	})
 
-	yTS := view.CalcTimeseriesY(0, 0, 4)
-	mdata := view.QNet.Network[0].Mdata["CPU"]
-	expectedData := fmt.Sprintf("%d", mdata)
-	got, _, _, _ = view.Screen.GetContent(2, yTS)
-	if got != rune(expectedData[0]) {
-		t.Errorf("Metric data not found at expected position after fix")
-	}
+	t.Run("Metric label appears correctly", func(t *testing.T) {
+		for _, rm := range metric {
+			assertRunePos(t, view, 8, height-1, rm)
+			break
+		}
+	})
+
+	t.Run("Metric value appears correctly", func(t *testing.T) {
+		mdata := view.QNet.Network[view.SelectEP].Mdata[metric]
+		mdataS := strconv.FormatInt(mdata, 10)
+		mdataR := []rune(mdataS)
+
+		// The first printed rune should match the first digit of the int
+		assertRunePos(t, view, 2, 4, mdataR[0])
+	})
 }
 
 func TestView_DrawHarmonyViewMulti_Concurrent(t *testing.T) {
@@ -801,6 +844,25 @@ func TestView_DrawHarmonyViewMulti_Accent(t *testing.T) {
 
 	view.DrawHarmonyViewMulti()
 	assertRunePos(t, view, x, 1, '')
+}
+
+func TestView_RenderPulseViz(t *testing.T) {
+	t.Run("Correct rune is drawn for the pulse", func(t *testing.T) {
+		view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+		defer view.Screen.Fini()
+
+		pvp := Ms.PulseVizPoint{
+			Position:  0,
+			Pattern:   0, // Pattern 0 is an Iamb, rune: '⚍'
+			IsAccent:  false,
+			Duration:  0,
+			StartTime: time.Time{},
+			Extends:   false,
+		}
+
+		view.RenderPulseViz(0, 0, []Ms.PulseVizPoint{pvp})
+		assertRunePos(t, view, 0, 0, '⚍')
+	})
 }
 
 func TestView_GetPulseRune(t *testing.T) {
@@ -942,8 +1004,7 @@ func TestView_PollQNetAll(t *testing.T) {
 		}
 
 		// Call PollQNetAll
-		err := view.PollQNetAll()
-		assertError(t, err, nil)
+		view.PollQNetAll()
 
 		// Verify data was polled for the good metrics
 		if qnet.Network[0].Mdata["CPU1"] != 100 {
@@ -981,10 +1042,7 @@ func TestView_PollQNetAll(t *testing.T) {
 		}
 
 		// Call PollQNetAll
-		err := view.PollQNetAll()
-
-		// Should not return an error (always returns nil)
-		assertError(t, err, nil)
+		view.PollQNetAll()
 
 		// Verify data was polled
 		if qnet.Network[0].Mdata["CPU1"] != 100 {
@@ -1042,7 +1100,7 @@ func TestStartWebNoTUI(t *testing.T) {
 		// Run check in goroutine because ListenAndServe is blocking
 		errChan := make(chan error, 1)
 		go func() {
-			errChan <- Md.StartWebNoTUI(config)
+			errChan <- Md.StartHarmonyViewWebOnly(config)
 		}()
 
 		// Wait a bit to start
