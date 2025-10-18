@@ -676,23 +676,22 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
 	}
 
 	// Start polling loop
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
+	/*	Direct Poll looping, uses local ticker to loop
+		go func() {
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
 
-		for range ticker.C {
-			view.PollQNetAll()
-		}
-	}()
-
-	/*
-
-		Poll Supervisor method
-
-		ps := PollSupervisor{}
-		ps.Start()
+			for range ticker.C {
+				view.PollQNetAll()
+			}
+		}()
 
 	*/
+
+	/* Poll Supervisor, goroutine in a WaitGroup with error channel */
+	ps := view.NewPollSupervisor()
+	ps.Start()
+	defer ps.Stop()
 
 	// Run stats endpoint (blocks)
 	addr := ":8090"
