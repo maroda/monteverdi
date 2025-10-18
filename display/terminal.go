@@ -530,10 +530,7 @@ func (v *View) UpdateScreen() {
 	v.Screen.Show()
 }
 
-// runTUI updates every 60 seconds in a loop.
-// Each iteration polls the configured Endpoint.Metric[]
-// and fills the related Endpoint.Mdata[Metric] in QNet,
-// which is then read by DrawHarmonyViewMulti
+// runTUI updates the display every 60 seconds in a loop
 func (v *View) runTUI() {
 	// Panic recovery and logging
 	defer func() {
@@ -552,7 +549,6 @@ func (v *View) runTUI() {
 	for {
 		select {
 		case <-ticker.C:
-			v.PollQNetAll()
 			v.UpdateScreen()
 		}
 	}
@@ -675,25 +671,12 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
 		Handler: view.SetupMux(),
 	}
 
-	// Start polling loop
-	/*	Direct Poll looping, uses local ticker to loop
-		go func() {
-			ticker := time.NewTicker(1 * time.Second)
-			defer ticker.Stop()
-
-			for range ticker.C {
-				view.PollQNetAll()
-			}
-		}()
-
-	*/
-
-	/* Poll Supervisor, goroutine in a WaitGroup with error channel */
+	// Create new Poll Supervisor to handle data fetches every minute
 	ps := view.NewPollSupervisor()
 	ps.Start()
 	defer ps.Stop()
 
-	// Run stats endpoint (blocks)
+	// Run web endpoint (blocks)
 	addr := ":8090"
 	slog.Info("Starting Monteverdi web server...", slog.String("Port", addr))
 	if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -739,6 +722,11 @@ func StartHarmonyView(c []Ms.ConfigFile) error {
 		Addr:    ":8090",
 		Handler: view.SetupMux(),
 	}
+
+	// Create new Poll Supervisor to handle data fetches every minute
+	ps := view.NewPollSupervisor()
+	ps.Start()
+	defer ps.Stop()
 
 	// Run HarmonyView in the terminal
 	go view.runTUI()
