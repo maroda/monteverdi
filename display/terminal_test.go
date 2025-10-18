@@ -41,7 +41,7 @@ func TestScreen(t *testing.T) {
 func TestNewViewWithScreen(t *testing.T) {
 	qn := &Ms.QNet{
 		MU:      sync.RWMutex{},
-		Network: []*Ms.Endpoint{makeEndpointMetrics(t)},
+		Network: []*Ms.Endpoint{makeEndpointWithMetrics(t)},
 	}
 	screen := tcell.NewSimulationScreen("utf8")
 	view, err := Md.NewViewWithScreen(qn, screen)
@@ -670,7 +670,7 @@ func TestView_DrawTimeseries(t *testing.T) {
 }
 
 func TestView_DrawHarmonyViewMulti_Borders(t *testing.T) {
-	ep := makeEndpointMetrics(t)
+	ep := makeEndpointWithMetrics(t)
 	view := makeTestViewWithScreen(t, []*Ms.Endpoint{ep})
 	defer view.Screen.Fini()
 	w, h := view.Screen.Size()
@@ -690,7 +690,7 @@ func TestView_DrawHarmonyViewMulti_Borders(t *testing.T) {
 }
 
 func TestView_DrawPulseViewLabels(t *testing.T) {
-	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
 	_, h := view.Screen.Size()
 	height := h - 1
@@ -723,14 +723,14 @@ func TestView_DrawPulseViewLabels(t *testing.T) {
 }
 
 func TestView_DrawPulseView(t *testing.T) {
-	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
 
 	view.MU.Lock()
 	view.ShowPulse = true
 	view.MU.Unlock()
 
-	filter_tests := []struct {
+	filtertests := []struct {
 		name   string
 		filter Ms.PulsePattern
 	}{
@@ -739,7 +739,7 @@ func TestView_DrawPulseView(t *testing.T) {
 		{"Amphibrach", Ms.Amphibrach},
 	}
 
-	for _, ff := range filter_tests {
+	for _, ff := range filtertests {
 		t.Run(ff.name, func(t *testing.T) {
 			view.MU.Lock()
 			filter := ff.filter
@@ -756,7 +756,7 @@ func TestView_DrawPulseView(t *testing.T) {
 }
 
 func TestView_DrawHarmonyViewLabels(t *testing.T) {
-	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
 	_, h := view.Screen.Size()
 	height := h - 1
@@ -830,7 +830,7 @@ func TestView_DrawHarmonyViewMulti_EmptyQNet(t *testing.T) {
 }
 
 func TestView_DrawHarmonyViewMulti_Accent(t *testing.T) {
-	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
 
 	view.QNet.Network[0].Accent["CPU"] = &Ms.Accent{
@@ -848,7 +848,7 @@ func TestView_DrawHarmonyViewMulti_Accent(t *testing.T) {
 
 func TestView_RenderPulseViz(t *testing.T) {
 	t.Run("Correct rune is drawn for the pulse", func(t *testing.T) {
-		view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+		view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 		defer view.Screen.Fini()
 
 		pvp := Ms.PulseVizPoint{
@@ -1061,7 +1061,7 @@ func TestView_PollQNetAll(t *testing.T) {
 }
 
 func TestView_ResizeScreen(t *testing.T) {
-	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointMetrics(t)})
+	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
 
 	// Draw initial screen
@@ -1135,7 +1135,7 @@ func TestStartWebNoTUI(t *testing.T) {
 
 // Helpers //
 
-func makeEndpointMetrics(t *testing.T) *Ms.Endpoint {
+func makeEndpointWithMetrics(t *testing.T) *Ms.Endpoint {
 	t.Helper()
 
 	return &Ms.Endpoint{
@@ -1162,6 +1162,40 @@ func makeEndpointMetrics(t *testing.T) *Ms.Endpoint {
 			Buffer:     make([]Ms.PulseEvent, 0),
 			Groups:     make([]*Ms.PulseTree, 0),
 		},
+		Sequence: make(map[string]*Ms.IctusSequence),
+	}
+}
+
+func makeEndpointEmptyMetricsURL(t *testing.T, u string) *Ms.Endpoint {
+	t.Helper()
+
+	return &Ms.Endpoint{
+		MU:     sync.RWMutex{},
+		ID:     "test",
+		URL:    u,
+		Delim:  "=",
+		Metric: map[int]string{0: "CPU", 1: "MEM"},
+		Mdata:  make(map[string]int64),
+		Maxval: map[string]int64{"CPU": 80, "MEM": 1000},
+		Accent: make(map[string]*Ms.Accent),
+		Layer: map[string]*Ms.Timeseries{
+			"CPU": {
+				Runes:   make([]rune, 80),
+				MaxSize: 80,
+				Current: 0,
+			},
+			"MEM": {
+				Runes:   make([]rune, 80),
+				MaxSize: 80,
+				Current: 0,
+			},
+		},
+		Pulses: &Ms.TemporalGrouper{
+			WindowSize: 60 * time.Second,
+			Buffer:     make([]Ms.PulseEvent, 0),
+			Groups:     make([]*Ms.PulseTree, 0),
+		},
+		Sequence: make(map[string]*Ms.IctusSequence),
 	}
 }
 
@@ -1193,7 +1227,12 @@ func makeTestViewWithScreen(t *testing.T, eps []*Ms.Endpoint) *Md.View {
 	s, err := makeTestScreen(t, "utf8")
 	assertError(t, err, nil)
 	s.SetSize(80, 20)
-	return &Md.View{QNet: qn, Screen: s}
+	return &Md.View{
+		MU:     sync.Mutex{},
+		QNet:   qn,
+		Screen: s,
+		Stats:  Mo.NewStatsInternal(),
+	}
 }
 
 func makeTestScreen(t *testing.T, charset string) (tcell.SimulationScreen, error) {

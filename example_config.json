@@ -32,7 +32,7 @@
     "metrics": {
       "process_resident_memory_bytes": { "type": "gauge", "max": 30000000 },
       "go_memstats_heap_alloc_bytes": { "type": "gauge", "max": 30000000 },
-      "go_memstats_heap_inuse_bytes": { "type": "gauge", "max": 8000000 },
+      "go_memstats_heap_inuse_bytes": { "type": "gauge", "max": 80000000 },
       "go_gc_heap_objects_objects": { "type": "gauge", "max": 44000 },
       "go_memstats_alloc_bytes_total": { "type": "counter", "transformer": "calc_rate", "max": 20000000 },
       "go_goroutines": { "type": "counter", "transformer": "calc_rate", "max": 1 },

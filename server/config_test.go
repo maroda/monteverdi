@@ -10,23 +10,6 @@ import (
 	Ms "github.com/maroda/monteverdi/server"
 )
 
-// Temporary OS file to use for testing configurations
-func createTempFile(t testing.TB, data string) (*os.File, func()) {
-	t.Helper()
-	tmpfile, err := os.CreateTemp("", "db")
-	if err != nil {
-		t.Fatalf("could not create temp file %v", err)
-	}
-	assertError(t, err, nil)
-
-	tmpfile.Write([]byte(data))
-	removeFile := func() {
-		tmpfile.Close()
-		os.Remove(tmpfile.Name())
-	}
-	return tmpfile, removeFile
-}
-
 func TestLoadConfigFileName(t *testing.T) {
 	configFile, delConfig := createTempFile(t, `[{
   "id": "MONTEVERDI_INTERNAL",
@@ -126,6 +109,25 @@ func TestValidateLoadWithFS_Error(t *testing.T) {
 		assertGotError(t, err)
 		assertStringContains(t, err.Error(), "file is empty")
 	})
+}
+
+// Helpers //
+
+// Temporary OS file to use for testing configurations
+func createTempFile(t testing.TB, data string) (*os.File, func()) {
+	t.Helper()
+	tmpfile, err := os.CreateTemp("", "db")
+	if err != nil {
+		t.Fatalf("could not create temp file %v", err)
+	}
+	assertError(t, err, nil)
+
+	tmpfile.Write([]byte(data))
+	removeFile := func() {
+		tmpfile.Close()
+		os.Remove(tmpfile.Name())
+	}
+	return tmpfile, removeFile
 }
 
 // MockFS for dependency injection on FileSystem to test config file

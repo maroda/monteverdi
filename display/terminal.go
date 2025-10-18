@@ -34,6 +34,7 @@ type View struct {
 	ShowMe      bool              // Display Metric ID
 	ShowPulse   bool              // Display pulse view overlay
 	PulseFilter *Ms.PulsePattern  // For filtering the display
+	Supervisor  *PollSupervisor   // Supervisor for performing QNet polling
 }
 
 // NewViewWithScreen inits the tcell screen that displays HarmonyView.
@@ -683,6 +684,15 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
 		}
 	}()
 
+	/*
+
+		Poll Supervisor method
+
+		ps := PollSupervisor{}
+		ps.Start()
+
+	*/
+
 	// Run stats endpoint (blocks)
 	addr := ":8090"
 	slog.Info("Starting Monteverdi web server...", slog.String("Port", addr))
@@ -736,7 +746,7 @@ func StartHarmonyView(c []Ms.ConfigFile) error {
 	// Run webserver in parallel
 	go func() {
 		addr := ":8090"
-		slog.Info("Starting Monteverdi stats endpoint...", slog.String("Port", addr))
+		slog.Info("Starting Monteverdi web server...", slog.String("Port", addr))
 		if err := view.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Could not start", slog.Any("Error", err))
 		}
