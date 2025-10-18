@@ -17,6 +17,7 @@ func (v *View) SetupMux() *mux.Router {
 	r := mux.NewRouter()
 
 	r.Handle("/metrics", v.Stats.Handler())
+	r.HandleFunc("/conf", v.ConfHandler)
 	r.HandleFunc("/ws", v.WebsocketHandler)
 	r.HandleFunc("/api/version", v.VersionHandler)
 	r.HandleFunc("/api/metrics-data", v.MetricsDataHandler)

@@ -35,6 +35,7 @@ type View struct {
 	ShowPulse   bool              // Display pulse view overlay
 	PulseFilter *Ms.PulsePattern  // For filtering the display
 	Supervisor  *PollSupervisor   // Supervisor for performing QNet polling
+	ConfigPath  string            // Path to JSON configuration
 }
 
 // NewViewWithScreen inits the tcell screen that displays HarmonyView.
