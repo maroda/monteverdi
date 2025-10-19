@@ -30,7 +30,7 @@
     "url": "http://localhost:8090/metrics",
     "delim": " ",
     "metrics": {
-      "process_resident_memory_bytes": { "type": "gauge", "max": 30000000 },
+      "process_resident_memory_bytes": { "type": "gauge", "max": 54000000 },
       "go_memstats_heap_alloc_bytes": { "type": "gauge", "max": 30000000 },
       "go_memstats_heap_inuse_bytes": { "type": "gauge", "max": 80000000 },
       "go_gc_heap_objects_objects": { "type": "gauge", "max": 44000 },

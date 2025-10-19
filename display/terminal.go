@@ -653,7 +653,7 @@ func (v *View) StatsMiddleware(next http.Handler) http.Handler {
 // The ticker for the runtime loop is here as a goroutine, the web server blocks.
 // This runs when using the `-headless` flag.
 // Logs appear in the console instead of a file.
-func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
+func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 	// Init Endpoints
 	eps := Ms.NewEndpointsFromConfig(c)
 	qn := Ms.NewQNet(*eps)
@@ -665,7 +665,10 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
 		Stats: stats,
 	}
 
-	// Server for stats endpoint
+	// Register config file location
+	view.ConfigPath = path
+
+	// Server for web endpoint
 	view.server = &http.Server{
 		Addr:    ":8090",
 		Handler: view.SetupMux(),
@@ -691,7 +694,7 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile) error {
 // This is the default view when runTUI from a shell. If there is no TTY, it will not runTUI.
 // The `-headless` flag can be used to runTUI in Web UI only mode, StartHarmonyViewWebOnly
 // The TUI operates with several looping and blocking processes, all handled here.
-func StartHarmonyView(c []Ms.ConfigFile) error {
+func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 	// Init endpoints
 	eps := Ms.NewEndpointsFromConfig(c)
 	qn := Ms.NewQNet(*eps)
@@ -717,7 +720,10 @@ func StartHarmonyView(c []Ms.ConfigFile) error {
 		return err
 	}
 
-	// Server for stats endpoint
+	// Register config file location
+	view.ConfigPath = path
+
+	// Server for web endpoint
 	view.server = &http.Server{
 		Addr:    ":8090",
 		Handler: view.SetupMux(),

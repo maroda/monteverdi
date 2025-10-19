@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -93,8 +94,11 @@ func (v *View) ConfHandler(w http.ResponseWriter, r *http.Request) {
 			"status":  "success",
 			"message": "Configuration reloaded",
 		})
+
+		slog.Info("Configuration reloaded", slog.String("path", configPath))
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		slog.Error("Method not allowed", slog.String("method", r.Method))
 		return
 	}
 }

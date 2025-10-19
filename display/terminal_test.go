@@ -1100,7 +1100,7 @@ func TestStartWebNoTUI(t *testing.T) {
 		// Run check in goroutine because ListenAndServe is blocking
 		errChan := make(chan error, 1)
 		go func() {
-			errChan <- Md.StartHarmonyViewWebOnly(config)
+			errChan <- Md.StartHarmonyViewWebOnly(config, "config.json")
 		}()
 
 		// Wait a bit to start

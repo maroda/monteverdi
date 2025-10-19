@@ -101,8 +101,9 @@ func main() {
 	slog.Info("Configuration", slog.String("path", configPath))
 
 	// Create config with filesystem
-	localfs := Ms.RealFS{}
-	config, err := Ms.LoadConfigFileNameWithFS(configPath, localfs)
+	// localfs := Ms.RealFS{}
+	// config, err := Ms.LoadConfigFileNameWithFS(configPath, localfs)
+	config, err := Ms.LoadConfigFileName(configPath)
 	if err != nil {
 		slog.Error("Error loading config.json", slog.Any("Error", err))
 		panic("Error loading config.json")
@@ -112,9 +113,9 @@ func main() {
 	if *headless {
 		// Run web-only version (no TUI)
 		slog.Info("Using headless UI")
-		err = Md.StartHarmonyViewWebOnly(config)
+		err = Md.StartHarmonyViewWebOnly(config, configPath)
 	} else {
-		err = Md.StartHarmonyView(config)
+		err = Md.StartHarmonyView(config, configPath)
 	}
 	if err != nil {
 		slog.Error("Error starting harmony view", slog.Any("Error", err))
