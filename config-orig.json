@@ -1,0 +1,22 @@
+[
+  {
+    "id": "MONTEVERDI_INTERNAL",
+    "url": "http://localhost:8090/metrics",
+    "delim": " ",
+    "metrics": {
+      "process_resident_memory_bytes": {
+        "type": "gauge",
+        "max": 30000000
+      },
+      "go_memstats_heap_inuse_bytes": {
+        "type": "gauge",
+        "max": 8000000
+      },
+      "go_memstats_alloc_bytes_total": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 20000000
+      }
+    }
+  }
+]

@@ -17,21 +17,20 @@
         <ol style="line-height: 1.8;">
             <li>Watch the <strong style="color: #00fce7;">Current</strong> values to see typical ranges for your metrics</li>
             <li>The <strong style="color: #ffcc00;">% Used</strong> shows how close you are to triggering an accent</li>
-            <li>When <strong style="color: #ff7f00;">? 🔥</strong> appears, that metric has exceeded its maxval threshold</li>
-            <li>Adjust the <code>"metrics"</code> values in <code>config.json</code> to set appropriate thresholds</li>
-            <li>Restart Monteverdi to apply changes</li>
+            <li>When <strong style="color: #ff7f00;">? 🔥</strong> appears, that metric has exceeded its maximum (<b>max</b>) threshold and triggers an accent</li>
+            <li>Use the <a href="/value-editor.html">Value Editor</a> to adjust the running configuration, which provides a selector for viewing one metric at a time.</li>
         </ol>
         <p style="margin: 10px 0 0 0; font-style: italic;">
-            Tip: Set maxval slightly above normal peaks to avoid false positives, but low enough to catch real issues.
+            Think of an accent as a watermark that you find interesting.
+            <br>
+            For instance, watching garbage collection patterns during patterns of network traffic, while also tracking cpu utilization and goroutine volume.
         </p>
     </div>
 
     <div class="nav-link">
-            <a href="/" style="font-size: 14px; font-weight: bold;">
-            ← Back to Harmony View
-        </a>
+        <a href="/">← Back to Harmony View</a> |
+        <a href="/value-editor.html">Value Editor</a>
     </div>
-
 
     <div id="metrics-panel">
         <h3 style="color: #5fa73b; margin-top: 0;">

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monteverdi - Config Editor</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="value-editor.css">
+</head>
+<body>
+
+<div id="container">
+    <h1>Monteverdi <span style="font-size: 0.5em; color: #888;" id="version"></span></h1>
+
+    <div style="margin-top: 20px; padding: 15px; background: rgba(45,45,45,0.5); border-radius: 8px; font-size: 13px; color: #aaa;">
+        <h4 style="color: #e85ff8; margin-top: 0;">Configuration Value Editor</h4>
+        <p style="line-height: 1.8; margin: 10px 0;">
+            Edit your <code>config.json</code> directly in the browser!
+            <br>
+            The configuration will be validated and applied immediately without restarting Monteverdi.
+        </p>
+        <ol style="line-height: 1.8;">
+            <li>Review the current configuration below</li>
+            <li>Select a metric in the drop-down menu to watch live updates</li>
+            <li>Make your changes (add/remove endpoints, adjust metrics, set new max triggers)</li>
+            <li>Click <strong style="color: #5fa73b;">Validate JSON</strong> to check syntax</li>
+            <li>Click <strong style="color: #5fa73b;">Update Configuration</strong> to apply changes</li>
+        </ol>
+        <p style="margin: 10px 0 0 0; font-style: italic;">
+            Changes take effect immediately.
+            <br>
+            The polling system will restart with your new configuration, emptying the current ring set and starting with a fresh one.
+        </p>
+    </div>
+
+    <div class="nav-link">
+        <a href="/">← Back to Harmony View</a> |
+        <a href="/metrics-data.html">Metrics Data</a>
+    </div>
+
+    <div id="metric-picker-panel" style="margin-top: 20px; padding: 15px; background: rgba(45,45,45,0.8); border-radius: 8px; border: 1px solid #555;">
+        <h3 style="color: #5fa73b; margin-top: 0;">
+            Live Metric Preview
+            <span style="font-size: 0.6em; color: #888;">(see current values while editing)</span>
+        </h3>
+
+        <div style="margin-bottom: 15px;">
+            <label for="metric-select" style="color: #e85ff8; font-weight: bold; margin-right: 10px;">
+                Select Metric:
+            </label>
+            <select id="metric-select" style="background: #1e1e1e; color: #00fce7; border: 1px solid #555; border-radius: 4px; padding: 6px; font-family: 'Courier New', monospace; cursor: crosshair;">
+                <option value="">-- Choose a metric --</option>
+            </select>
+        </div>
+
+        <div id="selected-metric-row" style="display: none;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                <tr style="border-bottom: 2px solid #555;">
+                    <th style="text-align: left; padding: 8px; color: #e85ff8;">Endpoint</th>
+                    <th style="text-align: left; padding: 8px; color: #e85ff8;">Metric</th>
+                    <th style="text-align: right; padding: 8px; color: #e85ff8;">Current</th>
+                    <th style="text-align: right; padding: 8px; color: #e85ff8;">Max</th>
+                    <th style="text-align: right; padding: 8px; color: #e85ff8;">% Used</th>
+                    <th style="text-align: center; padding: 8px; color: #e85ff8;">?</th>
+                </tr>
+                </thead>
+                <tbody id="selected-metric-tbody">
+                <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="config-editor">
+        <h3 style="color: #5fa73b; margin-top: 0;">
+            Current Configuration
+        </h3>
+
+        <textarea id="config-textarea" spellcheck="false"></textarea>
+
+        <div style="margin-top: 15px;">
+            <button id="validate-button" class="editor-button">
+                Validate JSON
+            </button>
+            <button id="submit-button" class="editor-button" style="background-color: #5fa73b; color: #1a1a1a;">
+                Update Configuration
+            </button>
+        </div>
+
+        <div id="status-message"></div>
+    </div>
+
+</div>
+
+<script src="value-editor.js"></script>
+<script>
+    // Fetch version
+    fetch('/api/version')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('version').textContent = data.version;
+        })
+        .catch(err => console.log('Version fetch failed:', err));
+</script>
+</body>
+</html>

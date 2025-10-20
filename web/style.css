@@ -30,6 +30,28 @@ hr {
     margin: 10px 0;
 }
 
+.nav-link {
+    display: inline-block;
+    margin: 10px 0;
+    color: #1973bb;
+    text-decoration: none;
+    font-size: 14px;
+    text-align: center;
+    width: 100%;
+}
+
+.nav-link:hover {
+    color: #1973bb;
+}
+
+a:visited {
+    color: #1973bb;
+}
+
+a:visited:hover {
+    color: #1973bb;
+}
+
 #chart {
     border: 1px solid #555;
     border-radius: 4px;

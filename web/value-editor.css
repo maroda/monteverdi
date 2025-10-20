@@ -1,0 +1,58 @@
+/* value-editor.css - Page-specific styles */
+
+#config-editor {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(45,45,45,0.8);
+    border-radius: 8px;
+    border: 1px solid #555;
+}
+
+#config-textarea {
+    width: calc(100% - 20px);
+    min-height: 400px;
+    background: #1e1e1e;
+    color: #00fce7;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+/* Reuse button styles similar to threshold controls */
+.editor-button {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: crosshair;
+    font-size: 14px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.editor-button:hover {
+    background-color: #4a4a4a;
+    border-color: #777;
+}
+
+#status-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    display: none;
+}
+
+#status-message.success {
+    background: rgba(95,167,59,0.3);
+    border: 1px solid #5fa73b;
+    color: #5fa73b;
+}
+
+#status-message.error {
+    background: rgba(255,127,0,0.3);
+    border: 1px solid #ff7f00;
+    color: #ff7f00;
+}

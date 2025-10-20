@@ -22,6 +22,10 @@ func (v *View) SetupMux() *mux.Router {
 	r.HandleFunc("/api/version", v.VersionHandler)
 	r.HandleFunc("/api/metrics-data", v.MetricsDataHandler)
 
+	r.HandleFunc("/editor", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/value-editor.html")
+	})
+
 	// Static files for D3 frontend
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
 

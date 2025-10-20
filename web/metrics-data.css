@@ -46,26 +46,6 @@
     background-color: #2a2a2a;
 }
 
-.nav-link {
-    display: inline-block;
-    margin: 10px 0;
-    color: #5fa73b;
-    text-decoration: none;
-    font-size: 14px;
-}
-
-.nav-link:hover {
-    color: #7fc95f;
-}
-
-a:visited {
-    color: #5fa73b;
-}
-
-a:visited:hover {
-    color: #7fc95f;
-}
-
 .help-section {
     margin-top: 20px;
     padding: 15px;

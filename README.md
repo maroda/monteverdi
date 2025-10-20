@@ -2,62 +2,83 @@
 
 [![Release](https://github.com/maroda/monteverdi/actions/workflows/release.yml/badge.svg)](https://github.com/maroda/monteverdi/actions/workflows/release.yml)
 
+## Quick Start
+
+1. Get it: `docker run --network host ghcr.io/maroda/monteverdi:latest`
+2. Browse to it: <http://localhost:8090>
+3. Click **Metrics Data** to see the current metrics being consumed
+4. Click **Value Editor** to manage the config or upload your own
+
+See [How To Use](#how-to-use) for more startup docs and [Web UI](#web-ui) for visual controls.
+
 ## Seconda Practica Observability
 
 Monteverdi is a live data streaming system that uses _Harmonic Accent Analysis_ to identify operational pulses of the system.
 
-This is an observability tool. It employs Leonard Meyer's musical analysis techniques to study the form present in technical (infra-)structure. System operators (like SREs or other DevOps roles) gain a multi-spacial system using hierarchical pattern recognition for understanding complex interaction dynamics. It pays attention to the _pulse_ of the system rather than the codified _rhythms_.
+> This is an observability tool. It applies a musical analysis technique - invented by [Leonard Meyer](https://en.wikipedia.org/wiki/Leonard_B._Meyer) - to study how patterns **form** in the operation of technical (infra-)**structure**.
+> 
+> Monteverdi pays attention to the _pulse_ of how system patterns interact rather than the _rhythms_ of traditional monitoring.
 
-> **Monteverdi measures how well the whole system is breathing, rather than how much air the lungs can use.**
+Traditional monitoring observes individual component metric in isolation. Number hits a threshold, alert is fired, a component has failed... but we know little about total system behavior without piecing it together like a mystery to be solved.
 
-Traditional monitoring observes individual component metric in isolation. Monteverdi analyzes the **interaction harmonics** between system components. The hope is that this will reveal emergent patterns and early warning signals that conventional dashboards miss. Events like "near misses" and "gray failures" can become more observable as interactions of patterns propagate through the system.
+Exploring new perspectives is how we emerge the art of monitoring, and _the interactions_ is where to look for new species of information.
+
+This is where Monteverdi fits. It provides a doorway into analysis where system components interact, measured and displayed in converging patterns. In future iterations, this might be able to alert on emergent patterns, raising early warning signals and proactive views of failure.
+
+New ways of understanding your system **as it lives** can give monitoring an entirely new perspective.
 
 ## What it can do now
 
-Streams data from multiple endpoints to draw histograms of the "accents" found by configuring triggers, i.e. a maximum value for the metric being recorded.
+Streams of data from multiple endpoints are used to draw histograms of "accents". These are found by configuring triggers, i.e. a maximum value for the metric being recorded.
 
-> NEW! Metrics are now configurable as **COUNTERS** using the new Plugin architecture. Using the `transformer="calc_rate"` entry in the config will do the job (see the included configs for examples).
+An endpoint is any URL that serves K/V data (delimiter is configurable), for instance Prometheus or Netdata endpoints. Output can be enhanced with plugins that do simple math (e.g. `calc_rate` for counters to make them rates). These plugins are modular and are developed separately from Monteverdi core.
 
-- The included `config.json` checks Monteverdi's local prometheus metrics only. This means you can try it without needing to have to set up a KV endpoint.
-- The included `example_config.json` shows three endpoints, including the local, but also Netdata and something else I have running locally.
-- Logging is found in `monteverdi.log`.
-
-If you runTUI `monteverdi` in the same directory as the shipped `config.json` you should get some metrics. You may need to fiddle with the max values in the config to trigger accents correctly.
+The included `config.json` checks Monteverdi's local prometheus metrics only. This means you can try it without needing to have to set up a KV endpoint. The included `example_config.json` shows three endpoints, and both show how to use the `calc_rate` plugin.
 
 ### Web UI
 
-![Web Interface](docs/images/monteverdi-webui-preview-v0.9.png)
+![Harmony View Interface](docs/images/monteverdi-webui-preview-v0.9.png)
 
-- There is a D3 web UI at <http://localhost:8090> with several visualization features. This "harmony view" shows pattern recognition only, no raw data.
-- Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected.
-- If no TTY is detected the logging is directed to STDOUT
- 
+- Runs at <http://localhost:8090>
+- Each metric in `config.json` gets its own ring.
+- Rings are in alphabetical order by metric, grouped into 60 second and 10 minute dimensions.
+- The inner group contains "Dimension 1" patterns: Iamb and Trochee. Dimension 1 patterns are based on the sequence of accent and no-accent in the raw data.
+- The outer group contains "Dimension 2" patterns: Amphibrach (only, for now). These patterns are based on the Dimension 1 patterns, specifically the "Iamb, Trochee, Iamb" triplet. Dimension 2 patterns _consume_ Dimension 1 patterns.
+- These patterns are not meant to signify anything but places in the data where accents are configured. Each dimension presents this pattern in different ways. The outcome is an _overall pattern among all data points_, not necessarily a direct measurement of system failure or success.
+
+Monteverdi has a warmup period before it will show any pattern recognition. This is because it checks for a minimum number of accents (currently 10) to detect patterns, and if accents aren't triggered then patterns won't be detected. If no TTY is detected the logging is directed to STDOUT, otherwise logging is found in `monteverdi.log`.
+
+#### Web UI Controls
+
+There are three pages: **Harmony View**, **Metrics Data**, and **Value Editor**.
+
+**Harmony View** has the concentric rings with data flowing around in 1 and 10 minute intervals. There are multiple ways to adjust the views to see your data in different perspectives, like:
+
+- A grid overlay
+- Ring spacing and pulse sizing
+- Linear or exponential data views
+- Metadata for pulses and rings
+- Event animations
+
+**Metrics Data** is a continuously updating table that shows all successfully fetched metrics from configured endpoints. Monteverdi will skip endpoints and metrics it cannot process (and logs the failure). _Use this view to verify that data is being ingested._
+
+**Value Editor** is a simple but powerful interface to allow direct configuration edits. The running config is loaded in the JSON editor and can be changed directly. The entire config can be replaced, endpoints added or removed, or just max values adjusted. This page provides a single metric preview with live updating values to help with tuning the max in your config.
+
 ### Terminal UI
 
 ![Terminal Interface](docs/images/monteverdi-tui-preview-v0.9.png)
 
-- This is the default view of Monteverdi when it is runTUI in a TTY, parallel with the Web UI.
-- There is now a `-headless` runtime flag for no TTY (i.e. containers).
-- Draws the accent values in the display as they happen.
-- Graphs can be clicked on to reveal the metric name and its updating _raw_ value (not the accent, which is what is shown visually).
-- Pattern recognition can be seen in the TUI if you hit 'p' for "pulse view" (but it is buggy, see known issues below).
-- Pulse view shows only the metric name.
+- This is the default view of Monteverdi when it is run in a TTY, parallel with the Web UI.
+- There is a `-headless` runtime flag for no TTY (useful for running in a container)
+- Draws the accent values in the display as they happen, with some color shading for different levels. This histogram view isn't available in the Web UI, and can be useful for debugging initial metric maximum value configurations.
+- Graphs can be clicked on to reveal the metric name and its updating _raw_ value.
+- Pattern recognition can be seen in the TUI if you hit 'p' for "pulse view" (but it is buggy, see known issues below). **The Web UI is the preferred interface to view patterns.**
 
 ### API
 
-- In addition to the prometheus `/metrics` endpoint, there is now a `/version` endpoint for programmatically displaying the version in the Web UI.
-- This API starts up regardless of a TUI or Web UI runtime
-- The app should no longer block if Endpoints are unreachable and log the error.
+In addition to the prometheus `/metrics` endpoint, there is a `/version` endpoint for programmatically displaying the version in the Web UI, and a `/conf` endpoint that provides configuration updates. The Web UI uses all of these endpoints to operate.
 
-## Feature Requests
-
-- [Plugin Architecture](./PLUGINS.md) to support things like rates and non-KV.
-- Automatically reload config. Currently loads on first runTUI.
-- Metrics input. Can read an existing timeseries with KV and extract pulses.
-- Inference. How do we take a history of pulses and define expected behaviors?
-- Monitor. How do we "alert" on pulse diversion?
-- Output. Can the pulses be converted to other formats?
-- Audio. How do the patterns sound?
+> This API starts up regardless of whether TUI or Web Only is used.
 
 ## How to use
 
@@ -76,6 +97,19 @@ The fields are:
 > See `example_config.json` for a complex example, or `config.json` to play around with Monteverdi's own Prometheus stats.
 
 Once you have this populated, use the runtime or docker options below to point Monteverdi at your config.
+
+### Configuration Endpoint
+
+Use the `/conf` endpoint to update the configuration:
+
+```shell
+>>> curl -X POST http://localhost:8090/conf \
+-H "Content-Type: application/json" \
+-d @example_config.json
+```
+
+To retrieve the current configuration: `curl http://localhost:8090/conf`
+
 
 ### Runtime
 
@@ -128,21 +162,21 @@ go build -ldflags "-X github.com/maroda/monteverdi/display.Version=$(git describ
 
 ## Docker
 
-This repo builds public container packages that you can use to try Monteverdi out for yourself. They can be runTUI like this:
+This repo builds public container packages that you can use to try Monteverdi out for yourself. They can be run like this:
 ```shell
-docker runTUI -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
+docker run -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
 ```
 
 > The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works. When using public hostnames in `config.json`, this is not necessary.
 
 To use your own config, set up the JSON and pass it to the container as a mount:
 ```shell
-docker runTUI -p 8090:8090 -v ./myconfig.json:/app/config.json ghcr.io/maroda/monteverdi:latest
+docker run -p 8090:8090 -v ./myconfig.json:/app/config.json ghcr.io/maroda/monteverdi:latest
 ```
 
 Or use a different filename with an environment variable:
 ```shell
-docker runTUI -p 8090:8090 \
+docker run -p 8090:8090 \
   -e MONTEVERDI_CONFIG_FILE=/app/myconfig.json \
   -v ./myconfig.json:/app/myconfig.json \
   ghcr.io/maroda/monteverdi:latest
@@ -150,7 +184,7 @@ docker runTUI -p 8090:8090 \
 
 ## Kubernetes
 
-You should be able to use a ConfigMap to runTUI this in a Kubernetes cluster. This is an untested config, but should work!
+You should be able to use a ConfigMap to run this in a Kubernetes cluster. This is an untested config, but should work!
 
 Create the ConfigMap from your local JSON:
 ```shell
@@ -207,3 +241,10 @@ spec:
 1. The Pulse View in the TUI is drawing weird, covering more space in the terminal than its configuration is supposed to be allowing.
 2. Clicking on pulses in WebUI is inconsistent, sometimes the metadata popup will work, sometimes it's really difficult to trigger.
 
+## Feature Requests
+
+- Metrics input. Can read an existing timeseries with KV and extract pulses.
+- Inference. How do we take a history of pulses and define expected behaviors?
+- Monitor. How do we "alert" on pulse diversion?
+- Output. Can the pulses be converted to other formats?
+- Audio. How do the patterns sound?
