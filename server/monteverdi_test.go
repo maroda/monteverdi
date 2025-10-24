@@ -17,6 +17,7 @@ import (
 
 	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 func TestNewQNet(t *testing.T) {
@@ -485,8 +486,8 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 	t.Run("Returns empty data when no pulses exist", func(t *testing.T) {
 		got := qn.Network[0].GetPulseVizData(testMetric, nil)
-		var want []Ms.PulseVizPoint
-		want = []Ms.PulseVizPoint{}
+		var want []Mt.PulseVizPoint
+		want = []Mt.PulseVizPoint{}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("GetPulseVizData returned incorrect value, got: %v, want: %v", got, want)
 		}
@@ -494,17 +495,17 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 	t.Run("Filters by metric name", func(t *testing.T) {
 		// Clear previous test data
-		qn.Network[0].Pulses.Buffer = []Ms.PulseEvent{}
+		qn.Network[0].Pulses.Buffer = []Mt.PulseEvent{}
 
 		// Add pulses for different metrics
-		pulse1 := Ms.PulseEvent{
-			Pattern:   Ms.Iamb,
+		pulse1 := Mt.PulseEvent{
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-20 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
 		}
-		pulse2 := Ms.PulseEvent{
-			Pattern:   Ms.Trochee,
+		pulse2 := Mt.PulseEvent{
+			Pattern:   Mt.Trochee,
 			StartTime: now.Add(-15 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{"CPU4"},
@@ -513,7 +514,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		qn.Network[0].Pulses.Buffer = append(qn.Network[0].Pulses.Buffer, pulse1, pulse2)
 
 		got := qn.Network[0].GetPulseVizData(testMetric, nil)
-		want := Ms.Iamb
+		want := Mt.Iamb
 
 		// Should only return points for the requested metric
 		for _, point := range got {
@@ -527,18 +528,18 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		// Setup endpoint with mixed pulse patterns
 		ep := makeEndpoint("TEST", "http://test")
 		ep.Pulses = &Ms.TemporalGrouper{
-			Buffer: []Ms.PulseEvent{
-				{Pattern: Ms.Iamb, StartTime: time.Now().Add(-10 * time.Second), Duration: 5 * time.Second, Metric: []string{testMetric}},
-				{Pattern: Ms.Trochee, StartTime: time.Now().Add(-5 * time.Second), Duration: 3 * time.Second, Metric: []string{testMetric}},
+			Buffer: []Mt.PulseEvent{
+				{Pattern: Mt.Iamb, StartTime: time.Now().Add(-10 * time.Second), Duration: 5 * time.Second, Metric: []string{testMetric}},
+				{Pattern: Mt.Trochee, StartTime: time.Now().Add(-5 * time.Second), Duration: 3 * time.Second, Metric: []string{testMetric}},
 			},
-			Groups: []*Ms.PulseTree{
-				{OGEvents: []Ms.PulseEvent{
-					{Pattern: Ms.Iamb, StartTime: time.Now().Add(-20 * time.Second), Duration: 4 * time.Second, Metric: []string{testMetric}},
+			Groups: []*Mt.PulseTree{
+				{OGEvents: []Mt.PulseEvent{
+					{Pattern: Mt.Iamb, StartTime: time.Now().Add(-20 * time.Second), Duration: 4 * time.Second, Metric: []string{testMetric}},
 				}},
 			},
 		}
 
-		patterns := []Ms.PulsePattern{Ms.Iamb, Ms.Trochee}
+		patterns := []Mt.PulsePattern{Mt.Iamb, Mt.Trochee}
 		for _, pattern := range patterns {
 			points := ep.GetPulseVizData(testMetric, &pattern)
 			for _, point := range points {
@@ -554,10 +555,10 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		hasIamb := false
 		hasTrochee := false
 		for _, point := range points {
-			if point.Pattern == Ms.Iamb {
+			if point.Pattern == Mt.Iamb {
 				hasIamb = true
 			}
-			if point.Pattern == Ms.Trochee {
+			if point.Pattern == Mt.Trochee {
 				hasTrochee = true
 			}
 		}
@@ -575,25 +576,25 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 		// Setup completed groups with different patterns (no buffer pulses)
 		ep.Pulses = &Ms.TemporalGrouper{
-			Buffer: []Ms.PulseEvent{}, // Empty buffer to isolate groups testing
-			Groups: []*Ms.PulseTree{
+			Buffer: []Mt.PulseEvent{}, // Empty buffer to isolate groups testing
+			Groups: []*Mt.PulseTree{
 				{
 					StartTime: time.Now().Add(-30 * time.Second),
-					OGEvents: []Ms.PulseEvent{
-						{Pattern: Ms.Iamb, StartTime: time.Now().Add(-25 * time.Second), Duration: 4 * time.Second, Metric: []string{"CPU1"}},
-						{Pattern: Ms.Trochee, StartTime: time.Now().Add(-20 * time.Second), Duration: 3 * time.Second, Metric: []string{"CPU1"}},
+					OGEvents: []Mt.PulseEvent{
+						{Pattern: Mt.Iamb, StartTime: time.Now().Add(-25 * time.Second), Duration: 4 * time.Second, Metric: []string{"CPU1"}},
+						{Pattern: Mt.Trochee, StartTime: time.Now().Add(-20 * time.Second), Duration: 3 * time.Second, Metric: []string{"CPU1"}},
 					},
 				},
 				{
 					StartTime: time.Now().Add(-15 * time.Second),
-					OGEvents: []Ms.PulseEvent{
-						{Pattern: Ms.Iamb, StartTime: time.Now().Add(-12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
+					OGEvents: []Mt.PulseEvent{
+						{Pattern: Mt.Iamb, StartTime: time.Now().Add(-12 * time.Second), Duration: 2 * time.Second, Metric: []string{"CPU1"}},
 					},
 				},
 			},
 		}
 
-		patterns := []Ms.PulsePattern{Ms.Iamb, Ms.Trochee}
+		patterns := []Mt.PulsePattern{Mt.Iamb, Mt.Trochee}
 		for _, pattern := range patterns {
 			points := ep.GetPulseVizData(testMetric, &pattern)
 			for _, point := range points {
@@ -611,8 +612,8 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 		// Use a fixed time for consistent calculations
 		testTime := time.Now()
 
-		testPulse := Ms.PulseEvent{
-			Pattern:   Ms.Iamb,
+		testPulse := Mt.PulseEvent{
+			Pattern:   Mt.Iamb,
 			StartTime: testTime.Add(-30 * time.Second),
 			Duration:  10 * time.Second,
 			Metric:    []string{testMetric},
@@ -657,22 +658,22 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 			MU: sync.RWMutex{},
 			Pulses: &Ms.TemporalGrouper{
 				WindowSize: 60 * time.Second,
-				Buffer:     []Ms.PulseEvent{},
-				Groups:     []*Ms.PulseTree{},
+				Buffer:     []Mt.PulseEvent{},
+				Groups:     []*Mt.PulseTree{},
 			},
 		}
 
-		testPulse := Ms.PulseEvent{
-			Pattern:   Ms.Iamb,
+		testPulse := Mt.PulseEvent{
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-30 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
 		}
 
 		// Create a group with original events
-		group := &Ms.PulseTree{
+		group := &Mt.PulseTree{
 			StartTime: now.Add(-35 * time.Second),
-			OGEvents:  []Ms.PulseEvent{testPulse}, // Note: using your abbreviated field name
+			OGEvents:  []Mt.PulseEvent{testPulse}, // Note: using your abbreviated field name
 		}
 		ep.Pulses.Groups = append(ep.Pulses.Groups, group)
 
@@ -688,15 +689,15 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 			MU: sync.RWMutex{},
 			Pulses: &Ms.TemporalGrouper{
 				WindowSize: 60 * time.Second,
-				Buffer:     []Ms.PulseEvent{},
-				Groups:     []*Ms.PulseTree{},
+				Buffer:     []Mt.PulseEvent{},
+				Groups:     []*Mt.PulseTree{},
 			},
 		}
 
 		now := time.Now()
-		oldGroup := &Ms.PulseTree{
+		oldGroup := &Mt.PulseTree{
 			StartTime: now.Add(-120 * time.Second), // Outside 60-second window
-			OGEvents:  []Ms.PulseEvent{{Pattern: Ms.Iamb, Metric: []string{testMetric}}},
+			OGEvents:  []Mt.PulseEvent{{Pattern: Mt.Iamb, Metric: []string{testMetric}}},
 		}
 		ep.Pulses.Groups = append(ep.Pulses.Groups, oldGroup)
 
@@ -708,7 +709,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 	t.Run("Trochee midpoint calculation", func(t *testing.T) {
 		ep := &Ms.Endpoint{}
-		pulse := Ms.PulseEvent{Pattern: Ms.Trochee}
+		pulse := Mt.PulseEvent{Pattern: Mt.Trochee}
 		startPos, endPos := 10, 20
 		midPoint := 15
 
@@ -726,7 +727,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 	t.Run("Amphibrach calculation", func(t *testing.T) {
 		ep := &Ms.Endpoint{}
-		pulse := Ms.PulseEvent{Pattern: Ms.Amphibrach}
+		pulse := Mt.PulseEvent{Pattern: Mt.Amphibrach}
 		startPos, firstPt, secondPt, endPos := 10, 20, 30, 40
 
 		firstThird := ep.CalcAccentStateForPos(pulse, firstPt-1, startPos, endPos)
@@ -748,7 +749,7 @@ func TestEndpoint_GetPulseVizData(t *testing.T) {
 
 	t.Run("Calculation returns false for no result", func(t *testing.T) {
 		ep := &Ms.Endpoint{}
-		pulse := Ms.PulseEvent{Pattern: 9}
+		pulse := Mt.PulseEvent{Pattern: 9}
 		startPos, endPos := 10, 20
 		midPoint := 15
 
@@ -880,8 +881,8 @@ func TestPulseToPoints_Clamping(t *testing.T) {
 
 	t.Run("Clamps start position to 0", func(t *testing.T) {
 		// Pulse that started before visible window
-		pulse := Ms.PulseEvent{
-			Pattern:   Ms.Iamb,
+		pulse := Mt.PulseEvent{
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-90 * time.Second), // Before 60-second window
 			Duration:  10 * time.Second,
 		}
@@ -897,8 +898,8 @@ func TestPulseToPoints_Clamping(t *testing.T) {
 
 	t.Run("Clamps end position to default with 79", func(t *testing.T) {
 		// Long duration pulse that would extend beyond visible range
-		pulse := Ms.PulseEvent{
-			Pattern:   Ms.Iamb,
+		pulse := Mt.PulseEvent{
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-10 * time.Second),
 			Duration:  80 * time.Second, // Very long duration
 		}
@@ -962,7 +963,7 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 	// Create a sequence that should generate pulses
 	qn.Network[0].Sequence[testMetric] = &Ms.IctusSequence{
 		Metric: testMetric,
-		Events: []Ms.Ictus{
+		Events: []Mt.Ictus{
 			{Timestamp: time.Now().Add(-10 * time.Second), IsAccent: false, Value: 5},
 			{Timestamp: time.Now().Add(-7 * time.Second), IsAccent: true, Value: 15},
 			{Timestamp: time.Now().Add(-3 * time.Second), IsAccent: false, Value: 8},
@@ -973,7 +974,7 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 		// Make sure we have a fresh sequence that will generate pulses
 		qn.Network[0].Sequence[testMetric] = &Ms.IctusSequence{
 			Metric: testMetric,
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now().Add(-15 * time.Second), IsAccent: false, Value: 5},
 				{Timestamp: time.Now().Add(-10 * time.Second), IsAccent: true, Value: 15},
 				{Timestamp: time.Now().Add(-5 * time.Second), IsAccent: false, Value: 8},
@@ -1012,11 +1013,11 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 		seq := qn.Network[0].Sequence[testMetric]
 		ictusSeq := &Ms.IctusSequence{
 			Metric: testMetric,
-			Events: make([]Ms.Ictus, len(seq.Events)),
+			Events: make([]Mt.Ictus, len(seq.Events)),
 		}
 
 		for j, e := range seq.Events {
-			ictusSeq.Events[j] = Ms.Ictus{
+			ictusSeq.Events[j] = Mt.Ictus{
 				Timestamp: e.Timestamp,
 				IsAccent:  e.IsAccent,
 				Value:     e.Value,
@@ -1035,8 +1036,8 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 		initialBufferSize := len(qn.Network[0].Pulses.Buffer)
 
 		// Create a pulse directly and add it
-		testPulse := Ms.PulseEvent{
-			Pattern:   Ms.Iamb,
+		testPulse := Mt.PulseEvent{
+			Pattern:   Mt.Iamb,
 			StartTime: time.Now().Add(-10 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
@@ -1056,7 +1057,7 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 		// Create sequence with only 1 event (insufficient for pulse detection)
 		qn.Network[0].Sequence["CPU2"] = &Ms.IctusSequence{
 			Metric: "CPU2",
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now(), IsAccent: true, Value: 10},
 			},
 		}
@@ -1075,7 +1076,7 @@ func TestPulseDetect_AddPulseCoverage(t *testing.T) {
 		// Create sequence that won't generate pulses (no state transitions)
 		qn.Network[0].Sequence["CPU3"] = &Ms.IctusSequence{
 			Metric: "CPU3",
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now().Add(-10 * time.Second), IsAccent: true, Value: 15},
 				{Timestamp: time.Now().Add(-5 * time.Second), IsAccent: true, Value: 16},
 				{Timestamp: time.Now(), IsAccent: true, Value: 17},
@@ -1110,9 +1111,9 @@ func TestQNet_PulseDetect_SequenceTrimming(t *testing.T) {
 	testMetric := "CPU1"
 
 	// Create a sequence with more than maxRecognitionEvents (10)
-	events := make([]Ms.Ictus, 15) // More than the 10 limit
+	events := make([]Mt.Ictus, 15) // More than the 10 limit
 	for i := 0; i < 15; i++ {
-		events[i] = Ms.Ictus{
+		events[i] = Mt.Ictus{
 			Timestamp: time.Now().Add(time.Duration(i) * time.Second),
 			IsAccent:  i%2 == 0, // Alternate accent/non-accent
 			Value:     int64(50 + i),
@@ -1163,7 +1164,7 @@ func reverse64(s []int64) []int64 {
 }
 
 // See what we actually got
-func getPositions(points []Ms.PulseVizPoint) []int {
+func getPositions(points []Mt.PulseVizPoint) []int {
 	positions := make([]int, len(points))
 	for i, p := range points {
 		positions[i] = p.Position
@@ -1203,9 +1204,9 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	//x[c[3]] = 6
 
 	// Initialize the Timeseries structure
-	l := make(map[string]*Ms.Timeseries)
+	l := make(map[string]*Mt.Timeseries)
 	for _, mName := range c {
-		l[mName] = &Ms.Timeseries{
+		l[mName] = &Mt.Timeseries{
 			Runes:   make([]rune, 60),
 			MaxSize: 60,
 			Current: 0,
@@ -1215,8 +1216,8 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	is := make(map[string]*Ms.IctusSequence)
 	tg := &Ms.TemporalGrouper{
 		WindowSize: 60 * time.Second,
-		Buffer:     make([]Ms.PulseEvent, 0),
-		Groups:     make([]*Ms.PulseTree, 0),
+		Buffer:     make([]Mt.PulseEvent, 0),
+		Groups:     make([]*Mt.PulseTree, 0),
 	}
 	hb := make(map[string]*Ms.CycBuffer)
 
@@ -1246,8 +1247,8 @@ func makeEndpointMTrans(metric string, url string, transformer Mp.MetricTransfor
 		Metric: map[int]string{0: metric},
 		Mdata:  make(map[string]int64),
 		Maxval: map[string]int64{metric: 1000},
-		Accent: make(map[string]*Ms.Accent),
-		Layer: map[string]*Ms.Timeseries{
+		Accent: make(map[string]*Mt.Accent),
+		Layer: map[string]*Mt.Timeseries{
 			metric: {
 				Runes:   make([]rune, 80),
 				MaxSize: 80,
@@ -1257,8 +1258,8 @@ func makeEndpointMTrans(metric string, url string, transformer Mp.MetricTransfor
 		Sequence: make(map[string]*Ms.IctusSequence),
 		Pulses: &Ms.TemporalGrouper{
 			WindowSize: 60 * time.Second,
-			Buffer:     make([]Ms.PulseEvent, 0),
-			Groups:     make([]*Ms.PulseTree, 0),
+			Buffer:     make([]Mt.PulseEvent, 0),
+			Groups:     make([]*Mt.PulseTree, 0),
 		},
 		Hysteresis:   make(map[string]*Ms.CycBuffer),
 		Transformers: map[string]Mp.MetricTransformer{metric: transformer},

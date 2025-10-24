@@ -101,8 +101,6 @@ func main() {
 	slog.Info("Configuration", slog.String("path", configPath))
 
 	// Create config with filesystem
-	// localfs := Ms.RealFS{}
-	// config, err := Ms.LoadConfigFileNameWithFS(configPath, localfs)
 	config, err := Ms.LoadConfigFileName(configPath)
 	if err != nil {
 		slog.Error("Error loading config.json", slog.Any("Error", err))

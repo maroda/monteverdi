@@ -14,6 +14,7 @@ import (
 	Md "github.com/maroda/monteverdi/display"
 	Mo "github.com/maroda/monteverdi/obvy"
 	Ms "github.com/maroda/monteverdi/server"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 func TestScreen(t *testing.T) {
@@ -566,7 +567,7 @@ func TestView_DrawTimeseries(t *testing.T) {
 			Metric: map[int]string{0: "cpu"},
 			Mdata:  map[string]int64{"cpu": 50},
 			Maxval: map[string]int64{"cpu": 100},
-			Layer: map[string]*Ms.Timeseries{
+			Layer: map[string]*Mt.Timeseries{
 				"cpu": {
 					Runes:   make([]rune, 60),
 					MaxSize: 60,
@@ -644,7 +645,7 @@ func TestView_DrawTimeseries(t *testing.T) {
 		endpoint := &Ms.Endpoint{
 			ID:     "test-ep",
 			Metric: map[int]string{0: "cpu"},
-			Layer: map[string]*Ms.Timeseries{
+			Layer: map[string]*Mt.Timeseries{
 				"cpu": {
 					Runes:   make([]rune, 60), // All zeros by default
 					MaxSize: 60,
@@ -732,11 +733,11 @@ func TestView_DrawPulseView(t *testing.T) {
 
 	filtertests := []struct {
 		name   string
-		filter Ms.PulsePattern
+		filter Mt.PulsePattern
 	}{
-		{"Iamb", Ms.Iamb},
-		{"Trochee", Ms.Trochee},
-		{"Amphibrach", Ms.Amphibrach},
+		{"Iamb", Mt.Iamb},
+		{"Trochee", Mt.Trochee},
+		{"Amphibrach", Mt.Amphibrach},
 	}
 
 	for _, ff := range filtertests {
@@ -833,7 +834,7 @@ func TestView_DrawHarmonyViewMulti_Accent(t *testing.T) {
 	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
 
-	view.QNet.Network[0].Accent["CPU"] = &Ms.Accent{
+	view.QNet.Network[0].Accent["CPU"] = &Mt.Accent{
 		Timestamp: time.Now().UnixMicro(),
 		Intensity: 1,
 		SourceID:  view.QNet.Network[0].ID,
@@ -851,7 +852,7 @@ func TestView_RenderPulseViz(t *testing.T) {
 		view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 		defer view.Screen.Fini()
 
-		pvp := Ms.PulseVizPoint{
+		pvp := Mt.PulseVizPoint{
 			Position:  0,
 			Pattern:   0, // Pattern 0 is an Iamb, rune: '⚍'
 			IsAccent:  false,
@@ -860,7 +861,7 @@ func TestView_RenderPulseViz(t *testing.T) {
 			Extends:   false,
 		}
 
-		view.RenderPulseViz(0, 0, []Ms.PulseVizPoint{pvp})
+		view.RenderPulseViz(0, 0, []Mt.PulseVizPoint{pvp})
 		assertRunePos(t, view, 0, 0, '⚍')
 	})
 }
@@ -872,15 +873,15 @@ func TestView_GetPulseRune(t *testing.T) {
 	t.Run("Correct rune and color for each type", func(t *testing.T) {
 		tests := []struct {
 			name        string
-			pattern     Ms.PulsePattern
+			pattern     Mt.PulsePattern
 			expectRune  rune
 			expectColor tcell.Color
 		}{
-			{"Iamb", Ms.Iamb, '⚍', tcell.ColorMaroon},
-			{"Trochee", Ms.Trochee, '⚎', tcell.ColorDarkOrange},
-			{"Amphibrach", Ms.Amphibrach, '☵', tcell.ColorAquaMarine},
-			{"Anapest", Ms.Anapest, '☳', tcell.ColorAzure},
-			{"Dactyl", Ms.Dactyl, '☶', tcell.ColorDodgerBlue},
+			{"Iamb", Mt.Iamb, '⚍', tcell.ColorMaroon},
+			{"Trochee", Mt.Trochee, '⚎', tcell.ColorDarkOrange},
+			{"Amphibrach", Mt.Amphibrach, '☵', tcell.ColorAquaMarine},
+			{"Anapest", Mt.Anapest, '☳', tcell.ColorAzure},
+			{"Dactyl", Mt.Dactyl, '☶', tcell.ColorDodgerBlue},
 		}
 
 		for _, tt := range tests {
@@ -1144,8 +1145,8 @@ func makeEndpointWithMetrics(t *testing.T) *Ms.Endpoint {
 		Metric: map[int]string{0: "CPU", 1: "MEM"},
 		Mdata:  map[string]int64{"CPU": 40, "MEM": 500},
 		Maxval: map[string]int64{"CPU": 80, "MEM": 1000},
-		Accent: make(map[string]*Ms.Accent),
-		Layer: map[string]*Ms.Timeseries{
+		Accent: make(map[string]*Mt.Accent),
+		Layer: map[string]*Mt.Timeseries{
 			"CPU": {
 				Runes:   make([]rune, 80),
 				MaxSize: 80,
@@ -1159,8 +1160,8 @@ func makeEndpointWithMetrics(t *testing.T) *Ms.Endpoint {
 		},
 		Pulses: &Ms.TemporalGrouper{
 			WindowSize: 60 * time.Second,
-			Buffer:     make([]Ms.PulseEvent, 0),
-			Groups:     make([]*Ms.PulseTree, 0),
+			Buffer:     make([]Mt.PulseEvent, 0),
+			Groups:     make([]*Mt.PulseTree, 0),
 		},
 		Sequence: make(map[string]*Ms.IctusSequence),
 	}
@@ -1177,8 +1178,8 @@ func makeEndpointEmptyMetricsURL(t *testing.T, u string) *Ms.Endpoint {
 		Metric: map[int]string{0: "CPU", 1: "MEM"},
 		Mdata:  make(map[string]int64),
 		Maxval: map[string]int64{"CPU": 80, "MEM": 1000},
-		Accent: make(map[string]*Ms.Accent),
-		Layer: map[string]*Ms.Timeseries{
+		Accent: make(map[string]*Mt.Accent),
+		Layer: map[string]*Mt.Timeseries{
 			"CPU": {
 				Runes:   make([]rune, 80),
 				MaxSize: 80,
@@ -1192,8 +1193,8 @@ func makeEndpointEmptyMetricsURL(t *testing.T, u string) *Ms.Endpoint {
 		},
 		Pulses: &Ms.TemporalGrouper{
 			WindowSize: 60 * time.Second,
-			Buffer:     make([]Ms.PulseEvent, 0),
-			Groups:     make([]*Ms.PulseTree, 0),
+			Buffer:     make([]Mt.PulseEvent, 0),
+			Groups:     make([]*Mt.PulseTree, 0),
 		},
 		Sequence: make(map[string]*Ms.IctusSequence),
 	}

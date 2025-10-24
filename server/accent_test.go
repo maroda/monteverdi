@@ -7,6 +7,7 @@ import (
 	"time"
 
 	Ms "github.com/maroda/monteverdi/server"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 func TestNewAccent(t *testing.T) {
@@ -84,7 +85,7 @@ func TestIctusSequence_DetectPulsesWithConfig(t *testing.T) {
 	t.Run("Returns Iamb", func(t *testing.T) {
 		ictusSeq := &Ms.IctusSequence{
 			Metric: "CPU1",
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now(), IsAccent: false, Value: 45},
 				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
 				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
@@ -97,8 +98,8 @@ func TestIctusSequence_DetectPulsesWithConfig(t *testing.T) {
 		for _, pulse := range pulseEvent {
 			fmt.Printf("pulse in test: %v\n", pulse)
 			fmt.Println(pulse.Pattern)
-			if pulse.Pattern != Ms.Iamb {
-				t.Errorf("Expected Iamb to be %v, got: %v", Ms.Iamb, pulse.Pattern)
+			if pulse.Pattern != Mt.Iamb {
+				t.Errorf("Expected Iamb to be %v, got: %v", Mt.Iamb, pulse.Pattern)
 			}
 		}
 	})
@@ -106,7 +107,7 @@ func TestIctusSequence_DetectPulsesWithConfig(t *testing.T) {
 	t.Run("Returns Trochee", func(t *testing.T) {
 		ictusSeq := &Ms.IctusSequence{
 			Metric: "CPU1",
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now(), IsAccent: true, Value: 85},
 				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: false, Value: 45},
 				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: true, Value: 90},
@@ -119,8 +120,8 @@ func TestIctusSequence_DetectPulsesWithConfig(t *testing.T) {
 		for _, pulse := range pulseEvent {
 			fmt.Printf("pulse in test: %v\n", pulse)
 			fmt.Println(pulse.Pattern)
-			if pulse.Pattern != Ms.Trochee {
-				t.Errorf("Expected Iamb to be %v, got: %v", Ms.Trochee, pulse.Pattern)
+			if pulse.Pattern != Mt.Trochee {
+				t.Errorf("Expected Iamb to be %v, got: %v", Mt.Trochee, pulse.Pattern)
 			}
 		}
 	})
@@ -150,7 +151,7 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 		pulseEvent := sequence.DetectPulses()
 
 		for _, pulse := range pulseEvent {
-			if pulse.Pattern != Ms.Iamb {
+			if pulse.Pattern != Mt.Iamb {
 				t.Errorf("Did not detect Iamb: %d", pulse.Pattern)
 			}
 		}
@@ -176,7 +177,7 @@ func TestIctusSequence_DetectPulses(t *testing.T) {
 		pulseEvent := sequence.DetectPulses()
 
 		for _, pulse := range pulseEvent {
-			if pulse.Pattern != Ms.Trochee {
+			if pulse.Pattern != Mt.Trochee {
 				t.Errorf("Did not detect Trochee: %d", pulse.Pattern)
 			}
 		}
@@ -190,7 +191,7 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 	t.Run("Returns empty slice with an empty sequence", func(t *testing.T) {
 		pulseSequence := &Ms.PulseSequence{
 			Metric:    testMetric,
-			Events:    []Ms.PulseEvent{},
+			Events:    []Mt.PulseEvent{},
 			StartTime: time.Time{},
 			EndTime:   time.Time{},
 		}
@@ -205,7 +206,7 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 	t.Run("Returns empty slice with only one sequence", func(t *testing.T) {
 		pulseSequence := &Ms.PulseSequence{
 			Metric: testMetric,
-			Events: []Ms.PulseEvent{
+			Events: []Mt.PulseEvent{
 				{
 					Dimension: 1,
 					Pattern:   1,
@@ -233,7 +234,7 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 	t.Run("Returns nil with an empty sequence", func(t *testing.T) {
 		pulseSequence := &Ms.PulseSequence{
 			Metric:    testMetric,
-			Events:    []Ms.PulseEvent{},
+			Events:    []Mt.PulseEvent{},
 			StartTime: time.Time{},
 			EndTime:   time.Time{},
 		}
@@ -248,7 +249,7 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 	t.Run("Returns nil with only one sequence", func(t *testing.T) {
 		pulseSequence := &Ms.PulseSequence{
 			Metric: testMetric,
-			Events: []Ms.PulseEvent{
+			Events: []Mt.PulseEvent{
 				{
 					Dimension: 1,
 					Pattern:   1,
@@ -273,7 +274,7 @@ func TestPulseSequence_DetectConsortPulses(t *testing.T) {
 func TestPulseSequence_TrimOldPulses(t *testing.T) {
 	tg := &Ms.TemporalGrouper{
 		PulseSequence: &Ms.PulseSequence{
-			Events: []Ms.PulseEvent{
+			Events: []Mt.PulseEvent{
 				{StartTime: time.Now().Add(-120 * time.Second)}, // 2 minutes old
 				{StartTime: time.Now().Add(-90 * time.Second)},  // 1.5 minutes old
 				{StartTime: time.Now().Add(-80 * time.Second)},  // 80 seconds old
@@ -303,30 +304,30 @@ func TestTemporalGrouper_HierarchyDetection(t *testing.T) {
 	t.Run("Detects Amphibrach from Iamb→Trochee→Iamb sequence", func(t *testing.T) {
 		tg := &Ms.TemporalGrouper{
 			WindowSize: 60 * time.Second,
-			Buffer:     make([]Ms.PulseEvent, 0),
-			Groups:     make([]*Ms.PulseTree, 0),
+			Buffer:     make([]Mt.PulseEvent, 0),
+			Groups:     make([]*Mt.PulseTree, 0),
 		}
 
 		// Create the sequence that should trigger Amphibrach
-		iamb1 := Ms.PulseEvent{
+		iamb1 := Mt.PulseEvent{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now,
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
 		}
 
-		trochee := Ms.PulseEvent{
+		trochee := Mt.PulseEvent{
 			Dimension: 1,
-			Pattern:   Ms.Trochee,
+			Pattern:   Mt.Trochee,
 			StartTime: now.Add(6 * time.Second),
 			Duration:  4 * time.Second,
 			Metric:    []string{testMetric},
 		}
 
-		iamb2 := Ms.PulseEvent{
+		iamb2 := Mt.PulseEvent{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(11 * time.Second),
 			Duration:  3 * time.Second,
 			Metric:    []string{testMetric},
@@ -347,7 +348,7 @@ func TestTemporalGrouper_HierarchyDetection(t *testing.T) {
 				d1count++
 			} else if pulse.Dimension == 2 {
 				d2count++
-				if pulse.Pattern == Ms.Amphibrach {
+				if pulse.Pattern == Mt.Amphibrach {
 					amphibrachFound = true
 				}
 			}
@@ -370,18 +371,18 @@ func TestTemporalGrouper_HierarchyDetection(t *testing.T) {
 	t.Run("Detects multiple Amphibrachs from extended Iamb→Trochee sequence", func(t *testing.T) {
 		tg := &Ms.TemporalGrouper{
 			WindowSize: 60 * time.Second,
-			Buffer:     make([]Ms.PulseEvent, 0),
-			Groups:     make([]*Ms.PulseTree, 0),
+			Buffer:     make([]Mt.PulseEvent, 0),
+			Groups:     make([]*Mt.PulseTree, 0),
 		}
 
-		pulses := []Ms.PulseEvent{
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{testMetric}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
-			{Dimension: 1, Pattern: Ms.Trochee, StartTime: now.Add(15 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
-			{Dimension: 1, Pattern: Ms.Iamb, StartTime: now.Add(18 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+		pulses := []Mt.PulseEvent{
+			{Dimension: 1, Pattern: Mt.Iamb, StartTime: now, Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Mt.Trochee, StartTime: now.Add(3 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Mt.Iamb, StartTime: now.Add(6 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Mt.Trochee, StartTime: now.Add(9 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Mt.Iamb, StartTime: now.Add(12 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Mt.Trochee, StartTime: now.Add(15 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
+			{Dimension: 1, Pattern: Mt.Iamb, StartTime: now.Add(18 * time.Second), Duration: 2 * time.Second, Metric: []string{testMetric}},
 		}
 
 		// Add all the D1 pulses
@@ -399,7 +400,7 @@ func TestTemporalGrouper_HierarchyDetection(t *testing.T) {
 				d1Count++
 			} else if pulse.Dimension == 2 {
 				d2Count++
-				if pulse.Pattern == Ms.Amphibrach {
+				if pulse.Pattern == Mt.Amphibrach {
 					amphibrachCount++
 				}
 			}
@@ -422,7 +423,7 @@ func TestTemporalGrouper_HierarchyDetection(t *testing.T) {
 func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 	t.Run("Removes all pulses when none are after limit", func(t *testing.T) {
 		tg := &Ms.TemporalGrouper{
-			Buffer: []Ms.PulseEvent{
+			Buffer: []Mt.PulseEvent{
 				{StartTime: time.Now().Add(-120 * time.Second)}, // 2 minutes ago
 				{StartTime: time.Now().Add(-90 * time.Second)},  // 1.5 minutes ago
 				{StartTime: time.Now().Add(-80 * time.Second)},  // 80 seconds ago
@@ -442,7 +443,7 @@ func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 
 	t.Run("Clears buffer when keepIndex equals buffer length", func(t *testing.T) {
 		tg := &Ms.TemporalGrouper{
-			Buffer: []Ms.PulseEvent{
+			Buffer: []Mt.PulseEvent{
 				{StartTime: time.Now().Add(-100 * time.Second)}, // Old pulse
 				{StartTime: time.Now().Add(-80 * time.Second)},  // Old pulse
 			},
@@ -467,7 +468,7 @@ func TestTemporalGrouper_TrimBuffer(t *testing.T) {
 	t.Run("Keeps pulses that are after the limit", func(t *testing.T) {
 		now := time.Now()
 		tg := &Ms.TemporalGrouper{
-			Buffer: []Ms.PulseEvent{
+			Buffer: []Mt.PulseEvent{
 				{StartTime: now.Add(-80 * time.Second)}, // Too old
 				{StartTime: now.Add(-70 * time.Second)}, // Too old
 				{StartTime: now.Add(-20 * time.Second)}, // Keep this
@@ -518,7 +519,7 @@ func TestTemporalGrouper_ProcessPendingPulses(t *testing.T) {
 	tg := &Ms.TemporalGrouper{}
 
 	// One PulseEvent goes into pendingPulses
-	pendingPulses := []Ms.PulseEvent{
+	pendingPulses := []Mt.PulseEvent{
 		{
 			Dimension: 1,
 			Pattern:   0,
@@ -545,33 +546,33 @@ func TestPulseEvents_FindChildren(t *testing.T) {
 		// D1 children that belong to the parent
 		{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-15 * time.Second),
 			Parent:    parentTime, // Points to parent
 		},
 		{
 			Dimension: 1,
-			Pattern:   Ms.Trochee,
+			Pattern:   Mt.Trochee,
 			StartTime: now.Add(-12 * time.Second),
 			Parent:    parentTime, // Points to parent
 		},
 		{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-8 * time.Second),
 			Parent:    parentTime, // Points to parent
 		},
 		// D2 parent amphibrach
 		{
 			Dimension: 2,
-			Pattern:   Ms.Amphibrach,
+			Pattern:   Mt.Amphibrach,
 			StartTime: parentTime,
 			Parent:    time.Time{}, // Zero value = no parent
 		},
 		// Unrelated D1 pulse (different parent)
 		{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-5 * time.Second),
 			Parent:    now, // Different parent
 		},
@@ -599,10 +600,10 @@ func TestAmphibrachTrimming(t *testing.T) {
 	now := time.Now()
 	tg := &Ms.TemporalGrouper{
 		WindowSize: 60 * time.Second,
-		Buffer: []Ms.PulseEvent{
+		Buffer: []Mt.PulseEvent{
 			{
 				Dimension: 2,
-				Pattern:   Ms.Amphibrach,
+				Pattern:   Mt.Amphibrach,
 				StartTime: now.Add(-45 * time.Second), // 45 seconds old
 				Metric:    []string{"CPU1"},
 			},
@@ -624,7 +625,7 @@ func TestIctusSequence_DetectPulsesWithConfig_DeduplicationCheck(t *testing.T) {
 	t.Run("Returns empty when already processed", func(t *testing.T) {
 		ictusSeq := &Ms.IctusSequence{
 			Metric: "CPU1",
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now(), IsAccent: false, Value: 45},
 				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
 				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
@@ -649,7 +650,7 @@ func TestIctusSequence_DetectPulsesWithConfig_DeduplicationCheck(t *testing.T) {
 	t.Run("Processes when not already processed", func(t *testing.T) {
 		ictusSeq := &Ms.IctusSequence{
 			Metric: "CPU1",
-			Events: []Ms.Ictus{
+			Events: []Mt.Ictus{
 				{Timestamp: time.Now(), IsAccent: false, Value: 45},
 				{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
 				{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
@@ -672,28 +673,28 @@ func TestPulseSequence_DetectConsortPulses_DetectedKeysCheck(t *testing.T) {
 	now := time.Now()
 
 	// Create pulse events that form an Amphibrach pattern
-	first := Ms.PulseEvent{
+	first := Mt.PulseEvent{
 		Dimension: 1,
-		Pattern:   Ms.Iamb,
+		Pattern:   Mt.Iamb,
 		StartTime: now,
 		Metric:    []string{testMetric},
 	}
-	second := Ms.PulseEvent{
+	second := Mt.PulseEvent{
 		Dimension: 1,
-		Pattern:   Ms.Trochee,
+		Pattern:   Mt.Trochee,
 		StartTime: now.Add(5 * time.Second),
 		Metric:    []string{testMetric},
 	}
-	third := Ms.PulseEvent{
+	third := Mt.PulseEvent{
 		Dimension: 1,
-		Pattern:   Ms.Iamb,
+		Pattern:   Mt.Iamb,
 		StartTime: now.Add(10 * time.Second),
 		Metric:    []string{testMetric},
 	}
 
 	pulseSequence := &Ms.PulseSequence{
 		Metric: testMetric,
-		Events: []Ms.PulseEvent{first, second, third},
+		Events: []Mt.PulseEvent{first, second, third},
 	}
 
 	// Create the key that would be generated for this pattern
@@ -726,7 +727,7 @@ func TestPulseSequence_DetectConsortPulses_DetectedKeysCheck(t *testing.T) {
 		}
 
 		// Verify it's an Amphibrach
-		if len(consorts) > 0 && consorts[0].Pattern != Ms.Amphibrach {
+		if len(consorts) > 0 && consorts[0].Pattern != Mt.Amphibrach {
 			t.Errorf("Expected Amphibrach pattern, got %v", consorts[0].Pattern)
 		}
 	})
@@ -734,17 +735,17 @@ func TestPulseSequence_DetectConsortPulses_DetectedKeysCheck(t *testing.T) {
 
 /// Helpers
 
-func makePulsesWithGrouper() ([]Ms.PulseEvent, *Ms.TemporalGrouper) {
+func makePulsesWithGrouper() ([]Mt.PulseEvent, *Ms.TemporalGrouper) {
 	grouper := &Ms.TemporalGrouper{
 		WindowSize: 60 * time.Second,
-		Buffer:     make([]Ms.PulseEvent, 0),
-		Groups:     make([]*Ms.PulseTree, 0),
+		Buffer:     make([]Mt.PulseEvent, 0),
+		Groups:     make([]*Mt.PulseTree, 0),
 	}
 
 	// Don't need a fake QNet here, just a representation of an IctusSequence
 	ictusSeq := &Ms.IctusSequence{
 		Metric: "CPU1",
-		Events: []Ms.Ictus{
+		Events: []Mt.Ictus{
 			{Timestamp: time.Now(), IsAccent: false, Value: 45},
 			{Timestamp: time.Now().Add(5 * time.Second), IsAccent: true, Value: 85},
 			{Timestamp: time.Now().Add(10 * time.Second), IsAccent: false, Value: 50},
