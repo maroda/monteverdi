@@ -498,6 +498,16 @@ func (q *QNet) PulseDetect(m string, i int) {
 			q.Network[i].Pulses.AddPulse(pulse)
 
 			slog.Debug("ADD PULSE", slog.Any("pattern", pulse.Pattern), slog.String("metric", m), slog.String("duration", pulse.Duration.String()))
+
+			// If configured, use the Output Adapter Plugin
+			// The output type depends on the value of MONTEVERDI_OUTPUT
+			if q.Output != nil {
+				if err := q.Output.WritePulse(&pulse); err != nil {
+					slog.Error("Output adapter write failed",
+						slog.String("metric", m),
+						slog.String("error", err.Error()))
+				}
+			}
 		}
 
 		// Update processed count

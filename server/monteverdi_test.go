@@ -956,7 +956,7 @@ func TestConcurrentPollAndDisplay(t *testing.T) {
 	wg.Wait()
 }
 
-func TestPulseDetect_AddPulseCoverage(t *testing.T) {
+func TestPulseDetect_AddPulse(t *testing.T) {
 	qn := makeQNet(1)
 	testMetric := "CPU1"
 

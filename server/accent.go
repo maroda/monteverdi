@@ -252,8 +252,9 @@ type TemporalGrouper struct {
 	DetectedKeys  map[string]bool
 }
 
-// AddPulse requires a minimum of three events to create a group
-// This group will be analyzed for patterns
+// AddPulse performs data routing for the pulse depending on its attributes.
+// Pulses are grouped into the minimum number to perform pattern recognition: 3
+// This group is processed in real time, results written to the endpoint's grouper.
 func (tg *TemporalGrouper) AddPulse(pulse Mt.PulseEvent) {
 	// Add to current buffer
 	tg.Buffer = append(tg.Buffer, pulse)
@@ -402,7 +403,6 @@ func (tg *TemporalGrouper) CreateGroupForPulses(pulses []Mt.PulseEvent, dimensio
 }
 
 // TrimBuffer keeps the TG clean and allows for better memory management
-// TODO: Amphibrach trimming is not working
 func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
 	initialCount := len(tg.Buffer)
 

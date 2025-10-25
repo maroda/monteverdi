@@ -173,8 +173,6 @@ func TestBadgerOutput_QueryRange(t *testing.T) {
 
 	t.Run("QueryRange returns values", func(t *testing.T) {
 		start := time.Now()
-		t.Logf("start: %v", start)
-
 		pulses := []*Mt.PulseEvent{
 			{Dimension: 1, Pattern: 0, StartTime: start},
 			{Dimension: 1, Pattern: 1, StartTime: start.Add(1 * time.Second)},

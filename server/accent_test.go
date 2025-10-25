@@ -733,7 +733,7 @@ func TestPulseSequence_DetectConsortPulses_DetectedKeysCheck(t *testing.T) {
 	})
 }
 
-/// Helpers
+// Helpers //
 
 func makePulsesWithGrouper() ([]Mt.PulseEvent, *Ms.TemporalGrouper) {
 	grouper := &Ms.TemporalGrouper{

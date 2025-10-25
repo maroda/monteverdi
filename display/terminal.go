@@ -667,6 +667,24 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 		Stats: stats,
 	}
 
+	// Configure output if set
+	// For now, assume BadgerDB
+	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
+	if outputLocation != "ENOENT" {
+		batchSize := 100
+		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
+		if err != nil {
+			slog.Error("Failed to create adapter",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+			return err
+		}
+		view.QNet.Output = output
+		defer output.Close()
+
+		slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
+	}
+
 	// Register config file location
 	view.ConfigPath = path
 
@@ -725,7 +743,7 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 	// Configure output if set
 	// For now, assume BadgerDB
 	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
-	if outputLocation != "" {
+	if outputLocation != "ENOENT" {
 		batchSize := 100
 		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
 		if err != nil {
@@ -735,6 +753,8 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 			return err
 		}
 		view.QNet.Output = output
+		defer output.Close()
+
 		slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
 	}
 
