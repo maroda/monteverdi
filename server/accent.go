@@ -27,90 +27,31 @@ import (
 	"log/slog"
 	"sort"
 	"time"
+
+	Mt "github.com/maroda/monteverdi/types"
 )
-
-// The Accent is the building block of this tool.
-type Accent struct {
-	Timestamp int64  // Unix timestamp
-	Intensity int    // raw, unweighted accent strength
-	SourceID  string // identifies the source
-}
-
-// Timeseries is a generic fixed TimeSeries DB
-type Timeseries struct {
-	Runes   []rune
-	MaxSize int
-	Current int
-}
 
 // NewAccent builds the metadata for the accent
 // There is no boolean, the existence of an Accent is always true
-func NewAccent(i int, s string) *Accent {
-	return &Accent{
+func NewAccent(i int, s string) *Mt.Accent {
+	return &Mt.Accent{
 		Timestamp: time.Now().UnixNano(),
 		Intensity: i,
 		SourceID:  s,
 	}
 }
 
-type Ictus struct {
-	Timestamp time.Time
-	IsAccent  bool
-	Value     int64
-	Duration  time.Duration
-}
-
+// IctusSequence is the arrangement of events to detect patterns against.
 type IctusSequence struct {
 	Metric                  string
-	Events                  []Ictus
+	Events                  []Mt.Ictus
 	StartTime               time.Time
 	EndTime                 time.Time
 	LastProcessedEventCount int
 }
 
-// These trigrams are read top-down, representing an accent/non-accent sequence
-const (
-	axnt       = "⚊" // U+268B is an accent (yang)
-	noax       = "⚋" // U+268A is a non-accent (yin)
-	iamb       = "⚍" // U+268D is noax, axnt (lesser yin)
-	anapest    = "☳" // U+2633 is noax, noax, axnt (thunder)
-	trochee    = "⚎" // U+268E is axnt, noax (lesser yang)
-	dactyl     = "☶" // U+2636 is axnt, noax, noax (mountain)
-	amphibrach = "☵" // U+2635 is noax, axnt, noax (water)
-)
-
-// PulsePattern is the seed of Meyer pattern matching
-// But why pulse?
-// Meyer explicitly points out the difference between rhythm and pulse.
-// Accents define the pulse of something, which are separate from its regular rhythms.
-// For example, the expected rhythm of an operational system can include health checks,
-// garbage collection, predictable load, etc. But the pulse represents a deeper, more
-// fundamental force as the system interacts with the real-world, as its rhythms continue.
-type PulsePattern int
-
-// PulsePattern entries
-// Iamb: non-accent → accent
-// Trochee: accent → non-accent
-// Amphibrach: non-accent → accent → non-accent (not yet implemented)
-const (
-	Iamb PulsePattern = iota
-	Trochee
-	Amphibrach
-	Anapest
-	Dactyl
-)
-
-type PulseEvent struct {
-	Dimension int
-	Pattern   PulsePattern
-	StartTime time.Time // This is a Primary Key
-	Duration  time.Duration
-	Metric    []string
-	Children  []time.Time // Primary Keys of children (D1 or greater)
-	Parent    time.Time   // Primary Keys of a parent (D2 or greater)
-}
-
-type PulseEvents []PulseEvent
+// PulseEvents is an alias on []Mt.PulseEvent to be used with a method.
+type PulseEvents []Mt.PulseEvent
 
 // FindChildren takes the StartTime of the Parent and returns its children
 func (pe *PulseEvents) FindChildren(parentT time.Time) PulseEvents {
@@ -123,17 +64,10 @@ func (pe *PulseEvents) FindChildren(parentT time.Time) PulseEvents {
 	return children
 }
 
-type PulseConfig struct {
-	IambStartPeriod    float64 // 0.0 = start of non-accent, 0.5 = middle, 1.0 = end
-	IambEndPeriod      float64 // 0.0 = start of accent, 0.5 = middle, 1.0 = end
-	TrocheeStartPeriod float64 // For accent period
-	TrocheeEndPeriod   float64 // For non-accent period
-}
-
 // NewPulseConfig returns a set of parameters
 // used to define pulse pattern periodicity
-func NewPulseConfig(is, ie, ts, te float64) *PulseConfig {
-	return &PulseConfig{
+func NewPulseConfig(is, ie, ts, te float64) *Mt.PulseConfig {
+	return &Mt.PulseConfig{
 		IambStartPeriod:    is,
 		IambEndPeriod:      ie,
 		TrocheeStartPeriod: ts,
@@ -145,12 +79,12 @@ func NewPulseConfig(is, ie, ts, te float64) *PulseConfig {
 // recognizes two patterns that make up a Dimension 1 pulse:
 // Iamb has no accent followed by an accent,
 // Trochee has an accent followed by no accent.
-func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent {
+func (is *IctusSequence) DetectPulsesWithConfig(config Mt.PulseConfig) []Mt.PulseEvent {
 	slog.Debug("PULSE_DETECTION_INPUT",
 		slog.Int("ictus_events", len(is.Events)),
 		slog.String("metric", is.Metric))
 
-	var pulses []PulseEvent
+	var pulses []Mt.PulseEvent
 
 	// We need at least three events to process
 	if len(is.Events) < 3 {
@@ -183,9 +117,9 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 			// Configurable END within the non-accent period
 			patternEnd := curr.Timestamp.Add(time.Duration(float64(accentDur) * config.IambEndPeriod))
 
-			pulses = append(pulses, PulseEvent{
+			pulses = append(pulses, Mt.PulseEvent{
 				Dimension: 1,
-				Pattern:   Iamb,
+				Pattern:   Mt.Iamb,
 				StartTime: patternStart,
 				Duration:  patternEnd.Sub(patternStart),
 				Metric:    []string{is.Metric},
@@ -204,9 +138,9 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 			patternStart := prev.Timestamp.Add(time.Duration(float64(accentDur) * config.TrocheeStartPeriod))
 			patternEnd := curr.Timestamp.Add(time.Duration(float64(nonAccentDur) * config.TrocheeEndPeriod))
 
-			pulses = append(pulses, PulseEvent{
+			pulses = append(pulses, Mt.PulseEvent{
 				Dimension: 1,
-				Pattern:   Trochee,
+				Pattern:   Mt.Trochee,
 				StartTime: patternStart,
 				Duration:  patternEnd.Sub(patternStart),
 				Metric:    []string{is.Metric},
@@ -220,39 +154,21 @@ func (is *IctusSequence) DetectPulsesWithConfig(config PulseConfig) []PulseEvent
 	return pulses
 }
 
-type PulseTree struct {
-	Dimension int
-	Pulses    []PulsePattern // The constituent pulses
-	OGEvents  []PulseEvent   // Preserve source event data
-	StartTime time.Time
-	Duration  time.Duration
-	Frequency int             // How often this grouping occurs
-	Children  []*PulseTree    // Lower-level patterns that comprise this one
-	VizData   []PulseVizPoint // Generic visualization descriptor
-}
-
-type PulseVizPoint struct {
-	Position  int          // position on the timeline
-	Pattern   PulsePattern // Iamb or Trochee
-	IsAccent  bool         // Is an accent
-	Duration  time.Duration
-	StartTime time.Time
-	Extends   bool // pattern extends beyond display
-}
-
+// PulseSequence is used to detect higher dimension pulses,
+// or 'consorts', which have more than two places.
 type PulseSequence struct {
 	Metric    string
-	Events    []PulseEvent
+	Events    []Mt.PulseEvent
 	StartTime time.Time
 	EndTime   time.Time
 }
 
 // DetectConsortPulses takes the pulses in a PulseSequence
 // and creates higher-dimension pulses from lower-dimension ones
-func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []PulseEvent {
+func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Mt.PulseEvent {
 	// Need at least 3 pulses to detect patterns
 	if ps == nil || ps.Events == nil || len(ps.Events) < 3 {
-		return []PulseEvent{}
+		return []Mt.PulseEvent{}
 	}
 
 	slog.Debug("CONSORT_DETECTION_START",
@@ -261,7 +177,9 @@ func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Pul
 		slog.String("second_pattern", fmt.Sprintf("%v", ps.Events[1].Pattern)),
 		slog.String("third_pattern", fmt.Sprintf("%v", ps.Events[2].Pattern)))
 
-	var consort []PulseEvent
+	// A higher dimension 'group' is called a 'consort'
+	// to distinguish it from the lower dimension 'group'
+	var consort []Mt.PulseEvent
 
 	// Track what we've already detected to prevent duplicates
 	detected := make(map[string]bool)
@@ -273,7 +191,7 @@ func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Pul
 
 		// Detect Amphibrach: Iamb → Trochee → Iamb
 		// (non-accent→accent) → (accent→non-accent) → (non-accent→accent)
-		if first.Pattern == Iamb && second.Pattern == Trochee && third.Pattern == Iamb {
+		if first.Pattern == Mt.Iamb && second.Pattern == Mt.Trochee && third.Pattern == Mt.Iamb {
 			key := fmt.Sprintf("%d_%d_%d",
 				first.StartTime.UnixNano(),
 				second.StartTime.UnixNano(),
@@ -294,9 +212,9 @@ func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Pul
 				slog.String("third_time", third.StartTime.Format("15:04:05.000")),
 				slog.String("now", time.Now().Format("15:04:05.000")))
 
-			newD2Pulse := PulseEvent{
+			newD2Pulse := Mt.PulseEvent{
 				Dimension: 2,
-				Pattern:   Amphibrach,
+				Pattern:   Mt.Amphibrach,
 				StartTime: first.StartTime,
 				Duration:  third.StartTime.Add(third.Duration).Sub(first.StartTime),
 				Metric:    first.Metric,
@@ -322,25 +240,29 @@ func (ps *PulseSequence) DetectConsortPulses(detectedKeys map[string]bool) []Pul
 	return consort
 }
 
+// TemporalGrouper is a window for collecting pulses in time
+// It can be used for 'groups' or 'consorts', they are both
+// collections of pulses.
 type TemporalGrouper struct {
 	WindowSize    time.Duration
-	Buffer        []PulseEvent
-	Groups        []*PulseTree
+	Buffer        []Mt.PulseEvent
+	Groups        []*Mt.PulseTree
 	PulseSequence *PulseSequence
-	PendingPulses []PulseEvent
+	PendingPulses []Mt.PulseEvent
 	DetectedKeys  map[string]bool
 }
 
-// AddPulse requires a minimum of three events to create a group
-// This group will be analyzed for patterns
-func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
+// AddPulse performs data routing for the pulse depending on its attributes.
+// Pulses are grouped into the minimum number to perform pattern recognition: 3
+// This group is processed in real time, results written to the endpoint's grouper.
+func (tg *TemporalGrouper) AddPulse(pulse Mt.PulseEvent) {
 	// Add to current buffer
 	tg.Buffer = append(tg.Buffer, pulse)
 
 	// Init a PulseSequence if needed
 	if tg.PulseSequence == nil {
 		tg.PulseSequence = &PulseSequence{
-			Events: []PulseEvent{},
+			Events: []Mt.PulseEvent{},
 		}
 	}
 
@@ -388,7 +310,7 @@ func (tg *TemporalGrouper) AddPulse(pulse PulseEvent) {
 
 			// Sliding window: reset to empty after processing
 			slog.Debug("SEQUENCE_BEFORE_WINDOW", slog.Any("events", tg.PulseSequence.Events))
-			tg.PulseSequence.Events = []PulseEvent{} // Clear the sequence
+			tg.PulseSequence.Events = []Mt.PulseEvent{} // Clear the sequence
 			slog.Debug("SEQUENCE_AFTER_WINDOW", slog.Any("events", tg.PulseSequence.Events))
 		}
 	}
@@ -444,7 +366,7 @@ func (tg *TemporalGrouper) ProcessPendingPulses() {
 
 func (tg *TemporalGrouper) createGroupsByDimension() {
 	// Group pulses by dimension
-	dimensionMap := make(map[int][]PulseEvent)
+	dimensionMap := make(map[int][]Mt.PulseEvent)
 	for _, pulse := range tg.Buffer {
 		dimensionMap[pulse.Dimension] = append(dimensionMap[pulse.Dimension], pulse)
 	}
@@ -460,17 +382,17 @@ func (tg *TemporalGrouper) createGroupsByDimension() {
 	}
 }
 
-func (tg *TemporalGrouper) CreateGroupForPulses(pulses []PulseEvent, dimension int) *PulseTree {
+func (tg *TemporalGrouper) CreateGroupForPulses(pulses []Mt.PulseEvent, dimension int) *Mt.PulseTree {
 	if len(pulses) == 0 {
 		return nil
 	}
 
-	patterns := make([]PulsePattern, len(pulses))
+	patterns := make([]Mt.PulsePattern, len(pulses))
 	for i, p := range pulses {
 		patterns[i] = p.Pattern
 	}
 
-	return &PulseTree{
+	return &Mt.PulseTree{
 		Dimension: dimension,
 		Pulses:    patterns,
 		StartTime: pulses[0].StartTime,
@@ -481,13 +403,12 @@ func (tg *TemporalGrouper) CreateGroupForPulses(pulses []PulseEvent, dimension i
 }
 
 // TrimBuffer keeps the TG clean and allows for better memory management
-// TODO: Amphibrach trimming is not working
 func (tg *TemporalGrouper) TrimBuffer(limit time.Time) {
 	initialCount := len(tg.Buffer)
 
 	// Find first pulse to KEEP (after limit)
 	keepIndex := len(tg.Buffer) // Default: remove all
-	// tg.Buffer is a []PulseEvent
+	// tg.Buffer is a []Mt.PulseEvent
 	for i, pulse := range tg.Buffer {
 		// the pulse.StartTime happens after the limit in the past, it's a keeper
 		if pulse.StartTime.After(limit) {

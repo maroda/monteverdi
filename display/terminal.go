@@ -13,7 +13,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	Mo "github.com/maroda/monteverdi/obvy"
+	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 const (
@@ -33,7 +35,7 @@ type View struct {
 	SelectMe    string            // Selected Metric with MouseClick
 	ShowMe      bool              // Display Metric ID
 	ShowPulse   bool              // Display pulse view overlay
-	PulseFilter *Ms.PulsePattern  // For filtering the display
+	PulseFilter *Mt.PulsePattern  // For filtering the display
 	Supervisor  *PollSupervisor   // Supervisor for performing QNet polling
 	ConfigPath  string            // Path to JSON configuration
 }
@@ -115,25 +117,25 @@ func (v *View) CalcDurationWidth(duration time.Duration) int {
 	return durationSeconds
 }
 
-func (v *View) GetPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell.Style) {
+func (v *View) GetPulseRune(pattern Mt.PulsePattern, isAccent bool) (rune, tcell.Style) {
 	var baseColor tcell.Color
 	var symbol rune
 
 	// Pattern type determines baseColor
 	switch pattern {
-	case Ms.Iamb:
+	case Mt.Iamb:
 		baseColor = tcell.ColorMaroon
 		symbol = '⚍'
-	case Ms.Trochee:
+	case Mt.Trochee:
 		baseColor = tcell.ColorDarkOrange
 		symbol = '⚎'
-	case Ms.Amphibrach:
+	case Mt.Amphibrach:
 		baseColor = tcell.ColorAquaMarine
 		symbol = '☵'
-	case Ms.Anapest:
+	case Mt.Anapest:
 		baseColor = tcell.ColorAzure
 		symbol = '☳'
-	case Ms.Dactyl:
+	case Mt.Dactyl:
 		baseColor = tcell.ColorDodgerBlue
 		symbol = '☶'
 	}
@@ -151,7 +153,7 @@ func (v *View) GetPulseRune(pattern Ms.PulsePattern, isAccent bool) (rune, tcell
 	return symbol, style
 }
 
-func (v *View) RenderPulseViz(x, y int, tld []Ms.PulseVizPoint) {
+func (v *View) RenderPulseViz(x, y int, tld []Mt.PulseVizPoint) {
 	for _, point := range tld {
 		symbol, style := v.GetPulseRune(point.Pattern, point.IsAccent)
 		v.Screen.SetContent(x+point.Position, y, symbol, nil, style)
@@ -175,11 +177,11 @@ func (v *View) DrawPulseView() {
 	filterText := "All Patterns"
 	if v.PulseFilter != nil {
 		switch *v.PulseFilter {
-		case Ms.Iamb:
+		case Mt.Iamb:
 			filterText = "Iamb Only"
-		case Ms.Trochee:
+		case Mt.Trochee:
 			filterText = "Trochee Only"
-		case Ms.Amphibrach:
+		case Mt.Amphibrach:
 			filterText = "Amphibrach Only"
 		}
 	}
@@ -579,17 +581,17 @@ func (v *View) handleEvent() {
 				switch ev.Rune() {
 				case 'a':
 					v.MU.Lock()
-					amphibrach := Ms.Amphibrach
+					amphibrach := Mt.Amphibrach
 					v.PulseFilter = &amphibrach
 					v.MU.Unlock()
 				case 'i':
 					v.MU.Lock()
-					iamb := Ms.Iamb
+					iamb := Mt.Iamb
 					v.PulseFilter = &iamb
 					v.MU.Unlock()
 				case 't':
 					v.MU.Lock()
-					trochee := Ms.Trochee
+					trochee := Mt.Trochee
 					v.PulseFilter = &trochee
 					v.MU.Unlock()
 				case 'x':
@@ -665,6 +667,24 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 		Stats: stats,
 	}
 
+	// Configure output if set
+	// For now, assume BadgerDB
+	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
+	if outputLocation != "ENOENT" {
+		batchSize := 100
+		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
+		if err != nil {
+			slog.Error("Failed to create adapter",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+			return err
+		}
+		view.QNet.Output = output
+		defer output.Close()
+
+		slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
+	}
+
 	// Register config file location
 	view.ConfigPath = path
 
@@ -718,6 +738,24 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 	if err != nil {
 		slog.Error("Could not start HarmonyView", slog.Any("Error", err))
 		return err
+	}
+
+	// Configure output if set
+	// For now, assume BadgerDB
+	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
+	if outputLocation != "ENOENT" {
+		batchSize := 100
+		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
+		if err != nil {
+			slog.Error("Failed to create adapter",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+			return err
+		}
+		view.QNet.Output = output
+		defer output.Close()
+
+		slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
 	}
 
 	// Register config file location

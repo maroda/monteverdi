@@ -8,6 +8,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	Ms "github.com/maroda/monteverdi/server"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 type PulseDataD3 struct {
@@ -103,17 +104,17 @@ func (v *View) GetPulseDataD3() []PulseDataD3 {
 }
 
 // PulsePatternToString returns a string form of the constant.
-func PulsePatternToString(pattern Ms.PulsePattern) string {
+func PulsePatternToString(pattern Mt.PulsePattern) string {
 	switch pattern {
-	case Ms.Iamb:
+	case Mt.Iamb:
 		return "iamb"
-	case Ms.Trochee:
+	case Mt.Trochee:
 		return "trochee"
-	case Ms.Amphibrach:
+	case Mt.Amphibrach:
 		return "amphibrach"
-	case Ms.Anapest:
+	case Mt.Anapest:
 		return "anapest"
-	case Ms.Dactyl:
+	case Mt.Dactyl:
 		return "dactyl"
 	default:
 		return "unknown"
@@ -233,7 +234,7 @@ func CalcSpeed(ps time.Time, config SpeedConfig) float64 {
 }
 
 // CalcSpeedForPulse is a wrapper for CalcSpeed to provide a configuration
-func (v *View) CalcSpeedForPulse(pe Ms.PulseEvent) float64 {
+func (v *View) CalcSpeedForPulse(pe Mt.PulseEvent) float64 {
 	// Default configuration - completely configurable
 	config := SpeedConfig{
 		InnerBase:  0.3,   // Ring 0: 0.3°/50ms = 6°/s = 60s/rotation

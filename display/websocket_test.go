@@ -16,18 +16,19 @@ import (
 	Md "github.com/maroda/monteverdi/display"
 	Mo "github.com/maroda/monteverdi/obvy"
 	Ms "github.com/maroda/monteverdi/server"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 func TestPulsePatternToString(t *testing.T) {
 	tests := []struct {
 		name    string
-		pattern Ms.PulsePattern
+		pattern Mt.PulsePattern
 	}{
-		{"iamb", Ms.Iamb},
-		{"trochee", Ms.Trochee},
-		{"amphibrach", Ms.Amphibrach},
-		{"anapest", Ms.Anapest},
-		{"dactyl", Ms.Dactyl},
+		{"iamb", Mt.Iamb},
+		{"trochee", Mt.Trochee},
+		{"amphibrach", Mt.Amphibrach},
+		{"anapest", Mt.Anapest},
+		{"dactyl", Mt.Dactyl},
 		{"unknown", 99},
 	}
 
@@ -215,7 +216,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Fallback with no accents",
 			endpoint: &Ms.Endpoint{
-				Accent: make(map[string]*Ms.Accent),
+				Accent: make(map[string]*Mt.Accent),
 				Mdata:  make(map[string]int64),
 				Maxval: make(map[string]int64),
 			},
@@ -224,7 +225,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Fallback when nil",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": nil},
+				Accent: map[string]*Mt.Accent{"CPU1": nil},
 				Mdata:  make(map[string]int64),
 				Maxval: make(map[string]int64),
 			},
@@ -233,7 +234,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Fallback when Mdata missing",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}},
+				Accent: map[string]*Mt.Accent{"CPU1": {Intensity: 5}},
 				Mdata:  make(map[string]int64), // Empty, no CPU1
 				Maxval: map[string]int64{"CPU1": 100},
 			},
@@ -242,7 +243,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Fallback when Maxval missing",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}},
+				Accent: map[string]*Mt.Accent{"CPU1": {Intensity: 5}},
 				Mdata:  map[string]int64{"CPU1": 50},
 				Maxval: make(map[string]int64), // Empty, no CPU1
 			},
@@ -251,7 +252,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Fallback when Maxval is 0",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}},
+				Accent: map[string]*Mt.Accent{"CPU1": {Intensity: 5}},
 				Mdata:  map[string]int64{"CPU1": 50},
 				Maxval: map[string]int64{"CPU1": 0}, // Zero
 			},
@@ -260,7 +261,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Calculates intensity correctly",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 5}}, // baseIntensity = 0.5
+				Accent: map[string]*Mt.Accent{"CPU1": {Intensity: 5}}, // baseIntensity = 0.5
 				Mdata:  map[string]int64{"CPU1": 50},
 				Maxval: map[string]int64{"CPU1": 100}, // valueRatio = 0.5
 			},
@@ -269,7 +270,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Calculates intensity to minimum 0.2",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 1}}, // baseIntensity = 0.1
+				Accent: map[string]*Mt.Accent{"CPU1": {Intensity: 1}}, // baseIntensity = 0.1
 				Mdata:  map[string]int64{"CPU1": 10},
 				Maxval: map[string]int64{"CPU1": 100}, // valueRatio = 0.1
 			},
@@ -278,7 +279,7 @@ func TestCalcIntensity(t *testing.T) {
 		{
 			name: "Calculates intensity to maximum 1.0",
 			endpoint: &Ms.Endpoint{
-				Accent: map[string]*Ms.Accent{"CPU1": {Intensity: 20}}, // baseIntensity = 2.0
+				Accent: map[string]*Mt.Accent{"CPU1": {Intensity: 20}}, // baseIntensity = 2.0
 				Mdata:  map[string]int64{"CPU1": 150},
 				Maxval: map[string]int64{"CPU1": 100}, // valueRatio = 1.5
 			},
@@ -297,7 +298,7 @@ func TestCalcIntensity(t *testing.T) {
 
 	t.Run("Returns first accent when multiple exist", func(t *testing.T) {
 		ep := &Ms.Endpoint{
-			Accent: map[string]*Ms.Accent{
+			Accent: map[string]*Mt.Accent{
 				"CPU1": {Intensity: 5},
 				"CPU2": {Intensity: 8},
 			},
@@ -404,17 +405,17 @@ func TestWebsocketHandler(t *testing.T) {
 	testMetric := "CPU1"
 
 	// Add D1 pulses to buffer
-	qn.Network[0].Pulses.Buffer = []Ms.PulseEvent{
+	qn.Network[0].Pulses.Buffer = []Mt.PulseEvent{
 		{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-30 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
 		},
 		{
 			Dimension: 1,
-			Pattern:   Ms.Trochee,
+			Pattern:   Mt.Trochee,
 			StartTime: now.Add(-20 * time.Second),
 			Duration:  4 * time.Second,
 			Metric:    []string{testMetric},
@@ -422,7 +423,7 @@ func TestWebsocketHandler(t *testing.T) {
 	}
 
 	// Add accent data for intensity calculation
-	qn.Network[0].Accent[testMetric] = &Ms.Accent{Intensity: 5}
+	qn.Network[0].Accent[testMetric] = &Mt.Accent{Intensity: 5}
 	qn.Network[0].Mdata[testMetric] = 50
 	qn.Network[0].Maxval[testMetric] = 100
 
@@ -479,16 +480,16 @@ func TestWebsocketHandler_ConnectionClosed(t *testing.T) {
 	// Add pulse data
 	now := time.Now()
 	testMetric := "CPU1"
-	qn.Network[0].Pulses.Buffer = []Ms.PulseEvent{
+	qn.Network[0].Pulses.Buffer = []Mt.PulseEvent{
 		{
 			Dimension: 1,
-			Pattern:   Ms.Iamb,
+			Pattern:   Mt.Iamb,
 			StartTime: now.Add(-30 * time.Second),
 			Duration:  5 * time.Second,
 			Metric:    []string{testMetric},
 		},
 	}
-	qn.Network[0].Accent[testMetric] = &Ms.Accent{Intensity: 5}
+	qn.Network[0].Accent[testMetric] = &Mt.Accent{Intensity: 5}
 	qn.Network[0].Mdata[testMetric] = 50
 	qn.Network[0].Maxval[testMetric] = 100
 
@@ -561,9 +562,9 @@ func makeQNetWithAmphibrachs(t *testing.T) *Ms.QNet {
 
 	// Add some D2 pulses directly to the buffer
 	now := time.Now()
-	amphibrach := Ms.PulseEvent{
+	amphibrach := Mt.PulseEvent{
 		Dimension: 2,
-		Pattern:   Ms.Amphibrach,
+		Pattern:   Mt.Amphibrach,
 		StartTime: now.Add(-2 * time.Minute), // 2 minutes old
 		Duration:  30 * time.Second,
 		Metric:    []string{"CPU1"},
@@ -616,9 +617,9 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	x[c[3]] = 6
 
 	// Initialize the Timeseries structure
-	l := make(map[string]*Ms.Timeseries)
+	l := make(map[string]*Mt.Timeseries)
 	for _, mName := range c {
-		l[mName] = &Ms.Timeseries{
+		l[mName] = &Mt.Timeseries{
 			Runes:   make([]rune, 60),
 			MaxSize: 60,
 			Current: 0,
@@ -628,11 +629,11 @@ func makeEndpoint(i, u string) *Ms.Endpoint {
 	is := make(map[string]*Ms.IctusSequence)
 	tg := &Ms.TemporalGrouper{
 		WindowSize: 60 * time.Second,
-		Buffer:     make([]Ms.PulseEvent, 0),
-		Groups:     make([]*Ms.PulseTree, 0),
+		Buffer:     make([]Mt.PulseEvent, 0),
+		Groups:     make([]*Mt.PulseTree, 0),
 	}
 
-	nap := make(map[string]*Ms.Accent)
+	nap := make(map[string]*Mt.Accent)
 
 	// Struct matches the Endpoint type
 	return &Ms.Endpoint{

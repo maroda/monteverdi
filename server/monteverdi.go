@@ -8,6 +8,7 @@ import (
 	"time"
 
 	Mp "github.com/maroda/monteverdi/plugin"
+	Mt "github.com/maroda/monteverdi/types"
 )
 
 // QNet represents the entire connected Network of Qualities
@@ -15,14 +16,15 @@ import (
 // And where pointers to the data are held
 
 type Monteverdi interface {
-	FindAccent(string, int) *Accent
+	FindAccent(string, int) *Mt.Accent
 	Poll() (int64, error)
 	PollMulti() error
 }
 
 type QNet struct {
 	MU      sync.RWMutex
-	Network Endpoints // slice of *Endpoint
+	Network Endpoints        // slice of *Endpoint
+	Output  Mp.OutputAdapter // Output interface
 }
 
 // NewQNet creates a new Quality Network
@@ -72,8 +74,8 @@ type Endpoint struct {
 	Maxval       map[string]int64                // map of metric data max val to find accents
 	Transformers map[string]Mp.MetricTransformer // map of metric transformers in use
 	Hysteresis   map[string]*CycBuffer           // map of buffers holding a history of metric data
-	Accent       map[string]*Accent              // map of accents by metric key, timestamped
-	Layer        map[string]*Timeseries          // map of rolling timeseries by metric key
+	Accent       map[string]*Mt.Accent           // map of accents by metric key, timestamped
+	Layer        map[string]*Mt.Timeseries       // map of rolling timeseries by metric key
 	Sequence     map[string]*IctusSequence       // map of total timeseries for pattern matching
 	Pulses       *TemporalGrouper                // accent groups arranged by pattern in time
 }
@@ -104,21 +106,21 @@ func NewEndpointsFromConfig(cf []ConfigFile) *Endpoints {
 		maxval := make(map[string]int64)                      // Value triggers an accent
 		hysteresis := make(map[string]*CycBuffer)             // Hysteresis buffer
 		transformers := make(map[string]Mp.MetricTransformer) // Transformers in use
-		accent := make(map[string]*Accent)                    // The accent metadata
-		metsdb := make(map[string]*Timeseries)                // Timeseries tracking accents
+		accent := make(map[string]*Mt.Accent)                 // The accent metadata
+		metsdb := make(map[string]*Mt.Timeseries)             // Timeseries tracking accents
 		ictseq := make(map[string]*IctusSequence)             // Running change Sequence
 		pulses := &TemporalGrouper{
 			WindowSize: time.Duration(pulseWindow) * time.Second, // This is a display config
-			Buffer:     make([]PulseEvent, 0),
-			Groups:     make([]*PulseTree, 0),
+			Buffer:     make([]Mt.PulseEvent, 0),
+			Groups:     make([]*Mt.PulseTree, 0),
 		} // Group patterns in time
 
 		// This locates the desired metrics from the on-disk config
 		j := 0
 		for k, mc := range c.Metrics {
-			metric[j] = k            // assign the metric name from the config key
-			maxval[k] = mc.Max       // assign the metric max value from the config value
-			metsdb[k] = &Timeseries{ // create a new rolling tsdb for this metric
+			metric[j] = k               // assign the metric name from the config key
+			maxval[k] = mc.Max          // assign the metric max value from the config value
+			metsdb[k] = &Mt.Timeseries{ // create a new rolling tsdb for this metric
 				Runes:   make([]rune, tsdbWindow),
 				MaxSize: tsdbWindow,
 				Current: 0,
@@ -220,7 +222,7 @@ func (ep *Endpoint) RecordIctus(m string, isAccent bool, d int64) {
 	if ep.Sequence[m] == nil {
 		ep.Sequence[m] = &IctusSequence{
 			Metric:    m,
-			Events:    make([]Ictus, 0),
+			Events:    make([]Mt.Ictus, 0),
 			StartTime: now,
 		}
 	}
@@ -239,7 +241,7 @@ func (ep *Endpoint) RecordIctus(m string, isAccent bool, d int64) {
 	}
 
 	// State is changing! Record the new Ictus
-	ictus := Ictus{
+	ictus := Mt.Ictus{
 		Timestamp: now,
 		IsAccent:  isAccent,
 		Value:     d,
@@ -253,27 +255,27 @@ func (ep *Endpoint) RecordIctus(m string, isAccent bool, d int64) {
 
 // GetPulseVizData takes a metric name and returns its viz point data
 // Second argument is used to filter the results on a specific PulsePattern
-func (ep *Endpoint) GetPulseVizData(m string, fp *PulsePattern) []PulseVizPoint {
+func (ep *Endpoint) GetPulseVizData(m string, fp *Mt.PulsePattern) []Mt.PulseVizPoint {
 	ep.MU.RLock()
 	defer ep.MU.RUnlock()
 
 	if ep.Pulses == nil {
 		// fmt.Printf("DEBUG: Pulses is nil for %s\n", m)
-		return []PulseVizPoint{}
+		return []Mt.PulseVizPoint{}
 	}
 
 	// Use a map to store the list
 	// and deduplicate pulses where necessary,
 	// giving display priority to the Trochee
 	// (configured in ChooseBetterPoint)
-	pointMap := make(map[int]PulseVizPoint)
+	pointMap := make(map[int]Mt.PulseVizPoint)
 	now := time.Now()
 
 	// Track processed pulses to avoid duplicates
 	seenPulses := make(map[string]bool)
 
 	// Helper to create unique pulse key
-	createPulseKey := func(pulse PulseEvent) string {
+	createPulseKey := func(pulse Mt.PulseEvent) string {
 		return fmt.Sprintf("%v_%d_%v", pulse.StartTime.UnixNano(), pulse.Pattern, pulse.Duration.Nanoseconds())
 	}
 
@@ -322,7 +324,7 @@ func (ep *Endpoint) GetPulseVizData(m string, fp *PulsePattern) []PulseVizPoint 
 	}
 
 	// Convert map back to slice
-	points := make([]PulseVizPoint, 0, len(pointMap))
+	points := make([]Mt.PulseVizPoint, 0, len(pointMap))
 	for _, point := range pointMap {
 		points = append(points, point)
 	}
@@ -339,8 +341,8 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoint {
-	var points []PulseVizPoint
+func (ep *Endpoint) PulseToPoints(pulse Mt.PulseEvent, now time.Time) []Mt.PulseVizPoint {
+	var points []Mt.PulseVizPoint
 
 	// Calculate timeline position
 	tsdbWindow := FillEnvVarInt("MONTEVERDI_TUI_TSDB_VISUAL_WINDOW", 80)
@@ -364,7 +366,7 @@ func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoi
 	for pos := startPos; pos <= endPos; pos++ {
 		isAccent := ep.CalcAccentStateForPos(pulse, pos, startPos, endPos)
 
-		points = append(points, PulseVizPoint{
+		points = append(points, Mt.PulseVizPoint{
 			Position:  pos,
 			Pattern:   pulse.Pattern,
 			IsAccent:  isAccent,
@@ -377,17 +379,17 @@ func (ep *Endpoint) PulseToPoints(pulse PulseEvent, now time.Time) []PulseVizPoi
 	return points
 }
 
-func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPos int) bool {
+func (ep *Endpoint) CalcAccentStateForPos(pulse Mt.PulseEvent, pos, startPos, endPos int) bool {
 	switch pulse.Pattern {
-	case Iamb:
+	case Mt.Iamb:
 		// non-accent → accent: first half false, second half true
 		midPoint := startPos + ((endPos - startPos) / 2)
 		return pos >= midPoint
-	case Trochee:
+	case Mt.Trochee:
 		// accent → non-accent: first half true, second half false
 		midPoint := startPos + ((endPos - startPos) / 2)
 		return pos < midPoint
-	case Amphibrach:
+	case Mt.Amphibrach:
 		// non-accent → accent → non-accent: first third false, middle third true, last third false
 		firstThird := startPos + ((endPos - startPos) / 3)
 		secondThird := startPos + (2 * (endPos - startPos) / 3)
@@ -402,7 +404,7 @@ func (ep *Endpoint) CalcAccentStateForPos(pulse PulseEvent, pos, startPos, endPo
 //
 // i == Network index
 // p == Metric name
-func (q *QNet) FindAccent(m string, i int) *Accent {
+func (q *QNet) FindAccent(m string, i int) *Mt.Accent {
 	// Lock for the entire accent detection + timeline updates
 	q.Network[i].MU.Lock()
 	defer q.Network[i].MU.Unlock()
@@ -415,12 +417,12 @@ func (q *QNet) FindAccent(m string, i int) *Accent {
 
 	// init values
 	intensity := 1
-	a := &Accent{}
+	a := &Mt.Accent{}
 	isAccent := false
 
 	// if the accent exists, fill in a bunch of metadata
 	if md >= mx {
-		q.Network[i].Accent = make(map[string]*Accent)
+		q.Network[i].Accent = make(map[string]*Mt.Accent)
 		q.Network[i].Accent[m] = NewAccent(intensity, m)
 		a = q.Network[i].Accent[m]
 		isAccent = true
@@ -474,11 +476,11 @@ func (q *QNet) PulseDetect(m string, i int) {
 		// Convert to IctusSequence format first
 		ictusSeq := &IctusSequence{
 			Metric: m,
-			Events: make([]Ictus, len(relevantEvents)),
+			Events: make([]Mt.Ictus, len(relevantEvents)),
 		}
 
 		for j, e := range relevantEvents {
-			ictusSeq.Events[j] = Ictus{
+			ictusSeq.Events[j] = Mt.Ictus{
 				Timestamp: e.Timestamp,
 				IsAccent:  e.IsAccent,
 				Value:     e.Value,
@@ -496,6 +498,16 @@ func (q *QNet) PulseDetect(m string, i int) {
 			q.Network[i].Pulses.AddPulse(pulse)
 
 			slog.Debug("ADD PULSE", slog.Any("pattern", pulse.Pattern), slog.String("metric", m), slog.String("duration", pulse.Duration.String()))
+
+			// If configured, use the Output Adapter Plugin
+			// The output type depends on the value of MONTEVERDI_OUTPUT
+			if q.Output != nil {
+				if err := q.Output.WritePulse(&pulse); err != nil {
+					slog.Error("Output adapter write failed",
+						slog.String("metric", m),
+						slog.String("error", err.Error()))
+				}
+			}
 		}
 
 		// Update processed count

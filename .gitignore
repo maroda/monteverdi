@@ -4,6 +4,7 @@
 # local files
 .env
 /monteverdi
+/monteverdi_db/
 /monteverdi.log
 /monteverdi.err
 
