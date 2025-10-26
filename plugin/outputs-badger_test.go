@@ -24,7 +24,7 @@ func TestNewBadgerOutput(t *testing.T) {
 	defer closedb()
 
 	t.Run("Creates new struct for output", func(t *testing.T) {
-		path := "./badger.db"
+		path := "./badger_db"
 		got, err := Mp.NewBadgerOutput(path, 10)
 		assertError(t, err, nil)
 		assertInt(t, got.BatchSize, compare.batchSize)
