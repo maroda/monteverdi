@@ -35,19 +35,93 @@ func TestJSONKeyPlugin(t *testing.T) {
 		assertStringContains(t, got, want)
 	})
 
+	now := time.Now()
+	plugin := Mp.JSONKeyPlugin{
+		MetricKey: "bitcoin.usd",
+	}
+
 	t.Run("Metric returns the correct value", func(t *testing.T) {
 		// This interface expects that /metric/ is filled with JSON
-		now := time.Now()
 		metric := `{"bitcoin":{"usd":111580},"ethereum":{"usd":3955.02}}`
 		want := int64(111580)
-		plugin := Mp.JSONKeyPlugin{
-			MetricKey: "bitcoin.usd",
-		}
 
 		got, err := plugin.Transform(metric, 0, []int64{0}, now)
 		assertError(t, err, nil)
 		assertInt64(t, got, want)
 	})
+
+	// Check for errors
+	errTests := []struct {
+		name   string
+		metric string
+		key    string
+	}{
+		{
+			name:   "Errors on JSON array (not yet implemented)",
+			metric: `[{"bitcoin":{"usd":111580},"ethereum":{"usd":3955.02}}]`,
+			key:    "bitcoin.usd",
+		},
+		{
+			name:   "Errors on unmarshalling JSON",
+			metric: `^M`,
+			key:    "bitcoin.usd",
+		},
+		{
+			name:   "Errors on missing key",
+			metric: `{"rubicoin":{"usd":111580},"ethereum":{"usd":3955.02}}`,
+			key:    "bitcoin.usd",
+		},
+		{
+			name:   "Errors on non-matching JSON structure",
+			metric: `{"bitcoin":{"usd":111580},"ethereum":{"usd":3955.02}}`,
+			key:    "bitcoin.usd.price",
+		},
+	}
+
+	for _, tt := range errTests {
+		t.Run(tt.name, func(t *testing.T) {
+			plugin.MetricKey = tt.key
+			_, err := plugin.Transform(tt.metric, 0, []int64{0}, now)
+			assertGotError(t, err)
+		})
+	}
+
+	t.Run("Errors on non-number", func(t *testing.T) {
+		plugin.MetricKey = "bitcoin.usd"
+		metric := `{"bitcoin":{"usd":"price"},"ethereum":{"usd":3955.02}}`
+		_, err := plugin.Transform(metric, 0, []int64{0}, now)
+		assertGotError(t, err)
+	})
+
+	// Check for number conversions
+	testNum := []struct {
+		name   string
+		metric string
+		key    string
+		want   int64
+	}{
+		{
+			name:   "float64",
+			metric: `{"bitcoin":{"usd":111580},"ethereum":{"usd":3955.02}}`,
+			key:    "ethereum.usd",
+			want:   int64(3955),
+		},
+		{
+			name:   "int",
+			metric: `{"bitcoin":{"usd":111580},"ethereum":{"usd":3955.02}}`,
+			key:    "bitcoin.usd",
+			want:   int64(111580),
+		},
+	}
+
+	for _, tt := range testNum {
+		t.Run(tt.name, func(t *testing.T) {
+			plugin.MetricKey = tt.key
+			got, err := plugin.Transform(tt.metric, 0, []int64{0}, now)
+			assertError(t, err, nil)
+			assertInt64(t, got, tt.want)
+		})
+	}
 }
 
 func TestJSONKeyPlugin_Live(t *testing.T) {

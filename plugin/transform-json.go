@@ -68,25 +68,13 @@ func ExtractValue(data interface{}, metric string) (int64, error) {
 	}
 
 	// Convert final value to int64
+	// json.Unmarshal loads all numbers as float64
+	// so it's the only real case to catch
 	switch v := current.(type) {
 	case float64:
 		return int64(v), nil
-	case int64:
-		return v, nil
-	case int:
-		return int64(v), nil
-	case json.Number:
-		i, err := v.Int64()
-		if err != nil {
-			f, err := v.Float64()
-			if err != nil {
-				return 0, fmt.Errorf("error converting json.Number to int64: %v", err)
-			}
-			return int64(f), nil
-		}
-		return i, nil
 	default:
-		return 0, fmt.Errorf("value not numeric, cannot traverse %T", v)
+		return 0, fmt.Errorf("unexpected non-numeric: %T", v)
 	}
 }
 
