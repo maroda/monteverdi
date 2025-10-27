@@ -504,6 +504,7 @@ func (v *View) HandleMouseClick(x, y int) {
 	}
 }
 
+/*
 // PollQNetAll is for reading the multi metric config in Endpoint
 func (v *View) PollQNetAll() {
 	start := time.Now()
@@ -512,6 +513,7 @@ func (v *View) PollQNetAll() {
 	duration := time.Since(start).Seconds()
 	v.Stats.RecPollTimer(duration)
 }
+*/
 
 // GetScreenSize provides the terminal size for drawing
 func (v *View) GetScreenSize() (int, int) {
@@ -694,10 +696,10 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 		Handler: view.SetupMux(),
 	}
 
-	// Create new Poll Supervisor to handle data fetches every minute
-	ps := view.NewPollSupervisor()
-	ps.Start()
-	defer ps.Stop()
+	// Create new Poll Supervisor to handle data fetches per endpoint
+	view.Supervisor = view.NewPollSupervisor()
+	view.Supervisor.Start()
+	defer view.Supervisor.Stop()
 
 	// Run web endpoint (blocks)
 	addr := ":8090"
@@ -767,10 +769,10 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 		Handler: view.SetupMux(),
 	}
 
-	// Create new Poll Supervisor to handle data fetches every minute
-	ps := view.NewPollSupervisor()
-	ps.Start()
-	defer ps.Stop()
+	// Create new Poll Supervisor to handle data fetches per endpoint
+	view.Supervisor = view.NewPollSupervisor()
+	view.Supervisor.Start()
+	defer view.Supervisor.Stop()
 
 	// Run HarmonyView in the terminal
 	go view.runTUI()

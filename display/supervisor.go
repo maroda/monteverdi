@@ -13,35 +13,61 @@ import (
 	Ms "github.com/maroda/monteverdi/server"
 )
 
+// PollSupervisor is a wrapper around the View that manages polling goroutines
+// They are strongly coupled, one knows about the other
 type PollSupervisor struct {
-	View     *View
-	Ticker   *time.Ticker
-	StopChan chan struct{}
-	WG       sync.WaitGroup
+	View    *View
+	Pollers []*EndpointPoller
+	WG      sync.WaitGroup
 }
 
-// NewPollSupervisor is a wrapper around the View that manages polling goroutines
-// They are strongly coupled, one knows about the other
+// EndpointPoller manages per-endpoint polling
+type EndpointPoller struct {
+	QNet     *Ms.QNet
+	Index    int          // Index in QNet.Network
+	Ticker   *time.Ticker // Frequency
+	StopChan chan struct{}
+}
+
+// NewPollSupervisor creates a new supervisor for all endpoints
 func (v *View) NewPollSupervisor() *PollSupervisor {
 	ps := &PollSupervisor{
-		View: v,
+		View:    v,
+		Pollers: make([]*EndpointPoller, len(v.QNet.Network)),
 	}
-	v.Supervisor = ps
+
+	// Create a poller for each endpoint
+	for i := range v.QNet.Network {
+		ps.Pollers[i] = &EndpointPoller{
+			QNet:  v.QNet,
+			Index: i,
+		}
+	}
+
 	return ps
 }
 
 // ReloadConfig performs an automatic restart after filling QNet with the new config
 func (v *View) ReloadConfig(c []Ms.ConfigFile) {
-	v.Supervisor.Stop()
+	// Lock the View
+	v.MU.Lock()
+	defer v.MU.Unlock()
+
+	// Stop current polling
+	if v.Supervisor != nil {
+		v.Supervisor.Stop()
+	}
 
 	// Build new endpoints from config
 	// and replace the existing QNet
 	eps := Ms.NewEndpointsFromConfig(c)
-	v.QNet.MU.Lock()
-	v.QNet.Network = *eps
-	v.QNet.MU.Unlock()
+	v.QNet = Ms.NewQNet(*eps)
 
+	// Create and start new supervisor
+	v.Supervisor = v.NewPollSupervisor()
 	v.Supervisor.Start()
+
+	slog.Info("Config reloaded and polling restarted!")
 }
 
 // ConfHandler receives the new JSON config, validates, and reloads
@@ -89,6 +115,7 @@ func (v *View) ConfHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Reload with new config
 		v.ReloadConfig(loadConfig)
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "success",
@@ -104,20 +131,43 @@ func (v *View) ConfHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start the PollSupervisor
-func (p *PollSupervisor) Start() {
-	p.StopChan = make(chan struct{})
-	p.Ticker = time.NewTicker(1 * time.Second)
+func (ps *PollSupervisor) Start() {
+	slog.Info("Starting Poll Supervisor", slog.Int("endpoints", len(ps.Pollers)))
 
-	p.WG.Add(1)
+	for _, poller := range ps.Pollers {
+		ps.startEndpointPoller(poller)
+	}
+}
+
+func (ps *PollSupervisor) startEndpointPoller(poller *EndpointPoller) {
+	interval := poller.QNet.Network[poller.Index].Interval
+	if interval == 0 {
+		interval = 15 * time.Second
+	}
+
+	poller.Ticker = time.NewTicker(interval)
+	poller.StopChan = make(chan struct{})
+
+	ps.WG.Add(1)
 	go func() {
-		defer p.WG.Done()
-		defer p.Ticker.Stop()
+		defer ps.WG.Done()
+		defer poller.Ticker.Stop()
+
+		epID := poller.QNet.Network[poller.Index].ID
+		slog.Info("Endpoint poller started",
+			slog.String("endpoint", epID),
+			slog.Duration("interval", interval))
 
 		for {
 			select {
-			case <-p.Ticker.C:
-				p.View.PollQNetAll()
-			case <-p.StopChan:
+			case <-poller.Ticker.C:
+				start := time.Now()
+				poller.QNet.PollEndpoint(poller.Index)
+				duration := time.Since(start).Seconds()
+				ps.View.Stats.RecPollTimer(duration)
+
+			case <-poller.StopChan:
+				slog.Info("Endpoint poller stopped", slog.String("endpoint", epID))
 				return
 			}
 		}
@@ -125,15 +175,27 @@ func (p *PollSupervisor) Start() {
 }
 
 // Stop the PollSupervisor
-func (p *PollSupervisor) Stop() {
-	if p.StopChan != nil {
-		close(p.StopChan)
-		p.WG.Wait()
+// This is idempotent and will run even if stopped
+func (ps *PollSupervisor) Stop() {
+	slog.Info("Stopping Poll Supervisor")
+
+	for _, poller := range ps.Pollers {
+		if poller.StopChan != nil {
+			select {
+			case <-poller.StopChan: // Already closed, noop
+			default:
+				close(poller.StopChan)
+			}
+		}
 	}
+
+	ps.WG.Wait()
+	slog.Info("All endpoint pollers stopped", slog.Int("endpoints", len(ps.Pollers)))
 }
 
 // Restart the PollSupervisor
-func (p *PollSupervisor) Restart() {
-	p.Stop()
-	p.Start()
+func (ps *PollSupervisor) Restart() {
+	slog.Info("Restarting Poll Supervisor")
+	ps.Stop()
+	ps.Start()
 }

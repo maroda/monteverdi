@@ -40,12 +40,12 @@ func TestNewQNet(t *testing.T) {
 	})
 }
 
-func TestQNet_PollMultiNetworkError(t *testing.T) {
+func TestQNet_PollEndpointNetworkError(t *testing.T) {
 	qn := NewTestQNet(t)
 
 	t.Run("No error returned on bad URL (code continues)", func(t *testing.T) {
 		qn.Network[0].URL = "http://unreachable-craquemattic:2345/metrics"
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 	})
 
 	t.Run("No error returned when endpoint times out (code continues)", func(t *testing.T) {
@@ -55,11 +55,11 @@ func TestQNet_PollMultiNetworkError(t *testing.T) {
 		defer slowServ.Close()
 
 		qn.Network[0].URL = slowServ.URL
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 	})
 }
 
-func TestQNet_PollMultiDataError(t *testing.T) {
+func TestQNet_PollEndpointDataError(t *testing.T) {
 	t.Run("No error on bad server data (code continues)", func(t *testing.T) {
 		partialServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintln(w, "CPU1=notanumber")
@@ -78,7 +78,7 @@ func TestQNet_PollMultiDataError(t *testing.T) {
 			3: "CPU4",
 		}
 
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 	})
 }
 
@@ -149,7 +149,7 @@ func TestQNet_FindAccent(t *testing.T) {
 
 	// create a new QNet and poll
 	qn := Ms.NewQNet(eps)
-	qn.PollMulti()
+	qn.PollEndpoint(0)
 
 	t.Run("No accent with value below Maxval", func(t *testing.T) {
 		// Using CPU1:10 from NewTestQNet
@@ -233,42 +233,7 @@ func TestConcurrentAccentDetection(t *testing.T) {
 	// If we get here without panic, concurrent access is safe.
 }
 
-func TestQNet_PollMulti(t *testing.T) {
-	t.Run("Continues polling other endpoints after one fails", func(t *testing.T) {
-		// First endpoint - will fail (bad URL)
-		badEndpoint := makeEndpoint("bad-endpoint", "http://localhost:99999")
-		badEndpoint.Metric = map[int]string{0: "CPU1"}
-
-		// Second endpoint - will succeed
-		goodServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "CPU2=200")
-			fmt.Fprintln(w, "CPU3=300")
-		}))
-		defer goodServer.Close()
-
-		goodEndpoint := makeEndpoint("good-endpoint", goodServer.URL)
-		goodEndpoint.Metric = map[int]string{0: "CPU2", 1: "CPU3"}
-
-		qnet := &Ms.QNet{
-			Network: []*Ms.Endpoint{badEndpoint, goodEndpoint},
-		}
-
-		qnet.PollMulti()
-
-		// Verify the good endpoint was still polled successfully
-		if goodEndpoint.Mdata["CPU2"] != 200 {
-			t.Errorf("Expected CPU2=200, got %d", goodEndpoint.Mdata["CPU2"])
-		}
-		if goodEndpoint.Mdata["CPU3"] != 300 {
-			t.Errorf("Expected CPU3=300, got %d", goodEndpoint.Mdata["CPU3"])
-		}
-
-		// Bad endpoint should have no data
-		if len(badEndpoint.Mdata) > 0 {
-			t.Errorf("Bad endpoint should have no metrics, got %v", badEndpoint.Mdata)
-		}
-	})
-
+func TestQNet_PollEndpoint(t *testing.T) {
 	var eps Ms.Endpoints
 
 	// Create remote server
@@ -281,7 +246,7 @@ func TestQNet_PollMulti(t *testing.T) {
 
 	// create a new QNet and poll
 	qn := Ms.NewQNet(eps)
-	qn.PollMulti()
+	qn.PollEndpoint(0)
 
 	t.Run("Fetches correct IDs", func(t *testing.T) {
 		got := qn.Network[0].ID
@@ -292,13 +257,6 @@ func TestQNet_PollMulti(t *testing.T) {
 		want = "SAAS_1"
 		assertString(t, got, want)
 	})
-
-	/*
-		t.Run("Reads Accent", func(t *testing.T) {
-			fmt.Println(qn.Network[0].Accent["CPU1"])
-			fmt.Println(qn.Network[1].Accent["CPU2"])
-		})
-	*/
 }
 
 func TestEndpoint_ValToRuneWithCheckMax(t *testing.T) {
@@ -932,7 +890,7 @@ func TestConcurrentPollAndDisplay(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			qn.PollMulti()
+			qn.PollEndpoint(0)
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()

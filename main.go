@@ -73,6 +73,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nEnvironment Variables:\n")
 		fmt.Fprintf(os.Stderr, "  MONTEVERDI_CONFIG_FILE\n")
 		fmt.Fprintf(os.Stderr, "        Path to configuration file (default: config.json)\n")
+		fmt.Fprintf(os.Stderr, "  MONTEVERDI_OUTPUT\n")
+		fmt.Fprintf(os.Stderr, "        Location for output, currently sets a BadgerDB database path.\n")
 		fmt.Fprintf(os.Stderr, "  MONTEVERDI_LOGLEVEL\n")
 		fmt.Fprintf(os.Stderr, "        Log level: debug or info (default: info)\n")
 		fmt.Fprintf(os.Stderr, "  MONTEVERDI_TUI_TSDB_VISUAL_WINDOW\n")

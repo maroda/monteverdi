@@ -40,11 +40,16 @@ MEM=555`
 		ps.Start()
 		defer ps.Stop()
 
-		if ps.StopChan == nil {
-			t.Errorf("StopChan() should be initialized, not nil")
+		if len(ps.Pollers) == 0 {
+			t.Errorf("Pollers = %v, want at least 1", len(ps.Pollers))
 		}
-		if ps.Ticker == nil {
-			t.Errorf("Ticker() should be initialized, not nil")
+		for i, poller := range ps.Pollers {
+			if poller.StopChan == nil {
+				t.Errorf("Poller[%d] StopChan() should be initialized, not nil", i)
+			}
+			if poller.Ticker == nil {
+				t.Errorf("Poller[%d] Ticker() should be initialized, not nil", i)
+			}
 		}
 
 		// Allow for one poll (every 1s) to happen
@@ -110,7 +115,10 @@ NETOUT=777`
 	t.Run("Reloads Config with Supervisor", func(t *testing.T) {
 		// now this should create the new config from a test JSON file
 		// that is configured to point to kvbody2
-		ps.Start()
+		view.Supervisor = ps
+		view.Supervisor.Start()
+		defer view.Supervisor.Stop()
+
 		time.Sleep(2 * time.Second)
 
 		metric1 := view.QNet.Network[0].Mdata["CPU"]
@@ -120,6 +128,7 @@ NETOUT=777`
 		data := `[{"id": "test2",
   "url": "` + metricsServ2.URL + `",
   "delim": "=",
+  "interval": 1,
   "metrics": {
       "NETIN": { "type": "rate", "max": 10 },
       "NETOUT": { "type": "rate", "max": 3000 }
@@ -131,6 +140,8 @@ NETOUT=777`
 		loadConfig, err := Ms.LoadConfigFileName(fileName)
 		assertError(t, err, nil)
 
+		// This will stop the old supervisor
+		// and create a new one with the new config
 		view.ReloadConfig(loadConfig)
 		time.Sleep(2 * time.Second)
 
@@ -168,9 +179,9 @@ func TestView_ConfHandler(t *testing.T) {
 		Stats:      Mo.NewStatsInternal(),
 		ConfigPath: configFile.Name(),
 	}
-	ps := view.NewPollSupervisor()
-	ps.Start()
-	defer ps.Stop()
+	view.Supervisor = view.NewPollSupervisor()
+	view.Supervisor.Start()
+	defer view.Supervisor.Stop()
 
 	t.Run("Returns Config JSON", func(t *testing.T) {
 		// Make GET request to retrieve current config

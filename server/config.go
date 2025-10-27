@@ -9,10 +9,11 @@ import (
 
 // ConfigFile contains the options to configure Endpoints
 type ConfigFile struct {
-	ID      string                  `json:"id"`      // Unique string ID
-	URL     string                  `json:"url"`     // Endpoint URL (no auth yet)
-	Delim   string                  `json:"delim"`   // Stats delimiter (eg: "=")
-	Metrics map[string]MetricConfig `json:"metrics"` // Value to trigger an accent
+	ID       string                  `json:"id"`       // Unique string ID
+	URL      string                  `json:"url"`      // Endpoint URL (no auth yet)
+	Delim    string                  `json:"delim"`    // Stats delimiter (eg: "=")
+	Interval int                     `json:"interval"` // Seconds to repeat poll
+	Metrics  map[string]MetricConfig `json:"metrics"`  // Value to trigger an accent
 }
 
 type MetricConfig struct {
