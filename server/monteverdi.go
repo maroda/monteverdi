@@ -43,14 +43,6 @@ func NewQNet(ep Endpoints) *QNet {
 	}
 }
 
-type EndpointOperate interface {
-	AddSecond(string)
-	AddSecondWithCheck(string, bool)
-	ValToRuneWithCheck(int64, bool) rune
-	ValToRune(int64) rune
-	GetDisplay(string) []rune
-}
-
 // Endpoint is what the app uses to
 // check the URL for whatever comes back
 // and then use each metric listed in the map to grab data
@@ -541,6 +533,9 @@ func (q *QNet) PollMulti() {
 		// When Delimiter is set to /""/ the entire fetch is the data
 		if delimiter == "" {
 			slog.Info("Empty delimiter configured, using Transformer")
+			slog.Info("JSON poll started",
+				slog.String("endpoint", q.Network[ni].ID),
+				slog.Time("time", time.Now()))
 
 			// To keep the atomicity of the metric name with its transformer key,
 			// load the body early and operate on that with the transformer.
@@ -551,6 +546,10 @@ func (q *QNet) PollMulti() {
 					slog.Int("code", code),
 					slog.Any("error", err))
 			}
+			slog.Debug("Fetch result",
+				slog.Int("status_code", code),
+				slog.Int("body_length", len(metricsBlob)),
+				slog.String("body", string(metricsBlob)))
 
 			// The metric key name in the configuration is the search term for the Transformer.
 			// Step through each of them, using the metricsBlob body, and locate their values.
@@ -565,18 +564,23 @@ func (q *QNet) PollMulti() {
 				case "json_key":
 					var td int64
 					var terr error
+					tdsink := true // This is needed in order to register a non-accent for display
 
 					// Send the JSON as a string to match the interface args
 					td, terr = mt.Transform(string(metricsBlob), 0, []int64{0}, time.Now())
 					if terr != nil {
 						slog.Error("Transformer error", slog.String("metric", m), slog.String("error", terr.Error()))
-						continue
+						// No accent to display because the metric is null
+						tdsink = false
 					}
 
 					// Lock and record data
 					q.Network[ni].MU.Lock()
-					q.Network[ni].ValueToHysteresis(m, td)
-					q.Network[ni].Mdata[m] = td
+
+					if tdsink {
+						q.Network[ni].ValueToHysteresis(m, td)
+						q.Network[ni].Mdata[m] = td
+					}
 
 					// Unlock and find the accent state
 					q.Network[ni].MU.Unlock()
