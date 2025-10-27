@@ -9,7 +9,7 @@ import (
 	Mt "github.com/maroda/monteverdi/types"
 )
 
-func TestQNet_PollMulti_JSONKeyPlugin(t *testing.T) {
+func TestQNet_PollEndpoint_JSONKeyPlugin(t *testing.T) {
 	testMetric := "bitcoin.usd"
 	remotebody := `{"bitcoin":{"usd":111580},"ethereum":{"usd":3955.02}}`
 	mockWWW := makeMockWebServBody(0*time.Millisecond, remotebody)
@@ -41,7 +41,7 @@ func TestQNet_PollMulti_JSONKeyPlugin(t *testing.T) {
 	qn := Ms.NewQNet(eps)
 
 	t.Run("Correctly fetches value from JSON", func(t *testing.T) {
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 		got := qn.Network[0].Mdata["bitcoin.usd"]
 		want := int64(111580)
 		assertInt64(t, got, want)
@@ -51,7 +51,7 @@ func TestQNet_PollMulti_JSONKeyPlugin(t *testing.T) {
 	mockWWW.Close()
 
 	t.Run("Continues when fetch fails", func(t *testing.T) {
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 		// This passes if we get this far without panic
 	})
 }

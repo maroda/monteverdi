@@ -984,83 +984,6 @@ func TestView_StatsMiddleware(t *testing.T) {
 	})
 }
 
-func TestView_PollQNetAll(t *testing.T) {
-	t.Run("Continues after an error", func(t *testing.T) {
-		// Create mock server with metrics, the middle one is bad
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "CPU1=100")
-			fmt.Fprintln(w, "CPU2200")
-			fmt.Fprintln(w, "CPU3=300")
-		}))
-		defer mockServer.Close()
-
-		// Create endpoint pointing to mock server
-		endpoint := makeEndpoint("test", mockServer.URL)
-		qnet := &Ms.QNet{Network: []*Ms.Endpoint{endpoint}}
-
-		stats := Mo.NewStatsInternal()
-		view := &Md.View{
-			QNet:  qnet,
-			Stats: stats,
-		}
-
-		// Call PollQNetAll
-		view.PollQNetAll()
-
-		// Verify data was polled for the good metrics
-		if qnet.Network[0].Mdata["CPU1"] != 100 {
-			t.Errorf("Expected CPU1=100, got %d", qnet.Network[0].Mdata["CPU1"])
-		}
-		// For CPU2, check that it was not set to the value expected above (200)
-		if qnet.Network[0].Mdata["CPU2"] == 200 {
-			t.Errorf("Expected error for CPU2, got %d", qnet.Network[0].Mdata["CPU2"])
-		}
-		// It should skip it and keep going
-		if qnet.Network[0].Mdata["CPU3"] != 300 {
-			t.Errorf("Expected CPU3=300, got %d", qnet.Network[0].Mdata["CPU3"])
-		}
-	})
-
-	t.Run("Successfully polls and records timing", func(t *testing.T) {
-		// Create mock server with metrics
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintln(w, "CPU1=100")
-			fmt.Fprintln(w, "CPU2=200")
-			fmt.Fprintln(w, "CPU3=300")
-		}))
-		defer mockServer.Close()
-
-		// Create endpoint pointing to mock server
-		endpoint := makeEndpoint("test", mockServer.URL)
-		qnet := &Ms.QNet{
-			Network: []*Ms.Endpoint{endpoint},
-		}
-
-		stats := Mo.NewStatsInternal()
-		view := &Md.View{
-			QNet:  qnet,
-			Stats: stats,
-		}
-
-		// Call PollQNetAll
-		view.PollQNetAll()
-
-		// Verify data was polled
-		if qnet.Network[0].Mdata["CPU1"] != 100 {
-			t.Errorf("Expected CPU1=100, got %d", qnet.Network[0].Mdata["CPU1"])
-		}
-		if qnet.Network[0].Mdata["CPU2"] != 200 {
-			t.Errorf("Expected CPU2=200, got %d", qnet.Network[0].Mdata["CPU2"])
-		}
-		if qnet.Network[0].Mdata["CPU3"] != 300 {
-			t.Errorf("Expected CPU3=300, got %d", qnet.Network[0].Mdata["CPU3"])
-		}
-
-		// Stats should have recorded the poll duration
-		// (We can't easily verify the exact value, but we know it was called)
-	})
-}
-
 func TestView_ResizeScreen(t *testing.T) {
 	view := makeTestViewWithScreen(t, []*Ms.Endpoint{makeEndpointWithMetrics(t)})
 	defer view.Screen.Fini()
@@ -1171,14 +1094,15 @@ func makeEndpointEmptyMetricsURL(t *testing.T, u string) *Ms.Endpoint {
 	t.Helper()
 
 	return &Ms.Endpoint{
-		MU:     sync.RWMutex{},
-		ID:     "test",
-		URL:    u,
-		Delim:  "=",
-		Metric: map[int]string{0: "CPU", 1: "MEM"},
-		Mdata:  make(map[string]int64),
-		Maxval: map[string]int64{"CPU": 80, "MEM": 1000},
-		Accent: make(map[string]*Mt.Accent),
+		MU:       sync.RWMutex{},
+		ID:       "test",
+		URL:      u,
+		Delim:    "=",
+		Interval: time.Second,
+		Metric:   map[int]string{0: "CPU", 1: "MEM"},
+		Mdata:    make(map[string]int64),
+		Maxval:   map[string]int64{"CPU": 80, "MEM": 1000},
+		Accent:   make(map[string]*Mt.Accent),
 		Layer: map[string]*Mt.Timeseries{
 			"CPU": {
 				Runes:   make([]rune, 80),

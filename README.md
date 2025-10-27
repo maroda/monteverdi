@@ -33,7 +33,15 @@ Streams of data from multiple endpoints are used to draw histograms of "accents"
 
 An endpoint is any URL that serves K/V data (delimiter is configurable), for instance Prometheus or Netdata endpoints. Output can be enhanced with plugins that do simple math (e.g. `calc_rate` for counters to make them rates). These plugins are modular and are developed separately from Monteverdi core.
 
-The included `config.json` checks Monteverdi's local prometheus metrics only. This means you can try it without needing to have to set up a KV endpoint. The included `example_config.json` shows three endpoints, and both show how to use the `calc_rate` plugin.
+### Active Plugins
+
+- Setting `MONTEVERDI_OUTPUT` to a file path will run the BadgerDB output adapter. This writes the stream of pulses to the database for archiving.
+- Configure the `calc_rate` transformer to ingest counting metrics as a rate.
+- Configure the `json_key` transformer to read an endpoint and extract data from a JSON blob.
+
+Not a plugin but still useful is the `interval` setting for configuring the duration between polls for each endpoint.
+
+> _The included `config.json` has examples._
 
 ### Web UI
 
@@ -131,6 +139,8 @@ Environment Variables:
         Path to configuration file (default: config.json)
   MONTEVERDI_LOGLEVEL
         Log level: debug or info (default: info)
+  MONTEVERDI_OUTPUT
+        Location for output, currently sets a BadgerDB database path.
   MONTEVERDI_TUI_TSDB_VISUAL_WINDOW
         TUI display width in characters (default: 80)
   MONTEVERDI_PULSE_WINDOW_SECONDS

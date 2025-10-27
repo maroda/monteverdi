@@ -17,7 +17,7 @@ import (
 	Ms "github.com/maroda/monteverdi/server"
 )
 
-func TestQNet_PollMultiPlugin(t *testing.T) {
+func TestQNet_PollEndpointPlugin(t *testing.T) {
 	metric := "CPU1"
 
 	t.Run("Returns correct rate from plugin", func(t *testing.T) {
@@ -30,13 +30,13 @@ func TestQNet_PollMultiPlugin(t *testing.T) {
 		qn := Ms.NewQNet(Ms.Endpoints{ep})
 
 		// First poll - no rate yet
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 		firstVal := qn.Network[0].Mdata[metric]
 		t.Logf("First val: %d", firstVal)
 
 		// Second poll - should have a rate
 		time.Sleep(1 * time.Second)
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 		secondVal := qn.Network[0].Mdata[metric]
 		t.Logf("Second val: %d", secondVal)
 
@@ -54,7 +54,7 @@ func TestQNet_PollMultiPlugin(t *testing.T) {
 		// Create endpoint with a transformer that errors
 		ep := makeEndpointMTrans(metric, mockMetricsServ.URL, &MockErrorTransformer{})
 		qn := Ms.NewQNet(Ms.Endpoints{ep})
-		qn.PollMulti()
+		qn.PollEndpoint(0)
 	})
 }
 
