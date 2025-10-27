@@ -77,6 +77,7 @@ func MetricKV(d, url string) (map[string]string, error) {
 	return ParseMetricKV(bytes.NewReader(body), d)
 }
 
+// ParseMetricKV pairs with MetricKV to extract all configured metrics from an endpoint
 func ParseMetricKV(reader io.Reader, d string) (map[string]string, error) {
 	envMap := make(map[string]string)
 	scanner := bufio.NewScanner(reader)

@@ -31,6 +31,7 @@ func NewJSONTransformer(mk string) *JSONKeyPlugin {
 // held as the full 'metric', i.e. the entire JSON response from ParseMetricKV
 func (tj *JSONKeyPlugin) Transform(metric string, current int64, historical []int64, timestamp time.Time) (int64, error) {
 
+	// Unmarshal the JSON into an interface for extraction
 	var data interface{}
 	if err := json.Unmarshal([]byte(metric), &data); err != nil {
 		slog.Error("Error unmarshalling json",
@@ -48,6 +49,8 @@ func (tj *JSONKeyPlugin) Transform(metric string, current int64, historical []in
 	return value, nil
 }
 
+// ExtractValue takes an interface that is assumed to have JSON data
+// and extract the specific metric key defined as a JSON path
 func ExtractValue(data interface{}, metric string) (int64, error) {
 	keys := strings.Split(metric, ".")
 	current := data
