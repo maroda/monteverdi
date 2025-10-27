@@ -43,14 +43,6 @@ func NewQNet(ep Endpoints) *QNet {
 	}
 }
 
-type EndpointOperate interface {
-	AddSecond(string)
-	AddSecondWithCheck(string, bool)
-	ValToRuneWithCheck(int64, bool) rune
-	ValToRune(int64) rune
-	GetDisplay(string) []rune
-}
-
 // Endpoint is what the app uses to
 // check the URL for whatever comes back
 // and then use each metric listed in the map to grab data
@@ -132,6 +124,8 @@ func NewEndpointsFromConfig(cf []ConfigFile) *Endpoints {
 						PrevVal:  make(map[string]int64),
 						PrevTime: make(map[string]time.Time),
 					}
+				case "json_key":
+					transformers[k] = &Mp.JSONKeyPlugin{MetricKey: k}
 				}
 			}
 
@@ -169,8 +163,6 @@ func (ep *Endpoint) AddSecondWithCheck(m string, isAccent bool) {
 	// translate this val into a rune for display
 	// ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRuneWithCheck(ep.Mdata[m], isAccent)
 	ep.Layer[m].Runes[ep.Layer[m].Current] = ep.ValToRuneWithCheckMax(ep.Mdata[m], ep.Maxval[m], isAccent)
-
-	// TODO: Can the value range be derived from or relative to ep.maxval?
 }
 
 func (ep *Endpoint) ValToRuneWithCheckMax(val, max int64, isAccent bool) rune {
@@ -538,15 +530,75 @@ func (q *QNet) PollMulti() {
 		// get custom delimiter
 		delimiter = q.Network[ni].Delim
 
+		// When Delimiter is set to /""/ the entire fetch is the data
+		if delimiter == "" {
+			slog.Info("Empty delimiter configured, using Transformer")
+			slog.Info("JSON poll started",
+				slog.String("endpoint", q.Network[ni].ID),
+				slog.Time("time", time.Now()))
+
+			// To keep the atomicity of the metric name with its transformer key,
+			// load the body early and operate on that with the transformer.
+			code, metricsBlob, err := SingleFetch(q.Network[ni].URL)
+			if err != nil {
+				slog.Error("Problem fetching body",
+					slog.String("url", q.Network[ni].URL),
+					slog.Int("code", code),
+					slog.Any("error", err))
+			}
+			slog.Debug("Fetch result",
+				slog.Int("status_code", code),
+				slog.Int("body_length", len(metricsBlob)),
+				slog.String("body", string(metricsBlob)))
+
+			// The metric key name in the configuration is the search term for the Transformer.
+			// Step through each of them, using the metricsBlob body, and locate their values.
+			for _, m := range q.Network[ni].Metric {
+				// Get the transformer
+				mt := q.Network[ni].Transformers[m]
+
+				slog.Debug("Adding metric", slog.String("metric", m), slog.Any("transformer", mt))
+
+				// Currently only JSON has a plugin, but others could be supported
+				switch mt.Type() {
+				case "json_key":
+					var td int64
+					var terr error
+					tdsink := true // This is needed in order to register a non-accent for display
+
+					// Send the JSON as a string to match the interface args
+					td, terr = mt.Transform(string(metricsBlob), 0, []int64{0}, time.Now())
+					if terr != nil {
+						slog.Error("Transformer error", slog.String("metric", m), slog.String("error", terr.Error()))
+						// No accent to display because the metric is null
+						tdsink = false
+					}
+
+					// Lock and record data
+					q.Network[ni].MU.Lock()
+
+					if tdsink {
+						q.Network[ni].ValueToHysteresis(m, td)
+						q.Network[ni].Mdata[m] = td
+					}
+
+					// Unlock and find the accent state
+					q.Network[ni].MU.Unlock()
+					q.FindAccent(m, ni)
+				}
+			}
+			continue
+		}
+
+		// Any other Delimiter is valid as a K/V pair
 		// pollSource is a map of KV extracted from the remote side
-		// map[METRIC_NAME]METRIC_VAL_STRING
 		pollSource, err := MetricKV(delimiter, q.Network[ni].URL)
 		if err != nil {
 			slog.Error("Could not poll metric", slog.Any("Error", err))
 			continue
 		}
 
-		// For each metric in the configuration...
+		// For each metric in the configuration:
 		for _, mname := range q.Network[ni].Metric {
 			// ... search through the polled data for its match
 			for k, v := range pollSource {
@@ -564,6 +616,7 @@ func (q *QNet) PollMulti() {
 					q.Network[ni].MU.Lock()
 
 					// Record data to the hysteresis buffer
+					// This comes before the Transformer so that it can be part of the calculation
 					q.Network[ni].ValueToHysteresis(mname, mdata)
 
 					// If a Transformer plugin is detected, use it
@@ -584,13 +637,17 @@ func (q *QNet) PollMulti() {
 						}
 					}
 
+					// Record data to Endpoint
 					if dataSink {
 						q.Network[ni].Mdata[mname] = mdata // Populate the map in the struct
 					}
 
+					// Unlock and find the accent state
 					q.Network[ni].MU.Unlock()
-					q.FindAccent(mname, ni) // Find any Accents at the same time
-					break                   // Stop, we've found the one we want
+					q.FindAccent(mname, ni)
+
+					// Go to the top after we've processed this metric
+					break
 				}
 			}
 

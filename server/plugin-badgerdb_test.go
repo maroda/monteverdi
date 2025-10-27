@@ -48,7 +48,7 @@ func TestQNet_PulseDetectWriteBadgerDB(t *testing.T) {
 
 	t.Run("Writes values to BadgerDB during PulseDetect", func(t *testing.T) {
 		// Define BadgerOutput adapter
-		path := "./badger.db"
+		path := "./badger_db"
 		batchSize := 1
 		output, err := Mp.NewBadgerOutput(path, batchSize)
 		defer output.Close()

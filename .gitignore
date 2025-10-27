@@ -2,6 +2,7 @@
 *.test
 
 # local files
+*/*_db
 .env
 /monteverdi
 /monteverdi_db/
