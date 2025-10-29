@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	Ms "github.com/maroda/monteverdi/server"
+	"go.opentelemetry.io/otel"
 )
 
 // SetupMux handles all data serving:
@@ -43,6 +44,10 @@ func (v *View) VersionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := otel.Tracer("monteverdi/api").Start(ctx, "MetricsDataHandler")
+	defer span.End()
+
 	v.QNet.MU.RLock()
 	defer v.QNet.MU.RUnlock()
 

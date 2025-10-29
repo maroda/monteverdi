@@ -1,6 +1,7 @@
 package monteverdi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,9 @@ import (
 	"time"
 
 	Ms "github.com/maroda/monteverdi/server"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // PollSupervisor is a wrapper around the View that manages polling goroutines
@@ -48,7 +52,10 @@ func (v *View) NewPollSupervisor() *PollSupervisor {
 }
 
 // ReloadConfig performs an automatic restart after filling QNet with the new config
-func (v *View) ReloadConfig(c []Ms.ConfigFile) {
+func (v *View) ReloadConfig(ctx context.Context, c []Ms.ConfigFile) {
+	ctx, span := otel.Tracer("monteverdi/supervisor").Start(ctx, "ReloadConfig")
+	defer span.End()
+
 	// Lock the View
 	v.MU.Lock()
 	defer v.MU.Unlock()
@@ -76,8 +83,14 @@ func (v *View) ConfHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
+		ctx := r.Context()
+		ctx, span := otel.Tracer("monteverdi/conf").Start(ctx, "ConfHandlerGet")
+		defer span.End()
+
 		loadConfig, err := Ms.LoadConfigFileName(configPath)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			http.Error(w, fmt.Sprintf("Failed to load new config: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -86,9 +99,15 @@ func (v *View) ConfHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(loadConfig)
 	case "POST":
+		ctx := r.Context()
+		ctx, span := otel.Tracer("monteverdi/conf").Start(ctx, "ConfHandlerPost")
+		defer span.End()
+
 		// Read JSON body
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			http.Error(w, "Failed to read request body", http.StatusBadRequest)
 			return
 		}
@@ -97,24 +116,31 @@ func (v *View) ConfHandler(w http.ResponseWriter, r *http.Request) {
 		// Validate JSON
 		var testConfig []Ms.ConfigFile
 		if err = json.Unmarshal(body, &testConfig); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
 		}
 
 		// Write JSON to disk
 		if err = os.WriteFile(configPath, body, 0644); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			http.Error(w, fmt.Sprintf("Failed to write new config: %v", err), http.StatusInternalServerError)
 			return
 		}
 
+		// TODO: consider LoadConfigFileName as a method of an interface to inject for testing this
 		// Load config and restart like normal
 		loadConfig, err := Ms.LoadConfigFileName(configPath)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			http.Error(w, fmt.Sprintf("Failed to load new config: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		// Reload with new config
-		v.ReloadConfig(loadConfig)
+		v.ReloadConfig(ctx, loadConfig)
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -142,6 +168,7 @@ func (ps *PollSupervisor) Start() {
 func (ps *PollSupervisor) startEndpointPoller(poller *EndpointPoller) {
 	interval := poller.QNet.Network[poller.Index].Interval
 	if interval == 0 {
+		slog.Warn("Poller interval is 0, using default of 15s")
 		interval = 15 * time.Second
 	}
 
@@ -162,10 +189,18 @@ func (ps *PollSupervisor) startEndpointPoller(poller *EndpointPoller) {
 			select {
 			case <-poller.Ticker.C:
 				start := time.Now()
-				poller.QNet.PollEndpoint(poller.Index)
-				duration := time.Since(start).Seconds()
-				ps.View.Stats.RecPollTimer(duration)
+				ctx := context.Background()
+				ctx, span := otel.Tracer("monteverdi/supervisor").Start(ctx, "PollEndpoint")
+				defer span.End()
 
+				span.SetAttributes(
+					attribute.String("endpoint", epID),
+					attribute.Int("interval.sec", int(interval)),
+				)
+
+				poller.QNet.PollEndpoint(poller.Index)
+
+				ps.View.Stats.RecPollTimer(time.Since(start).Seconds())
 			case <-poller.StopChan:
 				slog.Info("Endpoint poller stopped", slog.String("endpoint", epID))
 				return

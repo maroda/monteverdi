@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	Md "github.com/maroda/monteverdi/display"
+	Mo "github.com/maroda/monteverdi/obvy"
 	Ms "github.com/maroda/monteverdi/server"
 )
 
@@ -62,6 +67,13 @@ func init() {
 func main() {
 	slog.Info("STARTING Monteverdi")
 
+	// Init OTel for Grafana OTLP endpoint
+	tp, err := Mo.InitOTelGRF()
+	if err != nil {
+		slog.Error("Failed to initialize TraceProvider, continuing...")
+	}
+	defer tp.Shutdown(context.Background())
+
 	// check if headless for container use
 	configfile := flag.String("config", "config.json", "Path to configuration JSON")
 	headless := flag.Bool("headless", false, "Container mode: no Terminal UI, logs sink to STDOUT")
@@ -109,6 +121,10 @@ func main() {
 		panic("Error loading config.json")
 	}
 
+	// Graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// Start Monteverdi
 	if *headless {
 		// Run web-only version (no TUI)
@@ -120,5 +136,15 @@ func main() {
 	if err != nil {
 		slog.Error("Error starting harmony view", slog.Any("Error", err))
 		panic("Error starting harmony view")
+	}
+
+	<-ctx.Done()
+	slog.Info("Shutting down")
+	downCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Shutdown the OTel TraceProvider
+	if err = tp.Shutdown(downCtx); err != nil {
+		slog.Error("Error shutting down tracer", slog.Any("error", err))
 	}
 }

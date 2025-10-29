@@ -1,8 +1,12 @@
 package monteverdi_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -98,6 +102,31 @@ MEM=555`
 
 		ps.Stop()
 	})
+
+	t.Run("Sets interval to default when 0", func(t *testing.T) {
+		// The only response here is a log entry,
+		// the configuration value is not changed from 0
+		var logBuffer bytes.Buffer
+		logHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
+		logger := slog.New(logHandler)
+		slog.SetDefault(logger)
+
+		// Set the interval to 0
+		view.QNet.Network[0].MU.Lock()
+		view.QNet.Network[0].Interval = 0
+		view.QNet.Network[0].MU.Unlock()
+
+		// Start the Supervisor
+		ps.Start()
+		defer ps.Stop()
+
+		// Check if the log message made it through
+		logOut := logBuffer.String()
+		assertStringContains(t, logOut, "Poller interval is 0, using default of 15s")
+	})
+
 }
 
 func TestView_ReloadConfig(t *testing.T) {
@@ -142,7 +171,10 @@ NETOUT=777`
 
 		// This will stop the old supervisor
 		// and create a new one with the new config
-		view.ReloadConfig(loadConfig)
+		// In addition to the config file,
+		// it expects a context for otel.
+		ctx := context.Background()
+		view.ReloadConfig(ctx, loadConfig)
 		time.Sleep(2 * time.Second)
 
 		metric2 := view.QNet.Network[0].Mdata["NETIN"]
@@ -169,7 +201,6 @@ func TestView_ConfHandler(t *testing.T) {
 	// Config file alef
 	alefConfig := `[{"id": "test1", "url": "http://localhost:9999/metrics", "delim": "=", "metrics": {"CPU": {"type": "gauge", "max": 100}}}]`
 	configFile, delConfig := createTempFile(t, alefConfig)
-	defer delConfig()
 
 	// Setup view with config path
 	loadConfig, _ := Ms.LoadConfigFileName(configFile.Name())
@@ -235,9 +266,34 @@ func TestView_ConfHandler(t *testing.T) {
 			t.Errorf("Expected ID %s, got %s", "test2", view.QNet.Network[0].ID)
 		}
 	})
+
+	t.Run("Errors on invalid JSON POST", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodPost, "/conf", errorReader{})
+		w := httptest.NewRecorder()
+		view.ConfHandler(w, r)
+		assertStatus(t, w.Code, http.StatusBadRequest)
+	})
+
+	// This test must be last, it removes the config to check for error
+	t.Run("Errors when loading config file", func(t *testing.T) {
+		// Make GET request to retrieve current config
+		r := httptest.NewRequest(http.MethodGet, "/conf", nil)
+		w := httptest.NewRecorder()
+
+		// remove config file
+		delConfig()
+		view.ConfHandler(w, r)
+		assertStatus(t, w.Code, http.StatusInternalServerError)
+	})
 }
 
 // Helpers //
+
+type errorReader struct{}
+
+func (errorReader) Read(p []byte) (n int, err error) {
+	return 0, fmt.Errorf("read error")
+}
 
 // Mock responder for external API calls with configurable body content
 func makeMockWebServBody(delay time.Duration, body string) *httptest.Server {
