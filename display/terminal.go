@@ -16,6 +16,7 @@ import (
 	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
 	Mt "github.com/maroda/monteverdi/types"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -692,8 +693,11 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 
 	// Server for web endpoint
 	view.server = &http.Server{
-		Addr:    ":8090",
-		Handler: view.SetupMux(),
+		Addr: ":8090",
+		Handler: otelhttp.NewHandler(view.SetupMux(), "HarmonyViewWebOnly",
+			otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+				return r.Method + " " + r.URL.Path
+			})),
 	}
 
 	// Create new Poll Supervisor to handle data fetches per endpoint
@@ -765,8 +769,11 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 
 	// Server for web endpoint
 	view.server = &http.Server{
-		Addr:    ":8090",
-		Handler: view.SetupMux(),
+		Addr: ":8090",
+		Handler: otelhttp.NewHandler(view.SetupMux(), "HarmonyViewWithTUI",
+			otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+				return r.Method + " " + r.URL.Path
+			})),
 	}
 
 	// Create new Poll Supervisor to handle data fetches per endpoint

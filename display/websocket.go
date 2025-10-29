@@ -9,6 +9,8 @@ import (
 	"github.com/gorilla/websocket"
 	Ms "github.com/maroda/monteverdi/server"
 	Mt "github.com/maroda/monteverdi/types"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type PulseDataD3 struct {
@@ -43,10 +45,16 @@ func (v *View) WebsocketHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker.C:
+			ctx := r.Context()
+			ctx, span := otel.Tracer("monteverdi/websocket").Start(ctx, "GetPulseDataD3")
 			pulseData := v.GetPulseDataD3()
-			if err := conn.WriteJSON(pulseData); err != nil {
+			if err = conn.WriteJSON(pulseData); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				slog.Error("Websocket failed to write pulse data")
 				return // Connection closed
 			}
+			span.End()
 		}
 	}
 }

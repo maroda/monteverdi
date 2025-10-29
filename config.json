@@ -1,80 +1,21 @@
 [
   {
-    "id": "NETDATA",
-    "url": "http://localhost:19999/api/v3/allmetrics",
-    "delim": "=",
-    "interval": 1,
-    "metrics": {
-      "NETDATA_APP_WINDOWSERVER_CPU_UTILIZATION_VISIBLETOTAL": {
-        "type": "gauge",
-        "transformer": "",
-        "max": 20
-      },
-      "NETDATA_IPV4_PACKETS_VISIBLETOTAL": {
-        "type": "rate",
-        "transformer": "",
-        "max": 30
-      },
-      "NETDATA_USER_MATT_CPU_UTILIZATION_VISIBLETOTAL": {
-        "type": "rate",
-        "transformer": "",
-        "max": 90
-      }
-    }
-  },
-  {
-    "id": "COINGECKO",
-    "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-    "delim": "",
-    "interval": 30,
-    "metrics": {
-      "bitcoin.usd": {
-        "type": "gauge",
-        "transformer": "json_key",
-        "max": 115200
-      }
-    }
-  },
-  {
     "id": "MONTEVERDI_INTERNAL",
     "url": "http://localhost:8090/metrics",
     "delim": " ",
-    "interval": 1,
     "metrics": {
-      "go_gc_heap_objects_objects": {
+      "process_resident_memory_bytes": {
         "type": "gauge",
-        "transformer": "",
-        "max": 44000
+        "max": 30000000
       },
-      "go_goroutines": {
-        "type": "counter",
-        "transformer": "calc_rate",
-        "max": 1
+      "go_memstats_heap_inuse_bytes": {
+        "type": "gauge",
+        "max": 8000000
       },
       "go_memstats_alloc_bytes_total": {
         "type": "counter",
         "transformer": "calc_rate",
         "max": 20000000
-      },
-      "go_memstats_heap_alloc_bytes": {
-        "type": "gauge",
-        "transformer": "",
-        "max": 30000000
-      },
-      "go_memstats_heap_inuse_bytes": {
-        "type": "gauge",
-        "transformer": "",
-        "max": 80000000
-      },
-      "process_open_fds": {
-        "type": "counter",
-        "transformer": "calc_rate",
-        "max": 1
-      },
-      "process_resident_memory_bytes": {
-        "type": "gauge",
-        "transformer": "",
-        "max": 54000000
       }
     }
   }
