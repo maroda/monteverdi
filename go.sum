@@ -97,6 +97,10 @@ github.com/tklauser/numcpus v0.8.0/go.mod h1:ZJZlAY+dmR4eut8epnzf0u/VwodKmryxR8t
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
+gitlab.com/gomidi/midi v1.23.7 h1:I6qKoIk9s9dcX+pNf0jC+tziCzJFn82bMpuntRkLeik=
+gitlab.com/gomidi/midi v1.23.7/go.mod h1:3ohtNOhqoSakkuLG/Li1OI6I3J1c2LErnJF5o/VBq1c=
+gitlab.com/gomidi/midi/v2 v2.3.16 h1:yufWSENyjnJ4LFQa9BerzUm4E4aLfTyzw5nmnCteO0c=
+gitlab.com/gomidi/midi/v2 v2.3.16/go.mod h1:jDpP4O4skYi+7iVwt6Zyp18bd2M4hkjtMuw2cmgKgfw=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
 go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
 go.opentelemetry.io/contrib/detectors/aws/lambda v0.53.0 h1:KG6fOUk3EwSH1dEpsAbsLKFbn3cFwN9xDu8plGu55zI=
