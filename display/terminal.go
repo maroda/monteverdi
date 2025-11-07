@@ -747,10 +747,25 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 	}
 
 	// Configure output if set
-	// For now, assume BadgerDB
-	// TODO: create QNet method to set this
 	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
-	if outputLocation != "ENOENT" {
+	switch outputLocation {
+	case "ENOENT":
+		slog.Warn("Output Not Configured")
+	case "MIDI":
+		// configure live MIDI
+		output, err := Mp.NewMIDIOutput(0)
+		if err != nil {
+			slog.Error("Failed to create adapter",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+			return err
+		}
+		view.QNet.Output = output
+		defer output.Close()
+
+		slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
+	default:
+		// configure BadgerDB at MONTEVERDI_OUTPUT
 		batchSize := 100
 		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
 		if err != nil {
@@ -764,6 +779,23 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 
 		slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
 	}
+
+	/*
+		if outputLocation != "ENOENT" {
+			batchSize := 100
+			output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
+			if err != nil {
+				slog.Error("Failed to create adapter",
+					slog.String("output", outputLocation),
+					slog.Any("error", err))
+				return err
+			}
+			view.QNet.Output = output
+			defer output.Close()
+
+			slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
+		}
+	*/
 
 	// Register config file location
 	view.ConfigPath = path

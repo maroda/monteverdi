@@ -154,3 +154,13 @@ func (mo *MIDIOutput) Close() error {
 
 // Type for this plugin
 func (mo *MIDIOutput) Type() string { return "MIDI" }
+
+// WriteBatch is Not Implemented
+func (mo *MIDIOutput) WriteBatch(pulses []*Mt.PulseEvent) error {
+	return fmt.Errorf("not implemented")
+}
+
+// QueryRange is Not Implemented
+func (mo *MIDIOutput) QueryRange(start, end time.Time) ([]*Mt.PulseEvent, error) {
+	return nil, fmt.Errorf("not implemented")
+}
