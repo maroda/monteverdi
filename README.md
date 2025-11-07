@@ -121,7 +121,7 @@ To retrieve the current configuration: `curl http://localhost:8090/conf`
 
 ### Runtime
 
-Refer to the command help for any special configurations you want to make. The options and environment variables are listed:
+Refer to the command help for any special configurations you wantNotes to make. The options and environment variables are listed:
 ```shell
 >>> ./monteverdi -help
 Monteverdi - Seconda Practica Observability

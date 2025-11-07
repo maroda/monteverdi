@@ -748,6 +748,7 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 
 	// Configure output if set
 	// For now, assume BadgerDB
+	// TODO: create QNet method to set this
 	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
 	if outputLocation != "ENOENT" {
 		batchSize := 100
