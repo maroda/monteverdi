@@ -3,6 +3,7 @@ package plugin_test
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -11,19 +12,35 @@ import (
 	"gitlab.com/gomidi/midi/v2"
 )
 
-func TestMIDIOutput_WritePulse(t *testing.T) {
-	// Use the MIDI adapter on the first port
-	adapter, err := Mp.NewMIDIOutput(0)
-	assertError(t, err, nil)
-	defer adapter.Close()
+func TestMIDIOutput_DataTypes(t *testing.T) {
+	t.Run("Returns error for QueryRange (not implemented)", func(t *testing.T) {
+		adapter, err := Mp.NewMIDIOutput(0)
+		assertError(t, err, nil)
+		defer adapter.Close()
+
+		_, err = adapter.QueryRange(time.Now(), time.Now())
+		assertGotError(t, err)
+		assertStringContains(t, err.Error(), "not implemented")
+	})
 
 	t.Run("Returns Type", func(t *testing.T) {
+		adapter, err := Mp.NewMIDIOutput(0)
+		assertError(t, err, nil)
+		defer adapter.Close()
+
 		if adapter.Type() != "MIDI" {
 			t.Error("Expected MIDI for Type()")
 		}
 	})
+}
 
+func TestMIDIOutput_WritePulse(t *testing.T) {
 	t.Run("Errors when NoteOn fails", func(t *testing.T) {
+		// Use the MIDI adapter on the first port
+		adapter, err := Mp.NewMIDIOutput(0)
+		assertError(t, err, nil)
+		defer adapter.Close()
+
 		origSend := adapter.Send
 		// inject a SendNoteOnMIDI error
 		adapter.Send = func(msg midi.Message) error {
@@ -31,7 +48,7 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 		}
 		defer func() { adapter.Send = origSend }()
 
-		pulse := &Mt.PulseEvent{
+		pulse1 := &Mt.PulseEvent{
 			Dimension: 1,
 			Metric:    []string{"NETWORK"},
 			Pattern:   0,
@@ -39,15 +56,29 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 			Duration:  100 * time.Millisecond,
 		}
 
+		pulse2 := &Mt.PulseEvent{
+			Dimension: 1,
+			Metric:    []string{"NETWORK"},
+			Pattern:   0,
+			StartTime: time.Now().Add(500 * time.Millisecond),
+			Duration:  100 * time.Millisecond,
+		}
+
 		// SendNoteOnMIDI is the first function for WritePulse
 		// the expected behavior is to return an error
 		// if SendNoteOnMIDI fails
-		err = adapter.WritePulse(pulse)
+		err = adapter.WritePulse(pulse1)
+		err = adapter.WritePulse(pulse2) // Followup note is needed to trigger the player
 		assertGotError(t, err)
 		adapter.WG.Wait()
 	})
 
 	t.Run("Flush method is correctly called", func(t *testing.T) {
+		// Use the MIDI adapter on the first port
+		adapter, err := Mp.NewMIDIOutput(0)
+		assertError(t, err, nil)
+		defer adapter.Close()
+
 		flushCalled := false
 		originalSend := adapter.Send
 
@@ -62,7 +93,7 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 			return fmt.Errorf("returns error")
 		}
 
-		pulse := &Mt.PulseEvent{
+		pulse1 := &Mt.PulseEvent{
 			Dimension: 1,
 			Metric:    []string{"NETWORK"},
 			Pattern:   0,
@@ -70,7 +101,16 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 			Duration:  1 * time.Second,
 		}
 
-		adapter.WritePulse(pulse)
+		pulse2 := &Mt.PulseEvent{
+			Dimension: 1,
+			Metric:    []string{"NETWORK"},
+			Pattern:   0,
+			StartTime: time.Now().Add(500 * time.Millisecond),
+			Duration:  1 * time.Second,
+		}
+
+		adapter.WritePulse(pulse1)
+		adapter.WritePulse(pulse2)
 		adapter.WG.Wait()
 
 		if !flushCalled {
@@ -149,6 +189,22 @@ func TestMIDIOutput_ScaleStep(t *testing.T) {
 	})
 }
 
+func TestMIDIOutput_ScaleNotes(t *testing.T) {
+	adapter, err := Mp.NewMIDIOutput(0)
+	assertError(t, err, nil)
+	defer adapter.Close()
+
+	t.Run("Returns correct scale", func(t *testing.T) {
+		CMajor := []uint8{60, 62, 64, 65, 67, 69, 71, 72}
+		// DiatonicMaj := []uint8{0, 2, 2, 1, 2, 2, 2, 1}
+
+		got := adapter.ScaleNotes()
+		if !reflect.DeepEqual(got, CMajor) {
+			t.Errorf("Expected ScaleNotes to return %v, got %v", CMajor, got)
+		}
+	})
+}
+
 // INTEGRATION: Audio confirmation through MIDI
 func TestMIDIOutput_ScaleAudio(t *testing.T) {
 	adapter, err := Mp.NewMIDIOutput(0)
@@ -186,4 +242,155 @@ func TestMIDIOutput_ScaleAudio(t *testing.T) {
 		}
 		adapter.WG.Wait()
 	})
+}
+
+func TestMIDIOutput_WriteBatch(t *testing.T) {
+	adapter, err := Mp.NewMIDIOutput(0)
+	assertError(t, err, nil)
+	defer adapter.Close()
+
+	tests := []struct {
+		name   string
+		pulses []*Mt.PulseEvent
+		space  int
+		poly   bool
+	}{
+		{
+			name:  "Plays an arpeggio major chord",
+			space: 2,
+			poly:  false,
+			pulses: []*Mt.PulseEvent{
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  500 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1000 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1500 * time.Millisecond,
+				},
+			},
+		},
+		{
+			name:  "Plays wrapped arpeggio",
+			space: 7,
+			poly:  false,
+			pulses: []*Mt.PulseEvent{
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  500 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1000 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1500 * time.Millisecond,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter.IsPoly = tt.poly
+			adapter.IntSpace = tt.space
+			adapter.WriteBatch(tt.pulses)
+			adapter.WG.Wait()
+		})
+	}
+
+	// Flush any remaining grouped pulses
+	if len(adapter.Grouper) > 0 {
+		adapter.WriteBatch(adapter.Grouper)
+	}
+}
+
+func TestMIDIOutput_WritePulseBatch(t *testing.T) {
+	adapter, err := Mp.NewMIDIOutput(0)
+	assertError(t, err, nil)
+	defer adapter.Close()
+
+	tests := []struct {
+		name   string
+		pulses []*Mt.PulseEvent
+		space  int
+		poly   bool
+		arp    int
+	}{
+		{
+			name:  "Plays an arpeggio major chord",
+			space: 2,
+			poly:  false,
+			arp:   500,
+			pulses: []*Mt.PulseEvent{
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1000 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1000 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now(),
+					Duration:  1000 * time.Millisecond,
+				},
+				{
+					Dimension: 1,
+					Metric:    []string{"NETWORK"},
+					Pattern:   0,
+					StartTime: time.Now().Add(500 * time.Millisecond),
+					Duration:  1000 * time.Millisecond,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter.ArpSpace = tt.arp
+			adapter.IsPoly = tt.poly
+			adapter.IntSpace = tt.space
+			for i := range tt.pulses {
+				adapter.WritePulse(tt.pulses[i])
+			}
+		})
+	}
+
+	// Flush any remaining grouped pulses
+	if len(adapter.Grouper) > 0 {
+		adapter.WriteBatch(adapter.Grouper)
+	}
 }
