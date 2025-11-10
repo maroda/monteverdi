@@ -15,7 +15,6 @@ builds:
       - linux
     goarch:
       - amd64
-      - arm64
     ldflags:
       - -X github.com/maroda/monteverdi/display.Version={{.Version}}
 
