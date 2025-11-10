@@ -618,6 +618,11 @@ func (v *View) exit() {
 	v.MU.Lock()
 	defer v.MU.Unlock()
 	v.Screen.Fini()
+
+	if v.QNet.Output != nil {
+		v.QNet.Output.Close()
+	}
+
 	os.Exit(0)
 }
 
@@ -671,9 +676,25 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 	}
 
 	// Configure output if set
-	// For now, assume BadgerDB
 	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
-	if outputLocation != "ENOENT" {
+	switch outputLocation {
+	case "ENOENT":
+		slog.Warn("Output Not Configured")
+	case "MIDI":
+		// configure live MIDI
+		output, err := Mp.NewMIDIOutput(0)
+		if err != nil {
+			slog.Error("Failed to create adapter",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+			return err
+		}
+		view.QNet.Output = output
+		defer output.Close()
+
+		slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
+	default:
+		// configure BadgerDB at MONTEVERDI_OUTPUT
 		batchSize := 100
 		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
 		if err != nil {
@@ -747,9 +768,25 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 	}
 
 	// Configure output if set
-	// For now, assume BadgerDB
 	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
-	if outputLocation != "ENOENT" {
+	switch outputLocation {
+	case "ENOENT":
+		slog.Warn("Output Not Configured")
+	case "MIDI":
+		// configure live MIDI
+		output, err := Mp.NewMIDIOutput(0)
+		if err != nil {
+			slog.Error("Failed to create adapter",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+			return err
+		}
+		view.QNet.Output = output
+		defer output.Close()
+
+		slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
+	default:
+		// configure BadgerDB at MONTEVERDI_OUTPUT
 		batchSize := 100
 		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
 		if err != nil {

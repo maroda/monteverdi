@@ -138,7 +138,7 @@ func main() {
 		panic("Error starting harmony view")
 	}
 
-	<-ctx.Done()
+	<-ctx.Done() // Graceful, hopefully
 	slog.Info("Shutting down")
 	downCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
