@@ -18,6 +18,20 @@ builds:
     ldflags:
       - -X github.com/maroda/monteverdi/display.Version={{.Version}}
 
+  # Docker images do not get MIDI capabilities
+  - id: docker
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -tags=nomidi
+    ldflags:
+      - -X github.com/maroda/monteverdi/display.Version={{.Version}}
+
 archives:
   - id: linux
     builds:
@@ -39,7 +53,7 @@ archives:
 # Docker images for GitHub Container Registry
 dockers:
   - ids:
-      - linux
+      - docker
     image_templates:
       - "ghcr.io/maroda/monteverdi:{{ .Version }}-amd64"
       - "ghcr.io/maroda/monteverdi:latest-amd64"
@@ -56,7 +70,7 @@ dockers:
       - "--label=org.opencontainers.image.source=https://github.com/maroda/monteverdi"
 
   - ids:
-      - linux
+      - docker
     image_templates:
       - "ghcr.io/maroda/monteverdi:{{ .Version }}-arm64"
       - "ghcr.io/maroda/monteverdi:latest-arm64"
