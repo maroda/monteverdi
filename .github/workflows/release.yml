@@ -10,7 +10,8 @@ permissions:
   packages: write
 
 jobs:
-  goreleaser:
+  # Build Linux binaries and Docker images
+  release-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,7 +22,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -44,3 +45,53 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+  # Build macOS binaries
+  release-darwin:
+    runs-on: macos-latest
+    needs: release-linux  # Wait for Linux job to create draft release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run GoReleaser (macOS)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --config .goreleaser-darwin.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+  # Publish the release (undraft it)
+  finalize-release:
+    runs-on: ubuntu-latest
+    needs: [release-linux, release-darwin]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PAT }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: context.ref.replace('refs/tags/', '')
+            });
+            
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.data.id,
+              draft: false
+            });

@@ -8,24 +8,22 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+  - id: linux
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
-      - darwin
     goarch:
       - amd64
       - arm64
     ldflags:
       - -X github.com/maroda/monteverdi/display.Version={{.Version}}
-    # Exclude invalid combinations
-    ignore:
-      - goos: windows
-        goarch: arm64
 
 archives:
-  - format: tar.gz
+  - id: linux
+    builds:
+      - linux
+    format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -33,9 +31,6 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - web/**/*
       - config.json
@@ -44,7 +39,9 @@ archives:
 
 # Docker images for GitHub Container Registry
 dockers:
-  - image_templates:
+  - ids:
+      - linux
+    image_templates:
       - "ghcr.io/maroda/monteverdi:{{ .Version }}-amd64"
       - "ghcr.io/maroda/monteverdi:latest-amd64"
     use: buildx
@@ -59,7 +56,9 @@ dockers:
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.source=https://github.com/maroda/monteverdi"
 
-  - image_templates:
+  - ids:
+      - linux
+    image_templates:
       - "ghcr.io/maroda/monteverdi:{{ .Version }}-arm64"
       - "ghcr.io/maroda/monteverdi:latest-arm64"
     use: buildx
@@ -98,6 +97,7 @@ release:
   github:
     owner: maroda
     name: monteverdi
+  draft: true
   footer: >-
     ---
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

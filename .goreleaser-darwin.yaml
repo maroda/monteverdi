@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: darwin
+    env:
+      # MIDI support requires CGO
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -X github.com/maroda/monteverdi/display.Version={{.Version}}
+
+archives:
+  - id: darwin
+    builds:
+      - darwin
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - web/**/*
+      - config.json
+      - README.md
+      - LICENSE
+
+release:
+  github:
+    owner: maroda
+    name: monteverdi
+  draft: true # Needed so that the linux image is built first
