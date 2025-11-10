@@ -35,7 +35,8 @@ An endpoint is any URL that serves K/V data (delimiter is configurable), for ins
 
 ### Active Plugins
 
-- Setting `MONTEVERDI_OUTPUT` to a file path will run the BadgerDB output adapter. This writes the stream of pulses to the database for archiving.
+- Setting `MONTEVERDI_OUTPUT` to **a file path** will run the BadgerDB output adapter. This writes the stream of pulses to the database for archiving.
+- Setting `MONTEVERDI_OUTPUT` to **"MIDI"** will run the MIDI output adapter. It assumes there is a connected MIDI interface with a device receiving messages.
 - Configure the `calc_rate` transformer to ingest counting metrics as a rate.
 - Configure the `json_key` transformer to read an endpoint and extract data from a JSON blob.
 
@@ -256,5 +257,3 @@ spec:
 - Metrics input. Can read an existing timeseries with KV and extract pulses.
 - Inference. How do we take a history of pulses and define expected behaviors?
 - Monitor. How do we "alert" on pulse diversion?
-- Output. Can the pulses be converted to other formats?
-- Audio. How do the patterns sound?
