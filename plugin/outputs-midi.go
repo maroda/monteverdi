@@ -1,5 +1,4 @@
 //go:build !nomidi
-// +build !nomidi
 
 package plugin
 

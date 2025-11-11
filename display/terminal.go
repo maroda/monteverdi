@@ -682,15 +682,22 @@ func StartHarmonyViewWebOnly(c []Ms.ConfigFile, path string) error {
 		slog.Warn("Output Not Configured")
 	case "MIDI":
 		// configure live MIDI
-		output, err := Mp.NewMIDIOutput(0)
-		if err != nil {
-			slog.Error("Failed to create adapter",
-				slog.String("output", outputLocation),
-				slog.Any("error", err))
+		if err := InitMIDIOutput(view, outputLocation); err != nil {
 			return err
 		}
-		view.QNet.Output = output
-		defer output.Close()
+		defer view.QNet.Output.Close()
+
+		/*
+			output, err := Mp.NewMIDIOutput(0)
+			if err != nil {
+				slog.Error("Failed to create adapter",
+					slog.String("output", outputLocation),
+					slog.Any("error", err))
+				return err
+			}
+			view.QNet.Output = output
+			defer output.Close()
+		*/
 
 		slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
 	default:
@@ -774,15 +781,10 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 		slog.Warn("Output Not Configured")
 	case "MIDI":
 		// configure live MIDI
-		output, err := Mp.NewMIDIOutput(0)
-		if err != nil {
-			slog.Error("Failed to create adapter",
-				slog.String("output", outputLocation),
-				slog.Any("error", err))
+		if err = InitMIDIOutput(view, outputLocation); err != nil {
 			return err
 		}
-		view.QNet.Output = output
-		defer output.Close()
+		defer view.QNet.Output.Close()
 
 		slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
 	default:
