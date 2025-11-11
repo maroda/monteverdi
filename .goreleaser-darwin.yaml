@@ -41,4 +41,3 @@ release:
     owner: maroda
     name: monteverdi
   draft: true # Used for matrix image building
-  mode: append # Keep all builds together in one release
