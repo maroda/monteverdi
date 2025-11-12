@@ -13,6 +13,8 @@ jobs:
   # Build Linux binaries and Docker images
   release-linux:
     runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +45,7 @@ jobs:
           sudo apt-get install -y libasound2-dev
 
       - name: Run GoReleaser
+        id: release
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -50,6 +53,14 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      - name: Get Release ID
+        id: get-release-id
+        run: |
+          RELEASE_ID=$(gh release view ${{ github.ref_name }} --json id -q '.id')
+          echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
 
   # Build macOS binaries
   release-darwin:
@@ -88,15 +99,9 @@ jobs:
         with:
           github-token: ${{ secrets.GHFINE_PAT }}
           script: |
-            const release = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: context.ref.replace('refs/tags/', '')
-            });
-            
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: release.data.id,
+              release_id: '${{ needs.release-linux.outputs.release-id }}',
               draft: false
             });
