@@ -86,7 +86,7 @@ jobs:
       - name: Publish Release
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GH_PAT }}
+          github-token: ${{ secrets.GHFINE_PAT }}
           script: |
             const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
