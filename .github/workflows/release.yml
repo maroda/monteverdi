@@ -14,7 +14,7 @@ jobs:
   release-linux:
     runs-on: ubuntu-latest
     outputs:
-      release-id: ${{ steps.release.outputs.id }}
+      release-id: ${{ steps.get-release.outputs.release-id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,10 +55,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
       - name: Get Release ID
-        id: get-release-id
+        id: get-release
         run: |
           RELEASE_ID=$(gh release view ${{ github.ref_name }} --json id -q '.id')
-          echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "release-id=$RELEASE_ID" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
 
