@@ -10,6 +10,30 @@ permissions:
   packages: write
 
 jobs:
+  # Create draft release first
+  create-draft:
+    runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ steps.get-release.outputs.release-id }}
+    steps:
+    - name: Create Draft Release
+      id: create
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GH_PAT }}
+        script: |
+          const release = await github.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: context.ref.replace('refs/tags/', ''),
+            name: context.ref.replace('refs/tags/', ''),
+            draft: true,
+            prerelease: false
+          });
+          console.log('Created draft release with ID:', release.data.id);
+          return release.data.id;
+        result-encoding: string
+
   # Build Linux binaries and Docker images
   release-linux:
     runs-on: ubuntu-latest
@@ -89,11 +113,8 @@ jobs:
   # Publish the release (undraft it)
   finalize-release:
     runs-on: ubuntu-latest
-    needs: [release-linux, release-darwin]
+    needs: [create-draft, release-linux, release-darwin]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Publish Release
         uses: actions/github-script@v7
         with:
@@ -102,6 +123,6 @@ jobs:
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: '${{ needs.release-linux.outputs.release-id }}',
+              release_id: '${{ needs.create-draft.outputs.release-id }}',
               draft: false
             });

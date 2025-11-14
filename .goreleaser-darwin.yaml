@@ -40,5 +40,5 @@ release:
   github:
     owner: maroda
     name: monteverdi
-  draft: true # Used for matrix image building
+  draft: true
   mode: append

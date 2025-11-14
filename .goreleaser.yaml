@@ -110,8 +110,8 @@ release:
   github:
     owner: maroda
     name: monteverdi
-  draft: true # Used for matrix image building
-  mode: replace
+  draft: true
+  mode: append
   footer: >-
     ---
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
