@@ -14,7 +14,7 @@ jobs:
   create-draft:
     runs-on: ubuntu-latest
     outputs:
-      release-id: ${{ steps.get-release.outputs.release-id }}
+      release-id: ${{ steps.get-release.outputs.result }}
     steps:
     - name: Create Draft Release
       id: create
@@ -32,7 +32,6 @@ jobs:
           });
           console.log('Created draft release with ID:', release.data.id);
           return release.data.id;
-        result-encoding: string
 
   # Build Linux binaries and Docker images
   release-linux:
