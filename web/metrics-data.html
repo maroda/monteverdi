@@ -12,6 +12,21 @@
 <div id="container">
     <h1>Monteverdi <span style="font-size: 0.5em; color: #888;" id="version"></span></h1>
 
+    <div id="system-info" style="margin: 20px 0; padding: 15px; background: rgba(95,167,59,0.1); border-radius: 8px; border: 1px solid #5fa73b;">
+        <h3 style="color: #5fa73b; margin-top: 0;">System Configuration</h3>
+        <div style="font-family: monospace; font-size: 12px; line-height: 1.8;">
+            <div><strong>Output:</strong> <span id="output-type">-</span></div>
+            <div id="midi-details" style="display: none;">
+                <div><strong>MIDI Port:</strong> <span id="midi-port">-</span>&nbsp;
+                    <strong>MIDI Channel:</strong> <span id="midi-channel">-</span>&nbsp;
+                    <strong>Root Note:</strong> <span id="midi-root">-</span></div>
+                <div><strong>Scale:</strong> <span id="midi-scale">-</span>&nbsp;
+                    <strong>Notes:</strong> <span id="midi-notes">-</span></div>
+            </div>
+        </div>
+    </div>
+
+
     <div style="margin-top: 20px; padding: 15px; background: rgba(45,45,45,0.5); border-radius: 8px; font-size: 13px; color: #aaa;">
         <h4 style="color: #e85ff8; margin-top: 0;">How to tune your config.json:</h4>
         <ol style="line-height: 1.8;">

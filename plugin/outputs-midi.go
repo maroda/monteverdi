@@ -121,7 +121,7 @@ func (mo *MIDIOutput) ComputeScaleNotes() {
 
 // SendNoteOnMIDI is the bridge between WritePulse and MIDIOutput
 func (mo *MIDIOutput) SendNoteOnMIDI(midic, midin, midiv uint8) error {
-	slog.Info("MIDI NoteOn",
+	slog.Debug("MIDI NoteOn",
 		slog.Int("note", int(midin)),
 		slog.Int("velocity", int(midiv)),
 		slog.Time("time", time.Now()))
@@ -250,19 +250,19 @@ func (mo *MIDIOutput) WritePulse(pulse *Mt.PulseEvent) error {
 	if len(mo.Grouper) > 0 && pulse.StartTime.Sub(mo.LastTS) < 50*time.Millisecond {
 		play = false
 		mo.Grouper = append(mo.Grouper, pulse)
-		slog.Info("Grouping pulse", slog.Int("pulse", len(mo.Grouper)))
+		slog.Debug("Grouping pulse", slog.Int("pulse", len(mo.Grouper)))
 	} else {
 		// at this point the grouper is either 0 or the next note is not within 50ms
 		// this will not be reached until all simultaneous notes are added to the chord
 		if len(mo.Grouper) > 1 {
 			play = false
-			slog.Info("Playing batch")
+			slog.Debug("Playing batch")
 			if err := mo.WriteBatch(mo.Grouper); err != nil {
 				slog.Error("WriteBatch event failed", slog.Any("error", err))
 				return fmt.Errorf("WriteBatch failure: %q", err)
 			}
 		} else if len(mo.Grouper) == 1 {
-			slog.Info("Playing single")
+			slog.Debug("Playing single")
 		}
 		// Reaching this far means a Grouper has been exhausted,
 		// the next note > 50ms was played,

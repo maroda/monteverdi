@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -60,6 +61,17 @@ func (v *View) ReloadConfig(ctx context.Context, c []Ms.ConfigFile) {
 	v.MU.Lock()
 	defer v.MU.Unlock()
 
+	// Stop output, QNet will reinitialize with a new one
+	if v.QNet.Output != nil {
+		err := v.QNet.Output.Close()
+		if err != nil {
+			span.RecordError(err)
+			slog.Error("Failed to close output during reload",
+				slog.Any("output", v.QNet.Output),
+				slog.Any("error", err))
+		}
+	}
+
 	// Stop current polling
 	if v.Supervisor != nil {
 		v.Supervisor.Stop()
@@ -69,6 +81,34 @@ func (v *View) ReloadConfig(ctx context.Context, c []Ms.ConfigFile) {
 	// and replace the existing QNet
 	eps := Ms.NewEndpointsFromConfig(c)
 	v.QNet = Ms.NewQNet(*eps)
+
+	// Refresh output, allowing for a new config
+	// Nothing should raise an error, but everything should log it
+	outputLocation := Ms.FillEnvVar("MONTEVERDI_OUTPUT")
+	switch outputLocation {
+	case "ENOENT":
+		slog.Warn("Output Not Configured")
+	case "MIDI":
+		if err := InitMIDIOutput(v, outputLocation); err != nil {
+			span.RecordError(err)
+			slog.Error("Failed to reinitialize MIDI after reload",
+				slog.Any("error", err))
+		} else {
+			slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
+		}
+	default:
+		batchSize := 100
+		output, err := Mp.NewBadgerOutput(outputLocation, batchSize)
+		if err != nil {
+			span.RecordError(err)
+			slog.Error("Failed to reinitialize BadgerDB after reload",
+				slog.String("output", outputLocation),
+				slog.Any("error", err))
+		} else {
+			v.QNet.Output = output
+			slog.Info("BadgerOutput reinitialized after reload", slog.String("output", outputLocation))
+		}
+	}
 
 	// Create and start new supervisor
 	v.Supervisor = v.NewPollSupervisor()
