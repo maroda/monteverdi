@@ -2,11 +2,9 @@ package monteverdi
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
 	"go.opentelemetry.io/otel"
 )
@@ -53,15 +51,6 @@ func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 	v.QNet.MU.RLock()
 	defer v.QNet.MU.RUnlock()
 
-	type MetricData struct {
-		Endpoint    string  `json:"endpoint"`
-		Metric      string  `json:"metric"`
-		CurrentVal  int64   `json:"currentVal"`
-		MaxVal      int64   `json:"maxVal"`
-		IsAccent    bool    `json:"isAccent"`
-		PercentUsed float64 `json:"percentUsed"`
-	}
-
 	var allMetrics []MetricData
 
 	for _, ep := range v.QNet.Network {
@@ -87,15 +76,6 @@ func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 		ep.MU.RUnlock()
 	}
 
-	type SystemInfo struct {
-		OutputType  string `json:"outputType"`
-		MIDIPort    string `json:"midiPort,omitempty"`
-		MIDIChannel int    `json:"midiChannel"`
-		MIDIRoot    int    `json:"midiRoot"`
-		MIDIScale   string `json:"midiScale,omitempty"`
-		MIDINotes   string `json:"midiNotes,omitempty"`
-	}
-
 	systemInfo := SystemInfo{
 		OutputType: "None",
 	}
@@ -103,14 +83,8 @@ func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 	if v.QNet.Output != nil {
 		systemInfo.OutputType = v.QNet.Output.Type()
 
-		// If the output type is MIDI, fill in the details
-		if midiOut, ok := v.QNet.Output.(*Mp.MIDIOutput); ok {
-			systemInfo.MIDIPort = midiOut.Port.String()
-			systemInfo.MIDIChannel = int(midiOut.Channel)
-			systemInfo.MIDIRoot = int(midiOut.Root)
-			systemInfo.MIDIScale = fmt.Sprint(midiOut.Scale)
-			systemInfo.MIDINotes = fmt.Sprint(midiOut.ScNotes)
-		}
+		// This should log a warning if the platform doesn't support MIDI
+		v.getMIDISystemInfo(&systemInfo)
 	}
 
 	// Smush the two structs together for a big JSON blob
@@ -121,4 +95,22 @@ func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+type MetricData struct {
+	Endpoint    string  `json:"endpoint"`
+	Metric      string  `json:"metric"`
+	CurrentVal  int64   `json:"currentVal"`
+	MaxVal      int64   `json:"maxVal"`
+	IsAccent    bool    `json:"isAccent"`
+	PercentUsed float64 `json:"percentUsed"`
+}
+
+type SystemInfo struct {
+	OutputType  string `json:"outputType"`
+	MIDIPort    string `json:"midiPort,omitempty"`
+	MIDIChannel int    `json:"midiChannel"`
+	MIDIRoot    int    `json:"midiRoot"`
+	MIDIScale   string `json:"midiScale,omitempty"`
+	MIDINotes   string `json:"midiNotes,omitempty"`
 }
