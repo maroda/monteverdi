@@ -5,10 +5,26 @@ function updateMetricsTable() {
     fetch('/api/metrics-data')
         .then(r => r.json())
         .then(data => {
+            // Update system-info
+            if (data.system) {
+                document.getElementById('output-type').textContent = data.system.outputType;
+
+                if (data.system.outputType === 'MIDI') {
+                    document.getElementById('midi-details').style.display = 'block';
+                    document.getElementById('midi-port').textContent = data.system.midiPort || '-';
+                    document.getElementById('midi-channel').textContent = data.system.midiChannel ?? '-';
+                    document.getElementById('midi-root').textContent = data.system.midiRoot ?? '-';
+                    document.getElementById('midi-scale').textContent = data.system.midiScale;
+                    document.getElementById('midi-notes').textContent = data.system.midiNotes;
+                } else {
+                    document.getElementById('midi-details').style.display = 'none';
+                }
+            }
+
             const tbody = document.getElementById('metrics-tbody');
             tbody.innerHTML = '';
 
-            data.forEach(metric => {
+            data.metrics.forEach(metric => {
                 const row = tbody.insertRow();
 
                 // Endpoint

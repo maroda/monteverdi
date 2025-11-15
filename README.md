@@ -35,14 +35,68 @@ An endpoint is any URL that serves K/V data (delimiter is configurable), for ins
 
 ### Active Plugins
 
-- Setting `MONTEVERDI_OUTPUT` to **a file path** will run the BadgerDB output adapter. This writes the stream of pulses to the database for archiving.
-- Setting `MONTEVERDI_OUTPUT` to **"MIDI"** will run the MIDI output adapter. It assumes there is a connected MIDI interface with a device receiving messages.
-- Configure the `calc_rate` transformer to ingest counting metrics as a rate.
-- Configure the `json_key` transformer to read an endpoint and extract data from a JSON blob.
+> Plugins are not required to use Monteverdi. The pattern recognition and pulse generation are core elements, while Plugins are used for extended functionality.
+> 
+> _Currently only one Output adapter can be used at a time, but that is usually what you want._
 
-Not a plugin but still useful is the `interval` setting for configuring the duration between polls for each endpoint.
+#### Transformer: calc_rate
 
-> _The included `config.json` has examples._
+Configure `transformer: calc_rate` to ingest a monotonically increasing value as a rate.
+```json
+      "go_memstats_alloc_bytes_total": {
+        "type": "counter",
+        "transformer": "calc_rate",
+        "max": 20000000
+      },
+```
+
+#### Transformer: json_key
+
+Configure `transformer: json_key` to read an endpoint and extract data from a JSON blob.
+```json
+      "bitcoin.usd": {
+        "type": "gauge",
+        "transformer": "json_key",
+        "max": 115200
+      }
+```
+
+#### Output: BadgerDB
+
+> Setting `MONTEVERDI_OUTPUT` to **any directory path** will run the BadgerDB output adapter at that path. It does not need to exist first.
+
+This archives the stream of pulses to a local BadgerDB database.
+
+_Future versions will have a query API and a way to replay pulses from an archive._
+
+#### Output: MIDI
+
+> Setting `MONTEVERDI_OUTPUT` to **"MIDI"** will run the MIDI output adapter.
+
+This requires a connected MIDI interface and a device receiving messages.
+Download the binary for your system from the releases page to use MIDI.
+MacOS and Linux are currently supported.
+
+The MIDI Output plugin has Root and Scale configurations, defaulting to one-octave of C-Major.
+When Monteverdi detects a pulse, it plays a note. The Plugin has an internal shift register of
+notes that cycle through all values over and over. Individual pulses will play normally moving
+step-by-step up the Scale starting from Root and wrapping to the beginning.
+
+When pulses occur within 50ms of each other, they are grouped as a Chord.
+With Polyphonic MIDI, a chord should play on the event. With Monophonic MIDI (like most
+modular synths or boutique tabletops), the chord will be arpeggiated.
+
+The MIDI Output queue can back up due to the latency and timing checks, quitting the app
+will stop the output but allow the queued notes to continue playing.
+If you don't have the time to wait, issue a `pkill -9 monteverdi` and be prepared to reset
+your MIDI device if a note gets stuck (or wait until you start up Monteverdi again and it begins to play).
+This is also true for live reloads of the configuration.
+
+_Future versions will have a UI to change MIDI parameters, like 'arp delay' or 'root note', and a panic All Notes Off button._
+
+> MIDI Output has been tested extensively on the Winterbloom Sol interface and works with an Arturia Keystep37.
+> 
+> Details of the running MIDI configuration will be found on <http://localhost:8090/metrics-data.html>
 
 ### Web UI
 
@@ -101,11 +155,10 @@ The fields are:
 - **id**: The unique string ID of the endpoint where you're getting metrics. Small is best, it is displayed in the UI.
 - **url**: The URL of that endpoint.
 - **delim**: The delimiter used to indicate "key" and "value".
-- **metrics**: Gauges or Counters (with a built-in Rate Transformer Plugin), see examples for details.
+- **interval**: The duration between polls for each endpoint, in seconds.
+- metric entries: **name**, **type**, **transformer (optional)**, **max**
 
 > See `example_config.json` for a complex example, or `config.json` to play around with Monteverdi's own Prometheus stats.
-
-Once you have this populated, use the runtime or docker options below to point Monteverdi at your config.
 
 ### Configuration Endpoint
 
@@ -178,7 +231,7 @@ This repo builds public container packages that you can use to try Monteverdi ou
 docker run -p 8090:8090 --network host ghcr.io/maroda/monteverdi:latest
 ```
 
-> The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works. When using public hostnames in `config.json`, this is not necessary.
+The included `config.json` checks monteverdi's own `/metrics` endpoint, which requires the `--network host` part so that `localhost` works. When using public hostnames in `config.json`, this is not necessary.
 
 To use your own config, set up the JSON and pass it to the container as a mount:
 ```shell

@@ -620,7 +620,12 @@ func (v *View) exit() {
 	v.Screen.Fini()
 
 	if v.QNet.Output != nil {
-		v.QNet.Output.Close()
+		err := v.QNet.Output.Close()
+		if err != nil {
+			slog.Error("Failed to close output during exit",
+				slog.Any("output", v.QNet.Output),
+				slog.Any("error", err))
+		}
 	}
 
 	os.Exit(0)
@@ -786,7 +791,7 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 		}
 		defer view.QNet.Output.Close()
 
-		slog.Info("MIDI Adapter Enabled", slog.String("output", outputLocation))
+		slog.Debug("MIDI Adapter Enabled", slog.String("output", outputLocation))
 	default:
 		// configure BadgerDB at MONTEVERDI_OUTPUT
 		batchSize := 100
@@ -800,7 +805,7 @@ func StartHarmonyView(c []Ms.ConfigFile, path string) error {
 		view.QNet.Output = output
 		defer output.Close()
 
-		slog.Info("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
+		slog.Debug("BadgerOutput Adapter Enabled", slog.String("output", outputLocation))
 	}
 
 	// Register config file location

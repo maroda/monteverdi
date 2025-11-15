@@ -95,12 +95,11 @@ async function loadMetricsList() {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const metrics = await response.json();
-
+        const data = await response.json();
         const select = document.getElementById('metric-select');
 
         // Build unique list of endpoint:metric combinations
-        metrics.forEach(m => {
+        data.metrics.forEach(m => {
             const option = document.createElement('option');
             option.value = `${m.endpoint}:${m.metric}`;
             option.textContent = `${m.endpoint} → ${m.metric}`;
@@ -126,10 +125,10 @@ async function displaySelectedMetric() {
 
     try {
         const response = await fetch('/api/metrics-data');
-        const allMetrics = await response.json();
+        const data = await response.json();
 
         // Find the matching metric
-        const metricData = allMetrics.find(m =>
+        const metricData = data.metrics.find(m =>
             m.endpoint === endpoint && m.metric === metric
         );
 
