@@ -1,4 +1,4 @@
-// metrics.js - Handle the live metrics table display
+// metrics-data.js - Handle the live metrics table display
 
 // Fetch and display current metric values
 function updateMetricsTable() {

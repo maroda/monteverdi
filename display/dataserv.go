@@ -2,9 +2,13 @@ package monteverdi
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
+	Mp "github.com/maroda/monteverdi/plugin"
 	Ms "github.com/maroda/monteverdi/server"
 	"go.opentelemetry.io/otel"
 )
@@ -23,6 +27,10 @@ func (v *View) SetupMux() *mux.Router {
 	r.HandleFunc("/api/version", v.VersionHandler)
 	r.HandleFunc("/api/metrics-data", v.MetricsDataHandler)
 
+	// Plugin controls
+	r.PathPrefix("/api/plugin").HandlerFunc(v.PluginControlHandler)
+
+	// HTML pages
 	r.HandleFunc("/editor", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/value-editor.html")
 	})
@@ -38,11 +46,16 @@ func (v *View) SetupMux() *mux.Router {
 
 var Version = "dev"
 
+// VersionHandler returns the current release version
+// This must be compiled with:
+//
+//	go build -ldflags "-X github.com/maroda/monteverdi/display.Version=$(git describe --tags --always)"
 func (v *View) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"version": Version})
 }
 
+// MetricsDataHandler returns a JSON blob with the full set of running metrics and systeminfo
 func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx, span := otel.Tracer("monteverdi/api").Start(ctx, "MetricsDataHandler")
@@ -76,15 +89,17 @@ func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 		ep.MU.RUnlock()
 	}
 
-	systemInfo := SystemInfo{
-		OutputType: "None",
-	}
+	systemInfo := &SystemInfo{}
 
-	if v.QNet.Output != nil {
+	// Check for what value OutputType can be set
+	if v.QNet.Output == nil {
+		systemInfo.OutputType = "None"
+	} else {
 		systemInfo.OutputType = v.QNet.Output.Type()
-
-		// This should log a warning if the platform doesn't support MIDI
-		v.getMIDISystemInfo(&systemInfo)
+		switch systemInfo.OutputType {
+		case "MIDI":
+			v.getMIDISystemInfo(systemInfo)
+		}
 	}
 
 	// Smush the two structs together for a big JSON blob
@@ -95,6 +110,64 @@ func (v *View) MetricsDataHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (v *View) PluginControlHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := otel.Tracer("monteverdi/api").Start(ctx, "PluginControlHandler")
+	defer span.End()
+
+	// This endpoint only allows POST
+	if r.Method != http.MethodPost {
+		span.RecordError(fmt.Errorf("invalid method: %s", r.Method))
+		slog.Error("invalid method", slog.String("method", r.Method))
+		http.Error(w, "invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// If no output is configured, this endpoint throws an error
+	var output Mp.OutputAdapter
+	if output = v.QNet.Output; output == nil {
+		span.RecordError(fmt.Errorf("no output configured"))
+		slog.Error("no output configured")
+		http.Error(w, "no output configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Parse control action from URI
+	parts := strings.Split(r.URL.Path, "/")
+	slog.Debug("parts: ", slog.Any("parts: ", parts))
+	if len(parts) < 4 {
+		span.RecordError(fmt.Errorf("invalid path: %s", r.URL.Path))
+		slog.Error("Invalid plugin control URL: " + r.URL.Path)
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	// Get API control from third part of URI
+	control := parts[3]
+	switch control {
+	case "close":
+		if c, ok := output.(interface{ Close() error }); ok {
+			c.Close()
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "OUTPUT CLOSED"})
+		}
+	case "flush":
+		if f, ok := output.(interface{ Flush() error }); ok {
+			f.Flush()
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "WRITE CACHE FLUSHED"})
+		}
+	case "type":
+		if t, ok := output.(interface{ Type() string }); ok {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(t.Type())
+		}
+	default:
+		span.RecordError(fmt.Errorf("invalid control: %s", control))
+		http.Error(w, "invalid control", http.StatusBadRequest)
+	}
 }
 
 type MetricData struct {

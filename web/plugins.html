@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monteverdi - Plugins</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="plugins.css">
+</head>
+<body>
+
+<div id="container">
+    <h1>Monteverdi Plugin Control <span style="font-size: 0.5em; color: #888;" id="version"></span></h1>
+
+    <div style="margin-top: 20px; padding: 15px; background: rgba(45,45,45,0.5); border-radius: 8px; font-size: 13px; color: #aaa;">
+        <h4 style="color: #e85ff8; margin-top: 0;">Plugin Control Parameters</h4>
+        <p style="line-height: 1.8; margin: 10px 0;">
+            These controls provide direct access to the Monteverdi Output plugin.
+        </p>
+        <ol style="line-height: 1.8;">
+            <li><strong style="color: #00fce7;">Type</strong> displays the name of the selected Output</li>
+            <li><strong style="color: #ffcc00;">Flush</strong> clears the write cache by writing it to the Output</li>
+            <li><strong style="color: #ff7f00;">Close</strong> will shut down the Output</li>
+        </ol>
+    </div>
+
+    <div class="nav-link">
+        <a href="/">← Back to Harmony View</a> |
+        <a href="/metrics-data.html">Metrics Data</a> |
+        <a href="/value-editor.html">Value Editor</a>
+    </div>
+
+    <div id="pluginControls">
+        <div>
+            <span class="plugin-settings" style="display: flex; flex-direction: column; gap: 10px;">
+            <button id="outputType">Show Output Type ℹ️</button>
+            <button id="outputFlush">Flush Output Cache 🔄</button>
+            <button id="outputClose">Close Output ⚠️</button>
+            </span>
+        </div>
+        <div id="pluginResponse" class="feedback"></div>
+    </div>
+
+    <div id="system-info" style="margin: 20px 0; padding: 15px; background: rgba(95,167,59,0.1); border-radius: 8px; border: 1px solid #5fa73b;">
+        <h3 style="color: #5fa73b; margin-top: 0;">System Configuration</h3>
+        <div style="font-family: monospace; font-size: 12px; line-height: 1.8;">
+            <div><strong>Output:</strong> <span id="output-type">-</span></div>
+            <div id="midi-details" style="display: none;">
+                <div><strong>MIDI Port:</strong> <span id="midi-port">-</span>&nbsp;
+                    <strong>MIDI Channel:</strong> <span id="midi-channel">-</span>&nbsp;
+                    <strong>Root Note:</strong> <span id="midi-root">-</span></div>
+                <div><strong>Scale:</strong> <span id="midi-scale">-</span>&nbsp;
+                    <strong>Notes:</strong> <span id="midi-notes">-</span></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="plugins.js"></script>
+<script>
+    // Fetch version
+    fetch('/api/version')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('version').textContent = data.version;
+        })
+        .catch(err => console.log('Version fetch failed:', err));
+</script>
+</body>
+</html>

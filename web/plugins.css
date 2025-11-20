@@ -1,0 +1,58 @@
+.feedback {
+    margin: 0;
+    padding: 10px;
+    border-radius: 4px;
+    min-width: 200px;
+    min-height: 30px;
+    border: 1px solid #ddd;
+    background-color: #f8f9fa;
+    color: #666;
+}
+
+.feedback.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.feedback.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.feedback:empty::before {
+    content: 'No plugin actions yet';
+    color: #999;
+    font-style: italic;
+}
+
+#pluginControls {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: center;
+    margin: 0 auto;
+    max-width: fit-content;
+}
+
+.plugin-settings button {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 2px;
+    padding: 2px 6px;
+    cursor: crosshair;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+
+.plugin-settings button:hover {
+    background-color: #4a4a4a;
+    border-color: #777;
+}
+
+.plugin-settings button:active {
+    background-color: #2a2a2a;
+}
