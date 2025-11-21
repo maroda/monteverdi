@@ -171,7 +171,7 @@ func PulseDecode(data []byte) (*Mt.PulseEvent, error) {
 }
 
 // QueryRange retrieves pulses within a time range
-func (bo *BadgerOutput) QueryRange(start, end time.Time) ([]*Mt.PulseEvent, error) {
+func (bo *BadgerOutput) QueryRange(start, end time.Time) (interface{}, error) {
 	var pulses []*Mt.PulseEvent
 
 	// db.View() callback

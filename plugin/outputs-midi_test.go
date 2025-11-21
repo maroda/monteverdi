@@ -12,17 +12,48 @@ import (
 	"gitlab.com/gomidi/midi/v2"
 )
 
-func TestMIDIOutput_DataTypes(t *testing.T) {
-	t.Run("Returns error for QueryRange (not implemented)", func(t *testing.T) {
-		adapter, err := Mp.NewMIDIOutput(0)
-		assertError(t, err, nil)
-		defer adapter.Close()
+func TestMIDIOutput_QueryRange(t *testing.T) {
+	adapter, err := Mp.NewMIDIOutput(0)
+	assertError(t, err, nil)
+	defer adapter.Close()
 
-		_, err = adapter.QueryRange(time.Now(), time.Now())
-		assertGotError(t, err)
-		assertStringContains(t, err.Error(), "not implemented")
+	t.Run("Returns Empty QueryRange", func(t *testing.T) {
+		get, err := adapter.QueryRange(time.Now(), time.Now())
+		assertError(t, err, nil)
+		got, ok := get.(*Mp.NoteTracker)
+		if !ok {
+			t.Errorf("Expected Mp.NoteTracker, got %T", get)
+		}
+
+		depth := 0
+		// The defined depth should equal the constructed queue depth
+		assertInt(t, depth, got.Depth)
 	})
 
+	t.Run("Returns QueryRange with NoteTracker", func(t *testing.T) {
+		// Add to the Note Tracker Queue
+		depth := 8
+		for i := 0; i < depth; i++ {
+			adapter.Queue = append(adapter.Queue, Mp.ScheduledNote{
+				Channel: adapter.Channel,
+				Note:    adapter.ScNotes[i],
+				OffTime: time.Now().Add(time.Duration((i*100)+rand.Intn(200)) * time.Millisecond),
+			})
+		}
+
+		get, err := adapter.QueryRange(time.Now(), time.Now())
+		assertError(t, err, nil)
+		got, ok := get.(*Mp.NoteTracker)
+		if !ok {
+			t.Errorf("Expected Mp.NoteTracker, got %T", get)
+		}
+
+		// The defined depth should equal the constructed queue depth
+		assertInt(t, depth, got.Depth)
+	})
+}
+
+func TestMIDIOutput_Type(t *testing.T) {
 	t.Run("Returns Type", func(t *testing.T) {
 		adapter, err := Mp.NewMIDIOutput(0)
 		assertError(t, err, nil)
@@ -33,6 +64,92 @@ func TestMIDIOutput_DataTypes(t *testing.T) {
 		}
 	})
 }
+
+func TestMIDIOutput_ScaleStep(t *testing.T) {
+	adapter, err := Mp.NewMIDIOutput(0)
+	assertError(t, err, nil)
+	defer adapter.Close()
+
+	tests := []struct {
+		name  string
+		root  uint8
+		notes []uint8
+		steps []uint8
+	}{
+		{
+			"Returns the next member of the scale, C Diatonic Major",
+			60,
+			[]uint8{60, 62, 64, 65, 67, 69, 71, 72},
+			[]uint8{0, 2, 2, 1, 2, 2, 2, 1}, // This is also the default, diatonic major
+		},
+		{
+			"Returns the next member of the scale, D Diatonic Major",
+			62,
+			[]uint8{62, 64, 66, 67, 69, 71, 73, 74},
+			[]uint8{0, 2, 2, 1, 2, 2, 2, 1}, // diatonic major
+		},
+		{
+			"Returns the next member of the scale, D Natural Minor",
+			62,
+			[]uint8{62, 64, 65, 67, 69, 71, 72, 74},
+			[]uint8{0, 2, 1, 2, 2, 2, 1, 2}, // natural minor
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter.Scale = tt.steps
+			adapter.ScIdx = 0 // This should be incremented each time, only set it once
+			for i := 0; i < len(tt.steps); i++ {
+				if adapter.ScIdx != i {
+					t.Errorf("Expected Scale Index to self-increment to %d, got %d", i, adapter.ScIdx)
+				}
+
+				got := adapter.ScaleStep(tt.root)
+
+				if got != tt.notes[i] {
+					t.Errorf("Expected note to increment to %d, got %d", tt.notes[i], got)
+				}
+			}
+		})
+	}
+
+	t.Run("Wraps to the first member of the default scale", func(t *testing.T) {
+		root := uint8(60)
+		notes := []uint8{60, 62, 64, 65, 67, 69, 71, 72}
+		adapter.ScIdx = 0
+
+		// first step through all notes
+		for i := 0; i < len(adapter.Scale); i++ {
+			adapter.ScaleStep(root)
+		}
+
+		// now step one more and it should wrap
+		got := adapter.ScaleStep(root)
+		if got != notes[0] {
+			t.Errorf("Expected wrap to first note %d, got %d", notes[0], got)
+		}
+
+	})
+}
+
+func TestMIDIOutput_ScaleNotes(t *testing.T) {
+	adapter, err := Mp.NewMIDIOutput(0)
+	assertError(t, err, nil)
+	defer adapter.Close()
+
+	t.Run("Returns correct scale", func(t *testing.T) {
+		CMajor := []uint8{60, 62, 64, 65, 67, 69, 71, 72}
+		// DiatonicMaj := []uint8{0, 2, 2, 1, 2, 2, 2, 1}
+
+		got := adapter.ScaleNotes()
+		if !reflect.DeepEqual(got, CMajor) {
+			t.Errorf("Expected ScaleNotes to return %v, got %v", CMajor, got)
+		}
+	})
+}
+
+// INTEGRATION TESTING: Audio confirmation of tests is recommended //
 
 func TestMIDIOutput_WritePulse(t *testing.T) {
 	t.Run("Errors when NoteOn fails", func(t *testing.T) {
@@ -121,91 +238,6 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 	})
 }
 
-func TestMIDIOutput_ScaleStep(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
-	assertError(t, err, nil)
-	defer adapter.Close()
-
-	tests := []struct {
-		name  string
-		root  uint8
-		notes []uint8
-		steps []uint8
-	}{
-		{
-			"Returns the next member of the scale, C Diatonic Major",
-			60,
-			[]uint8{60, 62, 64, 65, 67, 69, 71, 72},
-			[]uint8{0, 2, 2, 1, 2, 2, 2, 1}, // This is also the default, diatonic major
-		},
-		{
-			"Returns the next member of the scale, D Diatonic Major",
-			62,
-			[]uint8{62, 64, 66, 67, 69, 71, 73, 74},
-			[]uint8{0, 2, 2, 1, 2, 2, 2, 1}, // diatonic major
-		},
-		{
-			"Returns the next member of the scale, D Natural Minor",
-			62,
-			[]uint8{62, 64, 65, 67, 69, 71, 72, 74},
-			[]uint8{0, 2, 1, 2, 2, 2, 1, 2}, // natural minor
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			adapter.Scale = tt.steps
-			adapter.ScIdx = 0 // This should be incremented each time, only set it once
-			for i := 0; i < len(tt.steps); i++ {
-				if adapter.ScIdx != i {
-					t.Errorf("Expected Scale Index to self-increment to %d, got %d", i, adapter.ScIdx)
-				}
-
-				got := adapter.ScaleStep(tt.root)
-
-				if got != tt.notes[i] {
-					t.Errorf("Expected note to increment to %d, got %d", tt.notes[i], got)
-				}
-			}
-		})
-	}
-
-	t.Run("Wraps to the first member of the default scale", func(t *testing.T) {
-		root := uint8(60)
-		notes := []uint8{60, 62, 64, 65, 67, 69, 71, 72}
-		adapter.ScIdx = 0
-
-		// first step through all notes
-		for i := 0; i < len(adapter.Scale); i++ {
-			adapter.ScaleStep(root)
-		}
-
-		// now step one more and it should wrap
-		got := adapter.ScaleStep(root)
-		if got != notes[0] {
-			t.Errorf("Expected wrap to first note %d, got %d", notes[0], got)
-		}
-
-	})
-}
-
-func TestMIDIOutput_ScaleNotes(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
-	assertError(t, err, nil)
-	defer adapter.Close()
-
-	t.Run("Returns correct scale", func(t *testing.T) {
-		CMajor := []uint8{60, 62, 64, 65, 67, 69, 71, 72}
-		// DiatonicMaj := []uint8{0, 2, 2, 1, 2, 2, 2, 1}
-
-		got := adapter.ScaleNotes()
-		if !reflect.DeepEqual(got, CMajor) {
-			t.Errorf("Expected ScaleNotes to return %v, got %v", CMajor, got)
-		}
-	})
-}
-
-// INTEGRATION: Audio confirmation through MIDI
 func TestMIDIOutput_ScaleAudio(t *testing.T) {
 	adapter, err := Mp.NewMIDIOutput(0)
 	assertError(t, err, nil)

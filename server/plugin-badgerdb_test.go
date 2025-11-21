@@ -70,8 +70,13 @@ func TestQNet_PulseDetectWriteBadgerDB(t *testing.T) {
 		qn.PulseDetect(testMetric, 0)
 
 		// Now check if the database has the data
-		got, err := qn.Output.QueryRange(now.Add(-20*time.Second), now.Add(2*time.Second))
+		get, err := qn.Output.QueryRange(now.Add(-20*time.Second), now.Add(2*time.Second))
 		assertError(t, err, nil)
+
+		got, ok := get.([]*Mt.PulseEvent)
+		if !ok {
+			t.Errorf("Expected to get PulseEvent but got %v", get)
+		}
 		assertStringContains(t, got[0].Metric[0], testMetric)
 	})
 }
@@ -95,7 +100,7 @@ func (fbo *FailingBadgerOutput) WritePulse(pulse *Mt.PulseEvent) error {
 func (fbo *FailingBadgerOutput) WriteBatch(pulses []*Mt.PulseEvent) error {
 	return nil
 }
-func (fbo *FailingBadgerOutput) QueryRange(start, end time.Time) ([]*Mt.PulseEvent, error) {
+func (fbo *FailingBadgerOutput) QueryRange(start, end time.Time) (interface{}, error) {
 	return fbo.Pulses, nil
 }
 func (fbo *FailingBadgerOutput) Flush() error { return nil }

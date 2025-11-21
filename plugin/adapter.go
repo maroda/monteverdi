@@ -28,10 +28,10 @@ type MetricTransformer interface {
 // OutputAdapter can be used to define a place for the data to go,
 // pulse-by-pulse or in batches if supported by the output type.
 type OutputAdapter interface {
-	WritePulse(pulse *Mt.PulseEvent) error                     // Write singleton pulse data
-	WriteBatch(pulses []*Mt.PulseEvent) error                  // Write batches of pulses
-	QueryRange(start, end time.Time) ([]*Mt.PulseEvent, error) // Time range query tool
-	Flush() error                                              // Flush any buffered data
-	Close() error                                              // Close the adapter and release resources
-	Type() string                                              // ID for output
+	WritePulse(pulse *Mt.PulseEvent) error                // Write singleton pulse data
+	WriteBatch(pulses []*Mt.PulseEvent) error             // Write batches of pulses
+	QueryRange(start, end time.Time) (interface{}, error) // Time range query tool
+	Flush() error                                         // Flush any buffered data
+	Close() error                                         // Close the adapter and release resources
+	Type() string                                         // ID for output
 }

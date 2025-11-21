@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"sync"
 	"time"
 
@@ -17,9 +18,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// MIDIOutput is a
+// MIDIOutput is the interface for the MIDI Output Plugin Adapter
 type MIDIOutput struct {
-	WG       sync.WaitGroup
+	WG       sync.WaitGroup                 // Go channels for NoteOff events
+	QueMU    sync.Mutex                     // Note Tracker Queue protection
+	Queue    []ScheduledNote                // Pending notes being tracked
 	Port     drivers.Out                    // standard driver type
 	Send     func(msg midi.Message) error   // any midi message
 	NoteOff  func(midic, midin uint8) error // e.g. for quantization and testing
@@ -35,6 +38,14 @@ type MIDIOutput struct {
 	IsPoly   bool                           // Whether the MIDI output is polyphonic (false: monophonic)
 	Grouper  []*Mt.PulseEvent               // Grouper for chords or other entities
 	LastTS   time.Time                      // Most recent pulse timestamp
+}
+
+// ScheduledNote is a tracking queue used for reporting purposes
+// It sits in parallel with the real-time MIDI note management
+type ScheduledNote struct {
+	Channel uint8
+	Note    uint8
+	OffTime time.Time // NoteOff is fired
 }
 
 // NewMIDIOutput is the router for pulse to become MIDI note,
@@ -64,6 +75,8 @@ func NewMIDIOutput(port int) (*MIDIOutput, error) {
 
 	initmidi := &MIDIOutput{
 		WG:       sync.WaitGroup{},
+		QueMU:    sync.Mutex{},
+		Queue:    []ScheduledNote{},
 		Port:     out,
 		Send:     send,
 		Channel:  defaultChannel,
@@ -194,8 +207,21 @@ func (mo *MIDIOutput) WriteBatch(pulses []*Mt.PulseEvent) error {
 				return fmt.Errorf("WriteBatch NoteOn event failed: %q", err)
 			}
 
+			// NoteOffMIDI is performed in a goroutine,
+			// allowing notes to be independently stacked.
+			// Before the WaitGroup is created, the NoteOff
+			// data is shared with a tracking queue.
+			noteOffTime := time.Now().Add(pulse.Duration)
+			mo.QueMU.Lock()
+			mo.Queue = append(mo.Queue, ScheduledNote{
+				Channel: mo.Channel,
+				Note:    note,
+				OffTime: noteOffTime,
+			})
+			mo.QueMU.Unlock()
+
 			mo.WG.Add(1)
-			go func(duration time.Duration) {
+			go func(duration time.Duration, note uint8, offTime time.Time) {
 				defer mo.WG.Done()
 
 				_, noteSpan := otel.Tracer("monteverdi/plugin").Start(ctx, "WriteBatch.NoteOff_goroutine")
@@ -203,11 +229,17 @@ func (mo *MIDIOutput) WriteBatch(pulses []*Mt.PulseEvent) error {
 
 				time.Sleep(duration)
 
+				// Note is removed from tracker queue
+				// before NoteOff event is sent
+				mo.QueMU.Lock()
+				mo.Queue = trimNoteTracker(mo.Queue, note, offTime)
+				mo.QueMU.Unlock()
+
 				if err := mo.NoteOff(mo.Channel, note); err != nil {
 					slog.Error("NoteOff event failed, attempting Flush")
 					mo.Flush()
 				}
-			}(pulse.Duration)
+			}(pulse.Duration, note, noteOffTime)
 		}
 		return nil
 	}()
@@ -286,8 +318,19 @@ func (mo *MIDIOutput) WritePulse(pulse *Mt.PulseEvent) error {
 
 		// NoteOffMIDI is performed in a goroutine,
 		// allowing notes to be independently stacked.
+		// Before the WaitGroup is created, the NoteOff
+		// data is shared with a tracking queue.
+		noteOffTime := time.Now().Add(pulse.Duration)
+		mo.QueMU.Lock()
+		mo.Queue = append(mo.Queue, ScheduledNote{
+			Channel: mo.Channel,
+			Note:    note,
+			OffTime: noteOffTime,
+		})
+		mo.QueMU.Unlock()
+
 		mo.WG.Add(1)
-		go func(duration time.Duration) {
+		go func(duration time.Duration, note uint8, offTime time.Time) {
 			defer mo.WG.Done()
 
 			// The OTEL child span is set here for measuring the entire note event.
@@ -296,11 +339,17 @@ func (mo *MIDIOutput) WritePulse(pulse *Mt.PulseEvent) error {
 
 			time.Sleep(duration)
 
+			// Note is removed from tracker queue
+			// before NoteOff event is sent
+			mo.QueMU.Lock()
+			mo.Queue = trimNoteTracker(mo.Queue, note, offTime)
+			mo.QueMU.Unlock()
+
 			if err := mo.NoteOff(mo.Channel, note); err != nil {
 				slog.Error("NoteOff event failed, attempting Flush")
 				mo.Flush()
 			}
-		}(pulse.Duration)
+		}(pulse.Duration, note, noteOffTime)
 
 	}
 
@@ -308,8 +357,23 @@ func (mo *MIDIOutput) WritePulse(pulse *Mt.PulseEvent) error {
 	return nil
 }
 
+func trimNoteTracker(queue []ScheduledNote, note uint8, offTime time.Time) []ScheduledNote {
+	for i, sn := range queue {
+		if sn.Note == note && sn.OffTime.Equal(offTime) {
+			return append(queue[:i], queue[i+1:]...)
+		}
+	}
+	return queue
+}
+
 // Flush sends an AllNotesOff to the active channel
 func (mo *MIDIOutput) Flush() error {
+	// Reset the Note Tracker
+	mo.QueMU.Lock()
+	mo.Queue = []ScheduledNote{}
+	mo.QueMU.Unlock()
+
+	// Send AllNotesOff
 	return mo.Send(midi.ControlChange(mo.Channel, midi.AllNotesOff, midi.Off))
 }
 
@@ -327,12 +391,43 @@ func (mo *MIDIOutput) Close() error {
 // Type for this plugin
 func (mo *MIDIOutput) Type() string { return "MIDI" }
 
-// WriteBatch is Not Implemented
-//func (mo *MIDIOutput) WriteBatch(pulses []*Mt.PulseEvent) error {
-//	return fmt.Errorf("not implemented")
-//}
+// QueryRange reads the Note Tracker Queue to return information about future notes.
+func (mo *MIDIOutput) QueryRange(start, end time.Time) (interface{}, error) {
+	mo.QueMU.Lock()
+	defer mo.QueMU.Unlock()
 
-// QueryRange is Not Implemented
-func (mo *MIDIOutput) QueryRange(start, end time.Time) ([]*Mt.PulseEvent, error) {
-	return nil, fmt.Errorf("not implemented")
+	if len(mo.Queue) == 0 {
+		return &NoteTracker{Depth: 0}, nil
+	}
+
+	// Locate queue bookends by finding min/max of NoteOff time
+	oldest := mo.Queue[0].OffTime
+	newest := mo.Queue[0].OffTime
+	for _, sn := range mo.Queue {
+		if sn.OffTime.Before(oldest) {
+			oldest = sn.OffTime
+		}
+		if sn.OffTime.After(newest) {
+			newest = sn.OffTime
+		}
+	}
+
+	return &NoteTracker{
+		Depth:          len(mo.Queue),
+		Oldest:         oldest,
+		Newest:         newest,
+		Window:         newest.Sub(oldest),
+		GrouperSize:    len(mo.Grouper),
+		ActiveRoutines: runtime.NumGoroutine(),
+	}, nil
+}
+
+// NoteTracker is a Queue for tracking future notes.
+type NoteTracker struct {
+	Depth          int           `json:"noteDepth"`
+	Oldest         time.Time     `json:"noteOldest"`
+	Newest         time.Time     `json:"noteNewest"`
+	Window         time.Duration `json:"noteWindow"`
+	GrouperSize    int           `json:"noteGrouperSize"`
+	ActiveRoutines int           `json:"activeRoutines"`
 }

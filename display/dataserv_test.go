@@ -74,10 +74,56 @@ func TestView_VersionHandler(t *testing.T) {
 }
 
 func TestView_MetricsDataHandler(t *testing.T) {
-	r := httptest.NewRequest("GET", "/api/metrics-data", nil)
-	w := httptest.NewRecorder()
+	t.Run("Metrics Data Endpoint", func(t *testing.T) {
+		r := httptest.NewRequest("GET", "/api/metrics-data", nil)
+		w := httptest.NewRecorder()
+		view := makeTestView(t)
+		view.MetricsDataHandler(w, r)
+		assertStatus(t, w.Code, http.StatusOK)
+	})
+}
 
-	// Set up data: New QNet, add Endpoint, create View.
+func TestView_PluginControlHandlerNoOutput(t *testing.T) {
+	view := makeTestView(t)
+
+	tests := []struct {
+		name     string
+		method   string
+		target   string
+		assert   int
+		contains string
+	}{
+		{
+			name:     "Plugin Control Endpoint: Bad Method",
+			method:   "GET",
+			target:   "/api/plugin/type",
+			assert:   http.StatusMethodNotAllowed, // 405
+			contains: "invalid",
+		},
+		{
+			name:     "Plugin Control Endpoint: No Output",
+			method:   "POST",
+			target:   "/api/plugin/type",
+			assert:   http.StatusInternalServerError,
+			contains: "no output",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(tt.method, tt.target, nil)
+			w := httptest.NewRecorder()
+			view.PluginControlHandler(w, r)
+			assertStatus(t, w.Code, tt.assert)
+			assertStringContains(t, w.Body.String(), tt.contains)
+		})
+	}
+}
+
+// Helpers //
+
+// View configured with Endpoint data and no output adapter
+func makeTestView(t *testing.T) *Md.View {
 	qn := makeNewTestQNet(t)
 	qn.Network[0] = &Ms.Endpoint{
 		MU:     sync.RWMutex{},
@@ -86,9 +132,7 @@ func TestView_MetricsDataHandler(t *testing.T) {
 		Mdata:  map[string]int64{"TMETRICT": 110},
 		Maxval: map[string]int64{"TMETRICT": 100},
 	}
-	view := &Md.View{QNet: qn}
-
-	view.MetricsDataHandler(w, r)
+	return &Md.View{QNet: qn}
 }
 
 // NewTestQNet is a special use func for tests that manually set up data and don't need network calls

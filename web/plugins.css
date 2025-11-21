@@ -1,0 +1,205 @@
+.feedback {
+    margin: 0;
+    padding: 10px;
+    border-radius: 4px;
+    min-width: 200px;
+    min-height: 30px;
+    border: 1px solid #ddd;
+    background-color: #f8f9fa;
+    color: #666;
+}
+
+.feedback.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.feedback.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.feedback:empty::before {
+    content: 'control outputs here';
+    color: #999;
+    font-style: italic;
+}
+
+#pluginControls {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: center;
+    margin: 0 auto;
+    max-width: fit-content;
+}
+
+.plugin-settings button {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 2px;
+    padding: 2px 6px;
+    cursor: crosshair;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+
+.plugin-settings button:hover {
+    background-color: #4a4a4a;
+    border-color: #777;
+}
+
+.plugin-settings button:active {
+    background-color: #2a2a2a;
+}
+
+#queuePanel {
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 20px;
+    background-color: #1a1a1a;
+}
+
+#queuePanel h3 {
+    margin-top: 0;
+    color: #4a9eff;
+}
+
+.queue-metric {
+    margin: 10px 0;
+    font-size: 14px;
+}
+
+.queue-metric .label {
+    color: #888;
+    margin-right: 8px;
+}
+
+.queue-metric .value {
+    color: #4a9eff;
+    font-weight: bold;
+    font-family: monospace;
+    font-size: 16px;
+}
+
+.queue-bar-container {
+    position: relative;
+    margin-top: 20px;
+    height: 30px;
+    background-color: #2a2a2a;
+    border-radius: 4px;
+    overflow: visible;
+    cursor: help;
+}
+
+/* Tooltip */
+.queue-bar-container::before {
+    content: attr(data-label);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
+    padding: 6px 12px;
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+/* Tooltip arrow */
+.queue-bar-container::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 2px;
+    border: 6px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+/* Show tooltip on hover */
+.queue-bar-container:hover::before,
+.queue-bar-container:hover::after {
+    opacity: 1;
+}
+
+.queue-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0e4467 0%, rgba(219, 16, 16, 0.5) 100%);
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+.routine-bar-container {
+    position: relative;
+    margin-top: 20px;
+    height: 30px;
+    background-color: #2a2a2a;
+    border-radius: 4px;
+    overflow: visible;
+    cursor: help;
+}
+
+/* Tooltip */
+.routine-bar-container::before {
+    content: attr(data-label);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
+    padding: 6px 12px;
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+/* Tooltip arrow */
+.routine-bar-container::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 2px;
+    border: 6px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+/* Show tooltip on hover */
+.routine-bar-container:hover::before,
+.routine-bar-container:hover::after {
+    opacity: 1;
+}
+
+.routine-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, rgba(95, 167, 59, 0.5) 0%, rgb(255, 127, 127) 100%);
+    transition: width 0.3s ease;
+    width: 0%;
+}
