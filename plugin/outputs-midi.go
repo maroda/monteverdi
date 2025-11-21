@@ -18,6 +18,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+var (
+	DiatonicMajor = []uint8{0, 2, 2, 1, 2, 2, 2, 1}
+	NaturalMinor  = []uint8{0, 2, 1, 2, 2, 2, 1, 2}
+)
+
 // MIDIOutput is the interface for the MIDI Output Plugin Adapter
 type MIDIOutput struct {
 	WG       sync.WaitGroup                 // Go channels for NoteOff events
@@ -32,8 +37,8 @@ type MIDIOutput struct {
 	Scale    []uint8                        // Scale Intervals starting from 0 (for Root)
 	ScIdx    int                            // Track Scale Index for interval interpolation
 	ScNotes  []uint8                        // Notes computed from Root and Scale
-	IntSpace int                            // Build chords with WriteBatch using larger intervals
 	ArpSpace int                            // Build arpeggios with equal timing
+	IntSpace int                            // Build chords with WriteBatch using larger intervals
 	QLimit   int                            // Quantize note limit for one beat
 	IsPoly   bool                           // Whether the MIDI output is polyphonic (false: monophonic)
 	Grouper  []*Mt.PulseEvent               // Grouper for chords or other entities
@@ -51,7 +56,7 @@ type ScheduledNote struct {
 // NewMIDIOutput is the router for pulse to become MIDI note,
 // this is where the `rtmididrv` is initiated and devices connected.
 // This also contains metadata for the musical notes being played.
-func NewMIDIOutput(port int) (*MIDIOutput, error) {
+func NewMIDIOutput(port, arpd, arpi int, root uint8, scale []uint8) (*MIDIOutput, error) {
 	ctx := context.Background()
 	ctx, span := otel.Tracer("monteverdi/plugin").Start(ctx, "NewMIDIOutput")
 	defer span.End()
@@ -68,10 +73,12 @@ func NewMIDIOutput(port int) (*MIDIOutput, error) {
 		return nil, fmt.Errorf("error sending to MIDI port: %q", err)
 	}
 
+	defaultArp := arpd
+	defaultInt := arpi
+	defaultRoot := root
+	defaultScale := scale
 	defaultChannel := uint8(0)
-	defaultRoot := uint8(60)
 	defaultVelocity := uint8(100)
-	defaultScale := []uint8{0, 2, 2, 1, 2, 2, 2, 1} // Diatonic major
 
 	initmidi := &MIDIOutput{
 		WG:       sync.WaitGroup{},
@@ -84,8 +91,8 @@ func NewMIDIOutput(port int) (*MIDIOutput, error) {
 		Velocity: defaultVelocity,
 		Scale:    defaultScale,
 		ScIdx:    0,
-		IntSpace: 1,
-		ArpSpace: 300,
+		ArpSpace: defaultArp,
+		IntSpace: defaultInt,
 		QLimit:   4,
 		IsPoly:   false,
 		Grouper:  []*Mt.PulseEvent{},

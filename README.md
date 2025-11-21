@@ -71,32 +71,39 @@ _Future versions will have a query API and a way to replay pulses from an archiv
 
 #### Output: MIDI
 
-> Setting `MONTEVERDI_OUTPUT` to **"MIDI"** will run the MIDI output adapter.
+MIDI parameters are all controlled via Environment Variable.
 
-This requires a connected MIDI interface and a device receiving messages.
-Download the binary for your system from the releases page to use MIDI.
-MacOS and Linux are currently supported.
+> Setting `MONTEVERDI_OUTPUT=MIDI` will run the MIDI output, optional ENV VARs (defaults shown):
+> 
+> ```
+> MONTEVERDI_PLUGIN_MIDI_PORT=0                 # Choose the MIDI device
+> MONTEVERDI_PLUGIN_MIDI_ROOT=60                # Root for scales (60 = 'C4')
+> MONTEVERDI_PLUGIN_MIDI_SCALE=0,2,2,1,2,2,2,1  # Scale default is Diatonic Major
+> MONTEVERDI_PLUGIN_MIDI_ARP_INTERVAL=1         # Scale interval steps for Chords
+> MONTEVERDI_PLUGIN_MIDI_ARP_DELAY=300          # Delay between arpeggio notes
+> ```
 
-The MIDI Output plugin has Root and Scale configurations, defaulting to one-octave of C-Major.
+- This requires a connected MIDI device. A list of tested hardware is below.
+- Download the binary for your system from the releases page to use MIDI. MacOS and Linux are currently supported.
+- The Docker image does not include support for MIDI output (but may include MIDI file output in the future).
+
 When Monteverdi detects a pulse, it plays a note. The Plugin has an internal shift register of
-notes that cycle through all values over and over. Individual pulses will play normally moving
-step-by-step up the Scale starting from Root and wrapping to the beginning.
+notes, typically arranged like a scale, that cycle through all values over and over as it plays.
 
 When pulses occur within 50ms of each other, they are grouped as a Chord.
 With Polyphonic MIDI, a chord should play on the event. With Monophonic MIDI (like most
 modular synths or boutique tabletops), the chord will be arpeggiated.
 
-The MIDI Output queue can back up due to the latency and timing checks, quitting the app
-will stop the output but allow the queued notes to continue playing.
-If you don't have the time to wait, issue a `pkill -9 monteverdi` and be prepared to reset
-your MIDI device if a note gets stuck (or wait until you start up Monteverdi again and it begins to play).
-This is also true for live reloads of the configuration.
-
-_Future versions will have a UI to change MIDI parameters, like 'arp delay' or 'root note', and a panic All Notes Off button._
-
-> MIDI Output has been tested extensively on the Winterbloom Sol interface and works with an Arturia Keystep37.
+> MIDI Output has been tested with several devices so far:
+> - **Winterbloom Sol** synth module
+> - **Arturia Keystep37**
+> - **IAC Driver** on MacOS (using a softsynth in Ableton Live)
+> - Zoom U-44 built-in MIDI (beware of its small cache that can drop notes)
 > 
-> Details of the running MIDI configuration will be found on <http://localhost:8090/metrics-data.html>
+> Details of the running MIDI configuration will be found on <http://localhost:8090/plugins.html>
+> 
+> Click the **Flush Output** button to clear all queued notes and send a MIDI _AllNotesOff_ message.
+> This is helpful to do before quitting the app if it's playing so notes don't get stuck.
 
 ### Web UI
 

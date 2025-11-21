@@ -13,7 +13,7 @@ import (
 )
 
 func TestMIDIOutput_QueryRange(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
+	adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 	assertError(t, err, nil)
 	defer adapter.Close()
 
@@ -55,7 +55,7 @@ func TestMIDIOutput_QueryRange(t *testing.T) {
 
 func TestMIDIOutput_Type(t *testing.T) {
 	t.Run("Returns Type", func(t *testing.T) {
-		adapter, err := Mp.NewMIDIOutput(0)
+		adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 		assertError(t, err, nil)
 		defer adapter.Close()
 
@@ -66,7 +66,7 @@ func TestMIDIOutput_Type(t *testing.T) {
 }
 
 func TestMIDIOutput_ScaleStep(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
+	adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 	assertError(t, err, nil)
 	defer adapter.Close()
 
@@ -134,7 +134,7 @@ func TestMIDIOutput_ScaleStep(t *testing.T) {
 }
 
 func TestMIDIOutput_ScaleNotes(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
+	adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 	assertError(t, err, nil)
 	defer adapter.Close()
 
@@ -154,7 +154,7 @@ func TestMIDIOutput_ScaleNotes(t *testing.T) {
 func TestMIDIOutput_WritePulse(t *testing.T) {
 	t.Run("Errors when NoteOn fails", func(t *testing.T) {
 		// Use the MIDI adapter on the first port
-		adapter, err := Mp.NewMIDIOutput(0)
+		adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 		assertError(t, err, nil)
 		defer adapter.Close()
 
@@ -192,7 +192,7 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 
 	t.Run("Flush method is correctly called", func(t *testing.T) {
 		// Use the MIDI adapter on the first port
-		adapter, err := Mp.NewMIDIOutput(0)
+		adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 		assertError(t, err, nil)
 		defer adapter.Close()
 
@@ -239,7 +239,7 @@ func TestMIDIOutput_WritePulse(t *testing.T) {
 }
 
 func TestMIDIOutput_ScaleAudio(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
+	adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 	assertError(t, err, nil)
 	defer adapter.Close()
 
@@ -277,7 +277,7 @@ func TestMIDIOutput_ScaleAudio(t *testing.T) {
 }
 
 func TestMIDIOutput_WriteBatch(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
+	adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 	assertError(t, err, nil)
 	defer adapter.Close()
 
@@ -361,7 +361,7 @@ func TestMIDIOutput_WriteBatch(t *testing.T) {
 }
 
 func TestMIDIOutput_WritePulseBatch(t *testing.T) {
-	adapter, err := Mp.NewMIDIOutput(0)
+	adapter, err := Mp.NewMIDIOutput(0, 300, 1, uint8(60), Mp.DiatonicMajor)
 	assertError(t, err, nil)
 	defer adapter.Close()
 
