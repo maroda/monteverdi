@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	Mp "github.com/maroda/monteverdi/plugin"
@@ -147,15 +148,36 @@ func (v *View) PluginControlHandler(w http.ResponseWriter, r *http.Request) {
 	// Get API control from third part of URI
 	control := parts[3]
 	switch control {
+	case "queryrange":
+		if q, ok := output.(interface {
+			QueryRange(start, end time.Time) (interface{}, error)
+		}); ok {
+			query, err := q.QueryRange(time.Now(), time.Now())
+			if err != nil {
+				span.RecordError(err)
+				slog.Error("Error querying range", slog.Any("error", err))
+				http.Error(w, "error querying range", http.StatusInternalServerError)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(query)
+		}
 	case "close":
 		if c, ok := output.(interface{ Close() error }); ok {
-			c.Close()
+			if err := c.Close(); err != nil {
+				span.RecordError(err)
+				slog.Error("Error closing output", slog.Any("error", err))
+				http.Error(w, "error closing output", http.StatusInternalServerError)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"status": "OUTPUT CLOSED"})
 		}
 	case "flush":
 		if f, ok := output.(interface{ Flush() error }); ok {
-			f.Flush()
+			if err := f.Flush(); err != nil {
+				span.RecordError(err)
+				slog.Error("Error flushing output", slog.Any("error", err))
+				http.Error(w, "error flushing output", http.StatusInternalServerError)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"status": "WRITE CACHE FLUSHED"})
 		}
@@ -166,6 +188,7 @@ func (v *View) PluginControlHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	default:
 		span.RecordError(fmt.Errorf("invalid control: %s", control))
+		slog.Error("invalid control", slog.String("control", control))
 		http.Error(w, "invalid control", http.StatusBadRequest)
 	}
 }

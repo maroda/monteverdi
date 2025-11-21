@@ -73,8 +73,12 @@ func TestBadgerOutput_WritePulse(t *testing.T) {
 
 		// Verify database entries
 		var readPulses []*Mt.PulseEvent
-		readPulses, err := adapter.QueryRange(start.Add(-1*time.Second), start.Add(5*time.Second))
+		get, err := adapter.QueryRange(start.Add(-1*time.Second), start.Add(5*time.Second))
 		assertError(t, err, nil)
+		readPulses, ok := get.([]*Mt.PulseEvent)
+		if !ok {
+			t.Errorf("Expected a PulseEvent, got %T", get)
+		}
 
 		// Verify Count
 		if len(readPulses) != len(pulses) {
@@ -188,8 +192,12 @@ func TestBadgerOutput_QueryRange(t *testing.T) {
 		}
 
 		var queryResults []*Mt.PulseEvent
-		queryResults, err := adapter.QueryRange(start.Add(-1*time.Second), start.Add(5*time.Second))
+		get, err := adapter.QueryRange(start.Add(-1*time.Second), start.Add(5*time.Second))
 		assertError(t, err, nil)
+		queryResults, ok := get.([]*Mt.PulseEvent)
+		if !ok {
+			t.Errorf("Expected a PulseEvent, got %T", get)
+		}
 
 		for _, qr := range queryResults {
 			t.Logf("QueryResult StartTime: %v", qr.StartTime)

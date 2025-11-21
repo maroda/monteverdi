@@ -15,12 +15,12 @@
     <div style="margin-top: 20px; padding: 15px; background: rgba(45,45,45,0.5); border-radius: 8px; font-size: 13px; color: #aaa;">
         <h4 style="color: #e85ff8; margin-top: 0;">Plugin Control Parameters</h4>
         <p style="line-height: 1.8; margin: 10px 0;">
-            These controls provide direct access to the Monteverdi Output plugin.
+            These controls provide direct access to the currently activated Monteverdi Output Plugin Adapter.
         </p>
         <ol style="line-height: 1.8;">
-            <li><strong style="color: #00fce7;">Type</strong> displays the name of the selected Output</li>
-            <li><strong style="color: #ffcc00;">Flush</strong> clears the write cache by writing it to the Output</li>
-            <li><strong style="color: #ff7f00;">Close</strong> will shut down the Output</li>
+            <li><strong style="color: #00fce7;">Type</strong> displays the name of the active Output.</li>
+            <li><strong style="color: #ffcc00;">Flush</strong> clears the write cache and stops all activity.</li>
+            <li><strong style="color: #ff7f00;">Close</strong> completely closes the Output.</li>
         </ol>
     </div>
 
@@ -30,15 +30,57 @@
         <a href="/value-editor.html">Value Editor</a>
     </div>
 
+
     <div id="pluginControls">
         <div>
             <span class="plugin-settings" style="display: flex; flex-direction: column; gap: 10px;">
-            <button id="outputType">Show Output Type ℹ️</button>
-            <button id="outputFlush">Flush Output Cache 🔄</button>
+            <button id="outputType">Show Output ℹ️</button>
+            <button id="outputFlush">Flush Output 🔄</button>
             <button id="outputClose">Close Output ⚠️</button>
             </span>
         </div>
         <div id="pluginResponse" class="feedback"></div>
+    </div>
+
+
+    <div id="queuePanel" style="display: none; margin-top: 20px;">
+        <h3>Note Queue</h3>
+        <div id="queueViz">
+            <div class="queue-metric">
+                <span class="label">Concurrency:</span>
+                <span id="activeRoutines" class="value">--</span>
+                <span class="label">routines in-action</span>
+            </div>
+            <div class="queue-metric">
+                <span class="label">Depth:</span>
+                <span id="noteDepth" class="value">0</span>
+                <span class="label">notes waiting to play</span>
+            </div>
+            <div class="queue-metric">
+                <span class="label">Window:</span>
+                <span id="noteWindow" class="value">0.0</span>
+                <span class="label">seconds into the future</span>
+            </div>
+            <div class="queue-metric">
+                <span class="label">Oldest Note:</span>
+                <span id="noteOldest" class="value">--</span>
+            </div>
+            <div class="queue-metric">
+                <span class="label">Newest Note:</span>
+                <span id="noteNewest" class="value">--</span>
+            </div>
+            <div class="queue-metric">
+                <span class="label">Chords:</span>
+                <span id="noteGrouperSize" class="value">0</span>
+                <span class="label">waiting for future matches</span>
+            </div>
+            <div id="queueBar" class="queue-bar-container" data-label="NoteOn Queue Depth">
+                <div id="queueBarFill" class="queue-bar-fill"></div>
+            </div>
+            <div id="routineBar" class="routine-bar-container" data-label="Concurrent GoRoutines (Managing all Notes)">
+                <div id="routineBarFill" class="routine-bar-fill"></div>
+            </div>
+        </div>
     </div>
 
     <div id="system-info" style="margin: 20px 0; padding: 15px; background: rgba(95,167,59,0.1); border-radius: 8px; border: 1px solid #5fa73b;">

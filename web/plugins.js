@@ -43,9 +43,6 @@ async function controlPlugin(control) {
             feedbackDiv.textContent = `✓ ${control.toUpperCase()}: ${JSON.stringify(data)}`;
 
             return data;
-        } else {
-            throw new Error(`${response.status}: ${response.statusText}`);
-            console.error(`Plugin ${control} failed:`, response.statusText);
         }
     } catch (error) {
         // Show error feedback
@@ -58,3 +55,84 @@ async function controlPlugin(control) {
 
 document.getElementById('outputFlush').addEventListener('click', (e) => { controlPlugin('flush'); })
 document.getElementById('outputType').addEventListener('click', (e) => { controlPlugin('type'); })
+
+// MIDI only queue reporting
+let midiPollInterval = null;
+
+// init queue monitoring on page load
+async function initQueueMonitor() {
+    try {
+        const response = await fetch('/api/plugin/type', {method: 'POST'});
+        const data = await response.json();
+
+        // Only show queue panel for MIDI output
+        if (data === 'MIDI') {
+            document.getElementById('queuePanel').style.display = 'block';
+            midiQueuePoller();
+        }
+    } catch (error) {
+        console.error('Failed to check output type:', error);
+    }
+}
+
+function midiQueuePoller() {
+    midiQueryRange();
+    midiPollInterval = setInterval(midiQueryRange, 500);
+}
+
+function midiStopPoller() {
+    if (midiPollInterval) {
+        clearInterval(midiPollInterval);
+        midiPollInterval = null;
+    }
+}
+
+async function midiQueryRange() {
+    try {
+        const response = await fetch('/api/plugin/queryrange', { method: 'POST' });
+        if (!response.ok) {
+            midiStopPoller();
+            return;
+        }
+
+        const data = await response.json();
+
+        // Update the display
+        document.getElementById('noteDepth').textContent = data.noteDepth;
+        document.getElementById('noteWindow').textContent =
+            (data.noteWindow / 1000000000).toFixed(2); // nanoseconds to seconds
+
+        if (data.noteDepth > 0) {
+            document.getElementById('noteOldest').textContent =
+                new Date(data.noteOldest).toLocaleTimeString();
+            document.getElementById('noteNewest').textContent =
+                new Date(data.noteNewest).toLocaleTimeString();
+
+            // Update bar graph (assume max queue of 100 notes)
+            const percentage = Math.min((data.noteDepth / 100) * 100, 100);
+            document.getElementById('queueBarFill').style.width = percentage + '%';
+
+            // Update concurrency bar graph (assume upper bound of 100)
+            const percentGoRoutine = Math.min((data.activeRoutines / 100) * 100, 100);
+            document.getElementById('routineBarFill').style.width = percentGoRoutine + '%';
+        } else {
+            document.getElementById('noteOldest').textContent = '--';
+            document.getElementById('noteNewest').textContent = '--';
+            document.getElementById('queueBarFill').style.width = '0%';
+            document.getElementById('routineBarFill').style.width = '0%';
+        }
+
+        // These should always execute
+        document.getElementById('noteGrouperSize').textContent = data.noteGrouperSize;
+        document.getElementById('activeRoutines').textContent = data.activeRoutines;
+    } catch (error) {
+        console.error('Failed to query queue:', error);
+        midiStopPoller();
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', initQueueMonitor);
+
+// Clean up on page unload
+window.addEventListener('beforeunload', midiStopPoller);

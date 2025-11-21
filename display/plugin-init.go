@@ -7,10 +7,12 @@ import (
 	"log/slog"
 
 	Mp "github.com/maroda/monteverdi/plugin"
+	Ms "github.com/maroda/monteverdi/server"
 )
 
 func InitMIDIOutput(view *View, outputLocation string) error {
-	output, err := Mp.NewMIDIOutput(0)
+	midiPort := Ms.FillEnvVarInt("MONTEVERDI_PLUGIN_MIDI_PORT", 0)
+	output, err := Mp.NewMIDIOutput(midiPort)
 	if err != nil {
 		slog.Error("Failed to create adapter",
 			slog.String("output", outputLocation),
