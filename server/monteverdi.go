@@ -493,6 +493,7 @@ func (q *QNet) PulseDetect(m string, i int) {
 
 			// If configured, use the Output Adapter Plugin
 			// The output type depends on the value of MONTEVERDI_OUTPUT
+			// TODO: Sampling output (i.e. for MIDI)
 			if q.Output != nil {
 				if err := q.Output.WritePulse(&pulse); err != nil {
 					slog.Error("Output adapter write failed",

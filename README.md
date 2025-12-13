@@ -11,6 +11,8 @@
 
 See [How To Use](#how-to-use) for more startup docs and [Web UI](#web-ui) for visual controls.
 
+> To try it with test metrics run [ToadLester](https://github.com/maroda/toadlester).
+
 ## Seconda Practica Observability
 
 Monteverdi is a live data streaming system that uses _Harmonic Accent Analysis_ to identify operational pulses of the system.

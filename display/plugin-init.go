@@ -12,6 +12,7 @@ import (
 	Ms "github.com/maroda/monteverdi/server"
 )
 
+// InitMIDIOutput sets up a connected MIDI device
 func InitMIDIOutput(view *View, outputLocation string) error {
 	midiPort := Ms.FillEnvVarInt("MONTEVERDI_PLUGIN_MIDI_PORT", 0)
 	midiRoot := uint8(Ms.FillEnvVarInt("MONTEVERDI_PLUGIN_MIDI_ROOT", 60))

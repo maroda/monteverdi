@@ -26,7 +26,7 @@ func TestInitMIDIOutput(t *testing.T) {
 	slog.SetDefault(logger)
 
 	// Define parameters
-	port, root, arpd, arpi, scale := "2", "60", "200", "2", "0,2,2,1,2,2,2,1"
+	port, root, arpd, arpi, scale := "0", "60", "200", "2", "0,2,2,1,2,2,2,1"
 
 	// Set them as ENV VARs, which are used by the function
 	os.Setenv("MONTEVERDI_PLUGIN_MIDI_PORT", port)

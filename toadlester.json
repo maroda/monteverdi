@@ -1,0 +1,63 @@
+[
+  {
+    "id": "TOADLESTER_RANDOMIZER",
+    "url": "http://localhost:8899/rand/all",
+    "delim": ": ",
+    "interval": 2,
+    "metrics": {
+      "ExpMetric": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 50000
+      },
+      "FloatMetric": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 50000
+      },
+      "IntMetric": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 50000
+      }
+    }
+  },
+  {
+    "id": "TOADLESTER_SERIAL",
+    "url": "http://localhost:8899/metrics",
+    "delim": ": ",
+    "interval": 3,
+    "metrics": {
+      "Metric_exp_down": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 1600000000
+      },
+      "Metric_exp_up": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 16000000
+      },
+      "Metric_float_down": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 500
+      },
+      "Metric_float_up": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 600
+      },
+      "Metric_int_down": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 5300
+      },
+      "Metric_int_up": {
+        "type": "gauge",
+        "transformer": "",
+        "max": 50
+      }
+    }
+  }
+]
