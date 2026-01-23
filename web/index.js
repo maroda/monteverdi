@@ -37,8 +37,8 @@ setInterval(() => {
 }, 1000);
 
 // WebSocket connection
-const proto = window.location.protocol === 'https' ? 'wss' : 'ws';
-const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
 
 ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
