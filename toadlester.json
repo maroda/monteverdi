@@ -1,7 +1,7 @@
 [
   {
     "id": "TOADLESTER_RANDOMIZER",
-    "url": "http://localhost:8899/rand/all",
+    "url": "http://toadlester.rainbowq.net:8899/rand/all",
     "delim": ": ",
     "interval": 2,
     "metrics": {
@@ -24,7 +24,7 @@
   },
   {
     "id": "TOADLESTER_SERIAL",
-    "url": "http://localhost:8899/metrics",
+    "url": "http://toadlester.rainbowq.net:8899/metrics",
     "delim": ": ",
     "interval": 3,
     "metrics": {

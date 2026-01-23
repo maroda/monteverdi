@@ -11,8 +11,6 @@
 
 See [How To Use](#how-to-use) for more startup docs and [Web UI](#web-ui) for visual controls.
 
-> To try it with test metrics run [ToadLester](https://github.com/maroda/toadlester).
-
 ## Seconda Practica Observability
 
 Monteverdi is a live data streaming system that uses _Harmonic Accent Analysis_ to identify operational pulses of the system.
@@ -307,6 +305,23 @@ spec:
     targetPort: 8090
   type: LoadBalancer
 ```
+
+## Testing with ToadLester
+
+Monteverdi can be deployed alongside [ToadLester](https://github.com/maroda/toadlester) - a standalone metrics generation engine -
+using a [Terraform Module](https://registry.terraform.io/modules/maroda/toadlester/module/latest) for AWS ECS Fargate.
+That module deploys <https://www.rainbowq.net>, which has Monteverdi reading ToadLester metrics.
+
+Locally, run ToadLester with a container (the `.env` file contains metric output settings):
+```shell
+docker run -d --env-file ./.env --rm --network host \
+    --name toadlester ghcr.io/maroda/toadlester:latest
+```
+
+In either case, use [toadlester.json](toadlester.json) as the config to Monteverdi.
+
+The [ToadLester Provider](https://registry.terraform.io/providers/maroda/toadlester/latest) can be used independently to configure metric output settings.
+Changing the nature of the monotonic metrics and then tuning Monteverdi Max values to capture them will provide a good demo of the concentric rings UI.
 
 
 ## Known bugs
