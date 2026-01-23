@@ -4,6 +4,7 @@
 # local files
 */*_db
 .env
+*.env
 /monteverdi
 /monteverdi_db/
 /monteverdi.log
