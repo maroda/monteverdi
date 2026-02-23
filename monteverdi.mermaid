@@ -1,0 +1,160 @@
+---
+title: Monteverdi Simple Flowchart
+---
+flowchart TD
+    subgraph CONFIG["Configuration Layer"]
+        CJ["config.json<br/><i>Endpoints, Metrics, Max Values,<br/>Delimiters, Intervals, Transformers</i>"]
+        CE["POST /conf<br/><i>API Config Update</i>"]
+        WE["Value Editor<br/><i>Web UI JSON Editor</i>"]
+        TF["Terraform Provider<br/><i>IaC Config Management</i>"]
+    end
+
+    subgraph SOURCES["External Data Sources"]
+        EP1["Endpoint 1<br/><i>e.g. Prometheus /metrics</i>"]
+        EP2["Endpoint 2<br/><i>e.g. ToadLester /metrics</i>"]
+        EPN["Endpoint N<br/><i>Any K/V HTTP endpoint</i>"]
+    end
+
+    subgraph INGEST["Ingestion &amp; Transformation"]
+        PM["PollMulti()<br/><i>Concurrent endpoint polling<br/>on configured intervals</i>"]
+        KV["K/V Parser<br/><i>Split by configured delimiter</i>"]
+
+        subgraph TRANSFORM["Transformer Plugins"]
+            CR["calc_rate<br/><i>Counter → Rate conversion</i>"]
+            JK["json_key<br/><i>JSON blob key extraction</i>"]
+        end
+
+        MD["Mdata map<br/><i>Current metric values per endpoint</i>"]
+    end
+
+    subgraph ANALYSIS["Harmonic Accent Analysis"]
+        FA["FindAccent()<br/><i>Compare value vs Max threshold</i>"]
+        NA["NewAccent()<br/><i>Creates Accent with<br/>intensity, metric, timestamp</i>"]
+        ASEC["AddSecondWithCheck()<br/><i>Always called: accent=true/false<br/>Feeds timeline every second</i>"]
+
+        subgraph DIM1["Dimension 1 Patterns"]
+            IAM["Iamb<br/><i>no-accent → accent</i>"]
+            TRO["Trochee<br/><i>accent → no-accent</i>"]
+        end
+
+        subgraph DIM2["Dimension 2 Patterns"]
+            AMP["Amphibrach<br/><i>Iamb → Trochee → Iamb triplet</i>"]
+        end
+
+        PW["Pulse Window<br/><i>Default 3600s lifecycle</i>"]
+    end
+
+    subgraph OUTPUT["Output"]
+        subgraph DISPLAY["Display Package (View)"]
+            TUI["Terminal UI<br/><i>Histogram bars + timeseries<br/>per-metric accent display</i>"]
+            subgraph WEBUI["Web UI :8090"]
+                HV["Harmony View<br/><i>D3.js Concentric Rings<br/>60s + 10min dimensions</i>"]
+                VED["Value Editor<br/><i>Config JSON editor + preview</i>"]
+                MDT["Metrics Data Table<br/><i>Live metric values &amp; status</i>"]
+            end
+        end
+
+        subgraph SERVER["Server Package"]
+            MUX["Mux Router<br/><i>gorilla/mux</i>"]
+            WS["WebSocket<br/><i>Real-time D3 updates</i>"]
+            PROM["Prometheus /metrics<br/><i>Internal app metrics</i>"]
+            VAPI["API Endpoints<br/><i>/api/version<br/>/api/metrics-data<br/>/conf</i>"]
+        end
+
+        subgraph PLUGINS["Output Plugins"]
+            BDB["BadgerDB<br/><i>Local pulse archive</i>"]
+            MIDI_OUT["MIDI Output<br/><i>Notes from pulses<br/>Chords from clustered pulses<br/>Scale shift register</i>"]
+        end
+    end
+
+    subgraph OTEL["OpenTelemetry"]
+        direction TB
+        subgraph INIT["Init"]
+            OT_INIT["InitOTelGRF()<br/><i>Creates TracerProvider<br/>OTLP HTTP exporter<br/>AlwaysSample strategy<br/>Batched export</i>"]
+            OT_GLOBAL["otel.SetTracerProvider(tp)<br/><i>Global registration<br/>TraceContext + Baggage propagation</i>"]
+        end
+        subgraph TRACES["Traces"]
+            OT_WRAP["HTTP Auto-Instrumentation<br><i>wrapper → Mux Router</i>"]
+            OT_MANUAL["Manual Instrumentation<br><i>qnet/monteverdi</i>"]
+        end
+        subgraph EXPORT["Export"]
+            OT_OTLP["OTLP HTTP Exporter<br/><i>→ Grafana Cloud Tempo<br/>env: OTEL_EXPORTER_OTLP_ENDPOINT<br/>env: OTEL_EXPORTER_OTLP_HEADERS</i>"]
+        end
+    end
+
+%% Force ordering
+PW ~~~ MUX
+
+%% Config flows
+    CJ -->|"startup load"| PM
+    CE -->|"runtime update"| PM
+    WE -->|"POST /conf"| CE
+    TF -->|"POST /conf"| CE
+
+%% Data ingestion
+    EP1 -->|"HTTP poll"| PM
+    EP2 -->|"HTTP poll"| PM
+    EPN -->|"HTTP poll"| PM
+    PM --> KV
+    KV -->|"counter type"| CR
+    KV -->|"JSON source"| JK
+    KV -->|"gauge type<br>(default)"| MD
+    CR --> MD
+    JK --> MD
+
+%% Analysis
+    MD --> FA
+    FA --> ASEC
+    ASEC -->|"value ≥ max"| NA
+    ASEC -->|"value < max<br>no accent"| PW
+    NA -->|"accent stream"| DIM1
+    DIM1 -->|"D1 pattern pairs"| DIM2
+    DIM1 --> PW
+    DIM2 --> PW
+
+%% Output flows
+    PW -->|"pulse events"| WS
+    WS -->|"real-time push"| HV
+    MD -->|"current values"| MDT
+    PW -->|"archive pulses"| BDB
+    PW -->|"pulse → note<br>clustered ≤50ms → chord"| MIDI_OUT
+    PW -->|"drawTimeseries<br>░ | ▁▂▃▄▅▆▇█"| TUI
+    MUX --> WS
+    MUX --> PROM
+    MUX --> VAPI
+
+%% OTel flows
+    OT_INIT --> OT_GLOBAL
+    OT_GLOBAL --> OT_WRAP
+    OT_WRAP --> OT_MANUAL
+    OT_MANUAL --> OT_OTLP
+    BDB -.->|"native Badger spans"| OT_OTLP
+
+%% Styling
+    classDef config fill:#4a9eff,stroke:#2d7cd4,color:#fff
+    classDef source fill:#ff9f43,stroke:#d48a2d,color:#fff
+    classDef ingest fill:#54a0ff,stroke:#2d7cd4,color:#fff
+    classDef transform fill:#7700ff,stroke:#2d7cd4,color:#fff
+    classDef analysis fill:#ff6b6b,stroke:#d44040,color:#fff
+    classDef server fill:#0f27cd,stroke:#3d1a80,color:#fff
+    classDef display fill:#10ac84,stroke:#0b7d5f,color:#fff
+    classDef plugin fill:#f368e0,stroke:#b83daa,color:#fff
+    classDef otel fill:#99dd33,stroke:#009e9f,color:#333
+    classDef grafana fill:#ff7675,stroke:#d63031,color:#fff
+
+    class CJ,CE,WE,TF config
+    class EP1,EP2,EPN source
+    class PM,KV,MD ingest
+    class CR,JK transform
+    class FA,ASEC,NA,IAM,TRO,AMP,PW analysis
+    class HV,MDT,VED,TUI display
+    class MUX,WS,PROM,VAPI server
+    class BDB,MIDI_OUT plugin
+    class OT_INIT,OT_GLOBAL,OT_WRAP,OT_MANUAL,OT_OTLP otel
+
+    style CONFIG fill:#1a1a2e,stroke:#4a9eff,color:#fff
+    style SOURCES fill:#1a1a2e,stroke:#ff9f43,color:#fff
+    style INGEST fill:#1a1a2e,stroke:#54a0ff,color:#fff
+    style ANALYSIS fill:#1a1a2e,stroke:#ff6b6b,color:#fff
+    style OUTPUT fill:#1a1a2e,stroke:#5f27cd,color:#fff
+    style OTEL fill:#1a1a2e,stroke:#5f27cd,color:#fff

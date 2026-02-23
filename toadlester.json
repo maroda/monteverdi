@@ -8,17 +8,17 @@
       "ExpMetric": {
         "type": "gauge",
         "transformer": "",
-        "max": 50000
+        "max": 50000000
       },
       "FloatMetric": {
         "type": "gauge",
         "transformer": "",
-        "max": 50000
+        "max": 50000000
       },
       "IntMetric": {
         "type": "gauge",
         "transformer": "",
-        "max": 50000
+        "max": 50000000
       }
     }
   },
@@ -31,17 +31,17 @@
       "Metric_exp_down": {
         "type": "gauge",
         "transformer": "",
-        "max": 1600000000
+        "max": 3500000000
       },
       "Metric_exp_up": {
         "type": "gauge",
         "transformer": "",
-        "max": 16000000
+        "max": 160000000
       },
       "Metric_float_down": {
         "type": "gauge",
         "transformer": "",
-        "max": 500
+        "max": 5500
       },
       "Metric_float_up": {
         "type": "gauge",
@@ -51,12 +51,12 @@
       "Metric_int_down": {
         "type": "gauge",
         "transformer": "",
-        "max": 5300
+        "max": 73000000
       },
       "Metric_int_up": {
         "type": "gauge",
         "transformer": "",
-        "max": 50
+        "max": 250000
       }
     }
   }
